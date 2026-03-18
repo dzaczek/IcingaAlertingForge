@@ -43,19 +43,60 @@ A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks 
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    subgraph Grafana
+        GA[Unified Alerting]
+    end
+
+    subgraph Webhook Bridge :8080
+        WH[POST /webhook<br/>X-API-Key auth]
+        WH --> AUTH{Auth &<br/>Route}
+        AUTH -->|mode: work| WORK[Work Mode<br/>firing / resolved]
+        AUTH -->|mode: test| TEST[Test Mode<br/>create / delete]
+        WORK --> IC2
+        TEST --> IC2
+        WH --> CACHE[(In-Memory<br/>Service Cache)]
+        WH --> HIST[(history.jsonl)]
+    end
+
+    subgraph Icinga2 :5665
+        IC2[REST API<br/>Basic Auth]
+        IC2 --> PCR[Process Check Result]
+        IC2 --> CRUD[Create / Delete Service]
+    end
+
+    GA -- "POST JSON" --> WH
+
+    subgraph Endpoints
+        E1[/status/beauty — HTML Dashboard]
+        E2[/status/name — Service Query]
+        E3[/history — Event Log]
+        E4[/health — Health Probe]
+    end
+
+    WH --> Endpoints
 ```
-┌────────────┐        POST /webhook         ┌──────────────────┐     Icinga2 REST API      ┌──────────┐
-│   Grafana   │  ──────────────────────────► │  Webhook Bridge  │  ──────────────────────► │  Icinga2  │
-│  (Alerting) │    X-API-Key auth + JSON     │   (Go, :8080)    │   Basic Auth, :5665      │ (:5665)   │
-└────────────┘                               └──────────────────┘                           └──────────┘
-                                                │          │
-                                                │          ├── /status/beauty  (HTML dashboard)
-                                                │          ├── /status/{name}  (service query)
-                                                │          ├── /history        (event log)
-                                                │          └── /health         (health probe)
-                                                │
-                                                ▼
-                                        history.jsonl (JSONL log)
+
+```mermaid
+flowchart TD
+    subgraph Work Mode
+        W1[Grafana Alert] -->|firing + severity| W2{Map Severity}
+        W2 -->|critical| W3[exit_status = 2]
+        W2 -->|warning| W4[exit_status = 1]
+        W1 -->|resolved| W5[exit_status = 0]
+        W3 --> W6[Send Check Result to Icinga2]
+        W4 --> W6
+        W5 --> W6
+    end
+
+    subgraph Test Mode
+        T1[Grafana Alert<br/>mode=test] --> T2{test_action}
+        T2 -->|create| T3[PUT /v1/objects/services/host!name<br/>labels + annotations → vars, notes, display_name]
+        T2 -->|delete| T4[DELETE /v1/objects/services/host!name?cascade=1]
+        T3 --> T5[(Cache: register)]
+        T4 --> T6[(Cache: remove)]
+    end
 ```
 
 All Icinga2 communication uses a **single set of REST API credentials** (port 5665). No Director dependency.
@@ -520,11 +561,24 @@ PUT {ICINGA2_HOST}/v1/objects/services/{host}!{service_name}
     "enable_passive_checks": true,
     "check_interval": 300,
     "max_check_attempts": 1,
-    "notes": "Managed by webhook-bridge | auto-created"
+    "display_name": "MyTestService - CPU usage above 90%",
+    "notes": "CPU usage above 90%\nServer has high CPU for 5 minutes",
+    "notes_url": "https://wiki.example.com/runbooks/cpu-high",
+    "action_url": "https://grafana.example.com/d/panel-url",
+    "vars": {
+      "grafana_label_alertname": "MyTestService",
+      "grafana_label_severity": "critical",
+      "grafana_label_team": "infra",
+      "grafana_annotation_summary": "CPU usage above 90%",
+      "grafana_annotation_description": "Server has high CPU for 5 minutes",
+      "grafana_annotation_runbook_url": "https://wiki.example.com/runbooks/cpu-high"
+    }
   },
   "templates": ["generic-service"]
 }
 ```
+
+All webhook labels are stored as `vars.grafana_label_*` and annotations as `vars.grafana_annotation_*`, making the full Grafana alert context visible in the Icinga2 UI.
 
 Changes are **immediate** — no deploy step is required.
 

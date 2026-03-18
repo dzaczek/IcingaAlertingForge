@@ -47,7 +47,7 @@ func (h *WebhookHandler) handleTestCreate(requestID, source, serviceName string,
 	h.Cache.SetPending(serviceName)
 
 	start := time.Now()
-	if err := h.API.CreateService(h.HostName, serviceName); err != nil {
+	if err := h.API.CreateService(h.HostName, serviceName, alert.Labels, alert.Annotations); err != nil {
 		h.Cache.Remove(serviceName)
 		slog.Error("Failed to create service via Icinga2 API",
 			"service", serviceName, "error", err, "request_id", requestID)

@@ -7,8 +7,9 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     volumes:
-      - ./.env:/app/.env:ro
       - webhook_logs:/var/log/webhook-bridge
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

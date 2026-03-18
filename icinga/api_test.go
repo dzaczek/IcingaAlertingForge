@@ -109,6 +109,21 @@ func TestCreateService_Success(t *testing.T) {
 			t.Errorf("expected enable_active_checks false")
 		}
 
+		// Verify notes contain the summary
+		notes, _ := attrs["notes"].(string)
+		if notes != "CPU is too high" {
+			t.Errorf("expected notes to contain summary, got %q", notes)
+		}
+
+		// Verify vars contain labels and annotations
+		vars, _ := attrs["vars"].(map[string]any)
+		if vars["grafana_label_severity"] != "critical" {
+			t.Errorf("expected grafana_label_severity=critical, got %v", vars["grafana_label_severity"])
+		}
+		if vars["grafana_annotation_summary"] != "CPU is too high" {
+			t.Errorf("expected grafana_annotation_summary, got %v", vars["grafana_annotation_summary"])
+		}
+
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"results":[{"code":200}]}`))
 	}))
@@ -121,7 +136,15 @@ func TestCreateService_Success(t *testing.T) {
 		HTTPClient: server.Client(),
 	}
 
-	err := client.CreateService("test-host", "My Service")
+	labels := map[string]string{
+		"alertname": "My Service",
+		"severity":  "critical",
+	}
+	annotations := map[string]string{
+		"summary": "CPU is too high",
+	}
+
+	err := client.CreateService("test-host", "My Service", labels, annotations)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -141,7 +164,7 @@ func TestCreateService_Error(t *testing.T) {
 		HTTPClient: server.Client(),
 	}
 
-	err := client.CreateService("test-host", "Existing Service")
+	err := client.CreateService("test-host", "Existing Service", nil, nil)
 	if err == nil {
 		t.Error("expected error for 500 response")
 	}

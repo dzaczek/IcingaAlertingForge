@@ -84,16 +84,56 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 
 // CreateService creates a dummy passive service in Icinga2 via the REST API.
 // Uses PUT /v1/objects/services/<host>!<service> to create the object directly.
-func (c *APIClient) CreateService(host, name string) error {
+// Labels and annotations from the Grafana webhook are stored as Icinga2 attributes
+// so operators can see the full alert context in the Icinga2 UI.
+func (c *APIClient) CreateService(host, name string, labels, annotations map[string]string) error {
+	// Build notes from annotations (summary + description)
+	notes := "Managed by webhook-bridge | auto-created"
+	if s := annotations["summary"]; s != "" {
+		notes = s
+	}
+	if d := annotations["description"]; d != "" {
+		notes += "\n" + d
+	}
+
+	// Store all labels and annotations as custom vars for full context
+	vars := map[string]any{}
+	for k, v := range labels {
+		vars["grafana_label_"+k] = v
+	}
+	for k, v := range annotations {
+		vars["grafana_annotation_"+k] = v
+	}
+
+	serviceAttrs := map[string]any{
+		"check_command":         "dummy",
+		"enable_active_checks":  false,
+		"enable_passive_checks": true,
+		"check_interval":        300,
+		"max_check_attempts":    1,
+		"notes":                 notes,
+		"vars":                  vars,
+	}
+
+	// Set display_name if summary is available for better readability in UI
+	if s := annotations["summary"]; s != "" {
+		serviceAttrs["display_name"] = name + " - " + s
+	}
+
+	// Set notes_url if runbook_url or dashboard_url is provided
+	if u := annotations["runbook_url"]; u != "" {
+		serviceAttrs["notes_url"] = u
+	} else if u := annotations["dashboard_url"]; u != "" {
+		serviceAttrs["notes_url"] = u
+	}
+
+	// Set action_url if panel_url is provided
+	if u := annotations["panel_url"]; u != "" {
+		serviceAttrs["action_url"] = u
+	}
+
 	attrs := map[string]any{
-		"attrs": map[string]any{
-			"check_command":         "dummy",
-			"enable_active_checks":  false,
-			"enable_passive_checks": true,
-			"check_interval":        300,
-			"max_check_attempts":    1,
-			"notes":                 "Managed by webhook-bridge | auto-created",
-		},
+		"attrs":     serviceAttrs,
 		"templates": []string{"generic-service"},
 	}
 

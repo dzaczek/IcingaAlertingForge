@@ -1,5 +1,40 @@
-.env
-*.jsonl
-coverage.out
+# Binaries
 webhook-bridge
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test & coverage
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# Environment & secrets
+.env
+*.pem
+*.key
+*.crt
+
+# Logs & data
+*.jsonl
+*.log
+
+# OS
 .DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+vendor/
+tmp/
+
+# Docker
+docker-compose.override.yml

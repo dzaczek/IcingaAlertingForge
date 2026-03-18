@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  webhook-bridge:
+    build: .
+    container_name: webhook-bridge
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./.env:/app/.env:ro
+      - webhook_logs:/var/log/webhook-bridge
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  webhook_logs:

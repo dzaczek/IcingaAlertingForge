@@ -1,0 +1,253 @@
+package history
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"icinga-webhook-bridge/models"
+)
+
+// Logger provides thread-safe JSONL history logging with rotation and filtering.
+type Logger struct {
+	mu         sync.Mutex
+	filePath   string
+	maxEntries int
+}
+
+// NewLogger creates a new history Logger.
+// It ensures the parent directory exists.
+func NewLogger(filePath string, maxEntries int) (*Logger, error) {
+	dir := filepath.Dir(filePath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("history: create directory %s: %w", dir, err)
+	}
+
+	return &Logger{
+		filePath:   filePath,
+		maxEntries: maxEntries,
+	}, nil
+}
+
+// Append writes a single HistoryEntry to the JSONL file.
+// It also triggers rotation if the file exceeds maxEntries.
+func (l *Logger) Append(entry models.HistoryEntry) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf("history: open file: %w", err)
+	}
+	defer f.Close()
+
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return fmt.Errorf("history: marshal entry: %w", err)
+	}
+
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return fmt.Errorf("history: write entry: %w", err)
+	}
+
+	// Trigger async rotation check
+	go l.rotateIfNeeded()
+
+	return nil
+}
+
+// Query reads the history file and returns entries matching the provided filters.
+type QueryFilter struct {
+	Limit   int
+	Service string
+	Source  string
+	Mode    string
+	From    time.Time
+	To      time.Time
+}
+
+// Query returns history entries matching the filter, ordered newest-first.
+func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entries, err := l.readAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply filters
+	var filtered []models.HistoryEntry
+	for _, e := range entries {
+		if filter.Service != "" && e.ServiceName != filter.Service {
+			continue
+		}
+		if filter.Source != "" && e.SourceKey != filter.Source {
+			continue
+		}
+		if filter.Mode != "" && e.Mode != filter.Mode {
+			continue
+		}
+		if !filter.From.IsZero() && e.Timestamp.Before(filter.From) {
+			continue
+		}
+		if !filter.To.IsZero() && e.Timestamp.After(filter.To) {
+			continue
+		}
+		filtered = append(filtered, e)
+	}
+
+	// Reverse to get newest first
+	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
+		filtered[i], filtered[j] = filtered[j], filtered[i]
+	}
+
+	// Apply limit
+	if filter.Limit > 0 && len(filtered) > filter.Limit {
+		filtered = filtered[:filter.Limit]
+	}
+
+	return filtered, nil
+}
+
+// readAll reads all entries from the JSONL file.
+func (l *Logger) readAll() ([]models.HistoryEntry, error) {
+	f, err := os.Open(l.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("history: open file for reading: %w", err)
+	}
+	defer f.Close()
+
+	var entries []models.HistoryEntry
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB max line size
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var entry models.HistoryEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			continue // skip malformed lines
+		}
+		entries = append(entries, entry)
+	}
+
+	return entries, scanner.Err()
+}
+
+// rotateIfNeeded trims the history file to maxEntries if it exceeds the limit.
+func (l *Logger) rotateIfNeeded() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entries, err := l.readAll()
+	if err != nil || len(entries) <= l.maxEntries {
+		return
+	}
+
+	// Keep only the last maxEntries
+	entries = entries[len(entries)-l.maxEntries:]
+
+	f, err := os.Create(l.filePath)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+	for _, e := range entries {
+		data, err := json.Marshal(e)
+		if err != nil {
+			continue
+		}
+		writer.Write(data)
+		writer.WriteByte('\n')
+	}
+	writer.Flush()
+}
+
+// FilePath returns the path to the history JSONL file (used for export).
+func (l *Logger) FilePath() string {
+	return l.filePath
+}
+
+// Stats returns aggregate statistics from the history.
+func (l *Logger) Stats() (HistoryStats, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entries, err := l.readAll()
+	if err != nil {
+		return HistoryStats{}, err
+	}
+
+	stats := HistoryStats{
+		TotalEntries:    len(entries),
+		ByMode:          make(map[string]int),
+		ByAction:        make(map[string]int),
+		BySeverity:      make(map[string]int),
+		BySource:        make(map[string]int),
+		ErrorCount:      0,
+		RecentErrors:    []models.HistoryEntry{},
+		RecentEntries:   []models.HistoryEntry{},
+	}
+
+	for _, e := range entries {
+		stats.ByMode[e.Mode]++
+		stats.ByAction[e.Action]++
+		if e.Severity != "" {
+			stats.BySeverity[e.Severity]++
+		}
+		stats.BySource[e.SourceKey]++
+		if !e.IcingaOK {
+			stats.ErrorCount++
+		}
+		if e.DurationMs > 0 {
+			stats.TotalDurationMs += e.DurationMs
+		}
+	}
+
+	if stats.TotalEntries > 0 {
+		stats.AvgDurationMs = stats.TotalDurationMs / int64(stats.TotalEntries)
+	}
+
+	// Collect recent entries (last 20) — newest first
+	recentCount := 20
+	if len(entries) < recentCount {
+		recentCount = len(entries)
+	}
+	for i := len(entries) - 1; i >= len(entries)-recentCount; i-- {
+		stats.RecentEntries = append(stats.RecentEntries, entries[i])
+	}
+
+	// Collect recent errors (last 10) — newest first
+	for i := len(entries) - 1; i >= 0 && len(stats.RecentErrors) < 10; i-- {
+		if !entries[i].IcingaOK || entries[i].Error != "" {
+			stats.RecentErrors = append(stats.RecentErrors, entries[i])
+		}
+	}
+
+	return stats, nil
+}
+
+// HistoryStats holds aggregate statistics about the webhook history.
+type HistoryStats struct {
+	TotalEntries    int                  `json:"total_entries"`
+	ByMode          map[string]int       `json:"by_mode"`
+	ByAction        map[string]int       `json:"by_action"`
+	BySeverity      map[string]int       `json:"by_severity"`
+	BySource        map[string]int       `json:"by_source"`
+	ErrorCount      int                  `json:"error_count"`
+	TotalDurationMs int64                `json:"total_duration_ms"`
+	AvgDurationMs   int64                `json:"avg_duration_ms"`
+	RecentErrors    []models.HistoryEntry `json:"recent_errors"`
+	RecentEntries   []models.HistoryEntry `json:"recent_entries"`
+}

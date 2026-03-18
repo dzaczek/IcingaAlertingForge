@@ -1,0 +1,72 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: test-alerts
+    folder: Test Alerts
+    interval: 30s
+    rules:
+
+      - uid: always-critical-uid
+        title: "Test Always Critical Alert"
+        condition: C
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "1"
+              type: math
+          - refId: C
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              type: math
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Test alert always CRITICAL - for webhook verification"
+        labels:
+          alertname: "Test Always Critical Alert"
+          severity: critical
+        isPaused: true
+
+      - uid: always-warning-uid
+        title: "Test Always Warning Alert"
+        condition: C
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "1"
+              type: math
+          - refId: C
+            queryType: ""
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              type: math
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Test alert always WARNING"
+        labels:
+          alertname: "Test Always Warning Alert"
+          severity: warning
+        isPaused: true

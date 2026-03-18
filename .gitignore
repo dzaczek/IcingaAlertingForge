@@ -1,0 +1,5 @@
+.env
+*.jsonl
+coverage.out
+webhook-bridge
+.DS_Store

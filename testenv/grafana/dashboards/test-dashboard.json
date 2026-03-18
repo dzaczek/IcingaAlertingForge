@@ -1,0 +1,19 @@
+{
+  "dashboard": {
+    "title": "Webhook Bridge Test",
+    "uid": "webhook-bridge-test",
+    "panels": [
+      {
+        "title": "Prometheus Up",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "up",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+      }
+    ]
+  }
+}

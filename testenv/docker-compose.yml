@@ -1,0 +1,100 @@
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  icinga2_data:
+  grafana_data:
+  webhook_logs:
+
+services:
+
+  # ── Icinga2 (custom build with API + test host) ────────────────
+  icinga2:
+    build:
+      context: ./icinga2
+      dockerfile: Dockerfile
+    container_name: testenv-icinga2
+    hostname: icinga2
+    networks:
+      - monitoring
+    ports:
+      - "5665:5665"
+    volumes:
+      - icinga2_data:/data
+    healthcheck:
+      test: >-
+        curl -fs -k -u apiuser:apipassword
+        https://localhost:5665/v1/status || exit 1
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  # ── Prometheus ─────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: testenv-prometheus
+    networks:
+      - monitoring
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-lifecycle"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
+             "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Grafana ────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: testenv-grafana
+    networks:
+      - monitoring
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_UNIFIED_ALERTING_ENABLED=true
+      - GF_ALERTING_ENABLED=false
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ── Webhook Bridge ─────────────────────────────────────────────
+  webhook-bridge:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: testenv-webhook-bridge
+    networks:
+      - monitoring
+    ports:
+      - "9080:8080"
+    volumes:
+      - webhook_logs:/var/log/webhook-bridge
+      - ./.env.test:/app/.env:ro
+    depends_on:
+      icinga2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5

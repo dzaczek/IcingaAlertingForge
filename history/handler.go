@@ -1,0 +1,108 @@
+package history
+
+import (
+	"encoding/json"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"icinga-webhook-bridge/models"
+)
+
+// Handler provides HTTP handlers for querying and exporting webhook history.
+type Handler struct {
+	logger *Logger
+}
+
+// NewHandler creates a new history Handler.
+func NewHandler(logger *Logger) *Handler {
+	return &Handler{logger: logger}
+}
+
+// HandleHistory serves GET /history with optional query filters.
+func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	q := r.URL.Query()
+
+	limit := 100
+	if l := q.Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	filter := QueryFilter{
+		Limit:   limit,
+		Service: q.Get("service"),
+		Source:  q.Get("source"),
+		Mode:    q.Get("mode"),
+	}
+
+	if from := q.Get("from"); from != "" {
+		if t, err := time.Parse("2006-01-02", from); err == nil {
+			filter.From = t
+		} else if t, err := time.Parse(time.RFC3339, from); err == nil {
+			filter.From = t
+		}
+	}
+
+	if to := q.Get("to"); to != "" {
+		if t, err := time.Parse("2006-01-02", to); err == nil {
+			filter.To = t.Add(24*time.Hour - time.Nanosecond)
+		} else if t, err := time.Parse(time.RFC3339, to); err == nil {
+			filter.To = t
+		}
+	}
+
+	entries, err := h.logger.Query(filter)
+	if err != nil {
+		http.Error(w, `{"error":"failed to query history"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if entries == nil {
+		entries = make([]models.HistoryEntry, 0)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"entries": entries,
+		"count":   len(entries),
+		"filters": map[string]any{
+			"limit":   limit,
+			"service": filter.Service,
+			"source":  filter.Source,
+			"mode":    filter.Mode,
+		},
+	})
+}
+
+// HandleExport serves GET /history/export — streams the raw JSONL file.
+func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	filePath := h.logger.FilePath()
+	f, err := os.Open(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Error(w, `{"error":"failed to open history file"}`, http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Content-Disposition", "attachment; filename=webhook-history.jsonl")
+	http.ServeContent(w, r, "webhook-history.jsonl", time.Now(), f)
+}

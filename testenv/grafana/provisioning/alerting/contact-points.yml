@@ -1,0 +1,15 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: webhook-bridge-test
+    receivers:
+      - uid: webhook-bridge-uid
+        type: webhook
+        settings:
+          url: http://webhook-bridge:8080/webhook
+          httpMethod: POST
+          maxAlerts: 0
+        disableResolveMessage: false
+        headers:
+          X-API-Key: test-key-grafana-local

@@ -46,33 +46,33 @@ A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks 
 ```mermaid
 flowchart LR
     subgraph Grafana
-        GA[Unified Alerting]
+        GA["Unified Alerting"]
     end
 
-    subgraph Webhook Bridge :8080
-        WH[POST /webhook<br/>X-API-Key auth]
-        WH --> AUTH{Auth &<br/>Route}
-        AUTH -->|mode: work| WORK[Work Mode<br/>firing / resolved]
-        AUTH -->|mode: test| TEST[Test Mode<br/>create / delete]
-        WORK --> IC2
-        TEST --> IC2
-        WH --> CACHE[(In-Memory<br/>Service Cache)]
-        WH --> HIST[(history.jsonl)]
+    subgraph WB["Webhook Bridge :8080"]
+        WH["POST /webhook\nX-API-Key auth"]
+        WH --> AUTH{"Auth &\nRoute"}
+        AUTH -->|"mode: work"| WORK["Work Mode\nfiring / resolved"]
+        AUTH -->|"mode: test"| TEST["Test Mode\ncreate / delete"]
+        WH --> CACHE[("In-Memory\nService Cache")]
+        WH --> HIST[("history.jsonl")]
     end
 
-    subgraph Icinga2 :5665
-        IC2[REST API<br/>Basic Auth]
-        IC2 --> PCR[Process Check Result]
-        IC2 --> CRUD[Create / Delete Service]
+    subgraph IC["Icinga2 :5665"]
+        IC2["REST API\nBasic Auth"]
+        IC2 --> PCR["Process Check Result"]
+        IC2 --> CRUD["Create / Delete Service"]
     end
 
     GA -- "POST JSON" --> WH
+    WORK --> IC2
+    TEST --> IC2
 
     subgraph Endpoints
-        E1[/status/beauty — HTML Dashboard]
-        E2[/status/name — Service Query]
-        E3[/history — Event Log]
-        E4[/health — Health Probe]
+        E1["status/beauty - HTML Dashboard"]
+        E2["status/name - Service Query"]
+        E3["history - Event Log"]
+        E4["health - Health Probe"]
     end
 
     WH --> Endpoints
@@ -80,22 +80,22 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    subgraph Work Mode
-        W1[Grafana Alert] -->|firing + severity| W2{Map Severity}
-        W2 -->|critical| W3[exit_status = 2]
-        W2 -->|warning| W4[exit_status = 1]
-        W1 -->|resolved| W5[exit_status = 0]
-        W3 --> W6[Send Check Result to Icinga2]
+    subgraph WM["Work Mode"]
+        W1["Grafana Alert"] -->|"firing + severity"| W2{"Map Severity"}
+        W2 -->|"critical"| W3["exit_status = 2"]
+        W2 -->|"warning"| W4["exit_status = 1"]
+        W1 -->|"resolved"| W5["exit_status = 0"]
+        W3 --> W6["Send Check Result to Icinga2"]
         W4 --> W6
         W5 --> W6
     end
 
-    subgraph Test Mode
-        T1[Grafana Alert<br/>mode=test] --> T2{test_action}
-        T2 -->|create| T3[PUT /v1/objects/services/host!name<br/>labels + annotations → vars, notes, display_name]
-        T2 -->|delete| T4[DELETE /v1/objects/services/host!name?cascade=1]
-        T3 --> T5[(Cache: register)]
-        T4 --> T6[(Cache: remove)]
+    subgraph TM["Test Mode"]
+        T1["Grafana Alert\nmode=test"] --> T2{"test_action"}
+        T2 -->|"create"| T3["PUT services/host!name\nlabels + annotations to vars"]
+        T2 -->|"delete"| T4["DELETE services/host!name\ncascade=1"]
+        T3 --> T5[("Cache: register")]
+        T4 --> T6[("Cache: remove")]
     end
 ```
 

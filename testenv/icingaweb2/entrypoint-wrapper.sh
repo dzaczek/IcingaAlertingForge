@@ -26,10 +26,12 @@ fi
 
 # Ensure admin user in background (icingaweb_user table is created by the entrypoint)
 (
-    ADMIN_HASH='$2y$10$MRmtGRQMnEJOT8JRDaOvJOAfDAkXCnGJ0csLgnLOIjLGJcTlBbwpO'
     for i in $(seq 1 30); do
-        if mysql -h mariadb -u icingaweb2 -picingaweb2pass icingaweb2 -e \
-            "INSERT IGNORE INTO icingaweb_user (name, active, password_hash) VALUES ('admin', 1, '${ADMIN_HASH}');" &>/dev/null; then
+        if mysql -h mariadb -u icingaweb2 -picingaweb2pass icingaweb2 -e "SELECT 1 FROM icingaweb_user LIMIT 1" &>/dev/null; then
+            # Generate hash with PHP to ensure compatibility
+            ADMIN_HASH=$(php -r "echo password_hash('admin', PASSWORD_BCRYPT);")
+            mysql -h mariadb -u icingaweb2 -picingaweb2pass icingaweb2 -e \
+                "INSERT INTO icingaweb_user (name, active, password_hash) VALUES ('admin', 1, '${ADMIN_HASH}') ON DUPLICATE KEY UPDATE password_hash='${ADMIN_HASH}';"
             echo "Admin user ensured (admin/admin)"
             break
         fi

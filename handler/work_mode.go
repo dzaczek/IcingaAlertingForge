@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"icinga-webhook-bridge/models"
@@ -90,6 +91,22 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 			}
 		}
 		defer h.Limiter.ReleaseStatus()
+	}
+
+	// Auto-create service if it doesn't exist in cache
+	if !h.Cache.Exists(serviceName) {
+		slog.Info("Service not in cache, auto-creating",
+			"service", serviceName, "request_id", requestID)
+		if err := h.API.CreateService(h.HostName, serviceName, alert.Labels, alert.Annotations); err != nil {
+			// Ignore "already exists" errors (409) — just means another request created it
+			if !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "409") {
+				slog.Error("Failed to auto-create service",
+					"service", serviceName, "error", err, "request_id", requestID)
+			}
+		} else {
+			slog.Info("Service auto-created", "service", serviceName, "request_id", requestID)
+		}
+		h.Cache.Register(serviceName)
 	}
 
 	// Send check result to Icinga2

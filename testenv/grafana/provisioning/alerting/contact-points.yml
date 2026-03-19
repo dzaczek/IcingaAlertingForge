@@ -10,6 +10,6 @@ contactPoints:
           url: http://webhook-bridge:8080/webhook
           httpMethod: POST
           maxAlerts: 0
+          authorization_scheme: ApiKey
+          authorization_credentials: test-key-grafana-local
         disableResolveMessage: false
-        headers:
-          X-API-Key: test-key-grafana-local

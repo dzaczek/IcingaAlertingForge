@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,7 +39,19 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Authentication ──────────────────────────────────────────────
+	// Check X-API-Key header first, then fall back to Authorization header
+	// (Grafana webhook sends: "Authorization: <scheme> <credentials>")
 	apiKey := r.Header.Get("X-API-Key")
+	if apiKey == "" {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			// Strip scheme prefix (e.g. "ApiKey abc123" -> "abc123")
+			if i := strings.Index(auth, " "); i >= 0 {
+				apiKey = auth[i+1:]
+			} else {
+				apiKey = auth
+			}
+		}
+	}
 	source, ok := h.KeyStore.ValidateKey(apiKey)
 	if !ok {
 		slog.Warn("Unauthorized webhook request", "remote_addr", r.RemoteAddr)

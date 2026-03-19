@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Custom entrypoint wrapper to init DBs before the real entrypoint
 COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
+COPY create-admin.php /create-admin.php
 RUN chmod +x /entrypoint-wrapper.sh
 
 USER www-data

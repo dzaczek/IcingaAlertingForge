@@ -12,6 +12,7 @@ import (
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 )
 
@@ -25,6 +26,7 @@ type WebhookHandler struct {
 	History     *history.Logger
 	HostName    string
 	Limiter     *icinga.RateLimiter
+	Metrics     *metrics.Collector
 	HostExists  bool // set during startup after host validation
 }
 
@@ -40,6 +42,9 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	source, ok := h.KeyStore.ValidateKey(apiKey)
 	if !ok {
 		slog.Warn("Unauthorized webhook request", "remote_addr", r.RemoteAddr)
+		if h.Metrics != nil {
+			h.Metrics.RecordAuthFailure(r.RemoteAddr, apiKey)
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -66,12 +71,25 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// ── Process each alert ──────────────────────────────────────────
+	requestStart := time.Now()
 	var results []map[string]any
+	hasErrors := false
 	for _, alert := range payload.Alerts {
 		start := time.Now()
 		result := h.processAlert(requestID, source, alert)
 		result["duration_ms"] = time.Since(start).Milliseconds()
+		if result["status"] == "error" {
+			hasErrors = true
+		}
 		results = append(results, result)
+	}
+
+	// Record metrics
+	if h.Metrics != nil {
+		h.Metrics.RecordRequest(time.Since(requestStart).Milliseconds())
+		if hasErrors {
+			h.Metrics.RecordError()
+		}
 	}
 
 	statusCode := http.StatusOK

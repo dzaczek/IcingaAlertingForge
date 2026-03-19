@@ -14,6 +14,7 @@ import (
 	"icinga-webhook-bridge/handler"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/metrics"
 )
 
 const version = "1.0.0"
@@ -98,6 +99,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Metrics Collector ────────────────────────────────────────────
+	metricsCollector := metrics.NewCollector()
+
 	// ── Rate Limiter ────────────────────────────────────────────────
 	rateLimiter := icinga.NewRateLimiter(
 		cfg.RateLimitMutate,
@@ -118,6 +122,7 @@ func main() {
 		History:    historyLogger,
 		HostName:   cfg.Icinga2HostName,
 		Limiter:    rateLimiter,
+		Metrics:    metricsCollector,
 		HostExists: hostExists,
 	}
 
@@ -135,6 +140,7 @@ func main() {
 		Cache:     serviceCache,
 		History:   historyLogger,
 		API:       apiClient,
+		Metrics:   metricsCollector,
 		HostName:  cfg.Icinga2HostName,
 		AdminUser: cfg.AdminUser,
 		AdminPass: cfg.AdminPass,

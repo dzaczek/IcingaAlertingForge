@@ -10,6 +10,7 @@ import (
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 )
 
@@ -19,6 +20,7 @@ type DashboardHandler struct {
 	Cache     *cache.ServiceCache
 	History   *history.Logger
 	API       *icinga.APIClient
+	Metrics   *metrics.Collector
 	HostName  string
 	AdminUser string
 	AdminPass string
@@ -36,6 +38,7 @@ type dashboardData struct {
 	IsAdmin        bool
 	IcingaServices []icinga.ServiceInfo
 	HostName       string
+	SysStats       metrics.SystemStats
 }
 
 type dashboardAlert struct {
@@ -150,6 +153,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var sysStats metrics.SystemStats
+	if h.Metrics != nil {
+		sysStats = h.Metrics.Snapshot()
+	}
+
 	data := dashboardData{
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
@@ -160,6 +168,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		IsAdmin:        isAdmin,
 		IcingaServices: icingaServices,
 		HostName:       h.HostName,
+		SysStats:       sysStats,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -477,6 +486,143 @@ const dashboardHTML = `<!DOCTYPE html>
 </div>
 
 {{if .IsAdmin}}
+<!-- Admin: System Health -->
+<div class="section">
+  <h2>System Health</h2>
+  <div class="grid">
+    <div class="stat-card">
+      <div class="label">CPU Cores</div>
+      <div class="value">{{.SysStats.NumCPU}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Goroutines</div>
+      <div class="value {{if gt .SysStats.GoRoutines 100}}warning{{else}}ok{{end}}">{{.SysStats.GoRoutines}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Memory (Alloc)</div>
+      <div class="value">{{printf "%.1f" .SysStats.MemAllocMB}} MB</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Memory (Sys)</div>
+      <div class="value">{{printf "%.1f" .SysStats.MemSysMB}} MB</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Heap</div>
+      <div class="value">{{printf "%.1f" .SysStats.MemHeapMB}} MB</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Stack</div>
+      <div class="value">{{printf "%.2f" .SysStats.MemStackMB}} MB</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">GC Runs</div>
+      <div class="value">{{.SysStats.GCRuns}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">GC Pause Total</div>
+      <div class="value">{{printf "%.1f" .SysStats.GCPauseTotalMs}} ms</div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin: Performance Metrics -->
+<div class="section">
+  <h2>Performance</h2>
+  <div class="grid">
+    <div class="stat-card">
+      <div class="label">Total Requests</div>
+      <div class="value">{{.SysStats.TotalRequests}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Total Errors</div>
+      <div class="value {{if gt .SysStats.TotalErrors 0}}error{{else}}ok{{end}}">{{.SysStats.TotalErrors}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Error Rate</div>
+      <div class="value {{if gt .SysStats.ErrorRate 5.0}}critical{{else if gt .SysStats.ErrorRate 1.0}}warning{{else}}ok{{end}}">{{printf "%.1f" .SysStats.ErrorRate}}%</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Avg Latency</div>
+      <div class="value {{if gt .SysStats.AvgLatencyMs 500.0}}critical{{else if gt .SysStats.AvgLatencyMs 200.0}}warning{{else}}ok{{end}}">{{printf "%.0f" .SysStats.AvgLatencyMs}} ms</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Requests/min</div>
+      <div class="value">{{printf "%.1f" .SysStats.RequestsPerMin}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Uptime</div>
+      <div class="value" style="font-size:18px;">{{.SysStats.Uptime}}</div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin: Security -->
+<div class="section">
+  <h2>Security</h2>
+  <div class="grid">
+    <div class="stat-card">
+      <div class="label">Failed Auth (total)</div>
+      <div class="value {{if gt .SysStats.FailedAuthTotal 0}}warning{{else}}ok{{end}}">{{.SysStats.FailedAuthTotal}}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Brute Force IPs</div>
+      <div class="value {{if .SysStats.BruteForceIPs}}critical{{else}}ok{{end}}">{{len .SysStats.BruteForceIPs}}</div>
+    </div>
+  </div>
+
+  {{if .SysStats.BruteForceIPs}}
+  <div style="margin-top:12px;">
+    <h2 style="color:var(--critical);">Brute Force Detected</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>IP Address</th>
+            <th>Attempts</th>
+            <th>Last Seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .SysStats.BruteForceIPs}}
+          <tr>
+            <td class="mono" style="color:var(--critical);"><strong>{{.IP}}</strong></td>
+            <td><span class="badge critical">{{.Attempts}}</span></td>
+            <td class="mono">{{.LastSeen}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+
+  {{if .SysStats.FailedAuthRecent}}
+  <div style="margin-top:12px;">
+    <h2>Recent Failed Auth (last hour)</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>IP Address</th>
+            <th>Key Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .SysStats.FailedAuthRecent}}
+          <tr>
+            <td class="mono">{{.Timestamp.Format "2006-01-02 15:04:05"}}</td>
+            <td class="mono">{{.IP}}</td>
+            <td class="mono" style="color:var(--warning);">{{.KeyPrefix}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {{end}}
+</div>
+
 <!-- Admin: Icinga2 Services Management -->
 <div class="section">
   <h2>Icinga2 Services on "{{.HostName}}" (Admin)</h2>

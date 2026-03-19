@@ -2,7 +2,7 @@
 
 > **Project Status: Under Construction — Ready for Deploy**
 
-A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks and forwards them to Icinga2 as passive check results via the REST API. Supports automatic service creation/deletion, multi-key authentication, JSONL history logging, an in-memory service cache, and a live HTML dashboard.
+A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks and forwards them to Icinga2 as passive check results via the REST API. Supports automatic service creation, multi-key authentication, rate limiting, host auto-creation with Director conflict detection, an admin panel with security monitoring, JSONL history logging, an in-memory service cache, and a live HTML dashboard.
 
 ---
 
@@ -22,6 +22,7 @@ A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks 
   - [Grafana Contact Point Setup](#grafana-contact-point-setup)
 - [API Reference](#api-reference)
   - [Webhook Endpoint](#webhook-endpoint)
+  - [Admin Endpoints](#admin-endpoints)
   - [Status Endpoints](#status-endpoints)
   - [History Endpoints](#history-endpoints)
   - [Health Endpoint](#health-endpoint)
@@ -32,9 +33,11 @@ A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks 
   - [Get Service Status](#get-service-status)
 - [Grafana Webhook Payload Format](#grafana-webhook-payload-format)
 - [Authentication](#authentication)
+- [Rate Limiting](#rate-limiting)
+- [Host Auto-Creation & Director Conflict Detection](#host-auto-creation--director-conflict-detection)
 - [Cache Behavior](#cache-behavior)
 - [History & Logging](#history--logging)
-- [Dashboard](#dashboard)
+- [Admin Dashboard](#admin-dashboard)
 - [Project Structure](#project-structure)
 - [Testing](#testing)
 - [License](#license)
@@ -52,7 +55,7 @@ flowchart LR
     subgraph WB["Webhook Bridge :8080"]
         WH["POST /webhook\nX-API-Key auth"]
         WH --> AUTH{"Auth &\nRoute"}
-        AUTH -->|"mode: work"| WORK["Work Mode\nfiring / resolved"]
+        AUTH -->|"mode: work"| WORK["Work Mode\nfiring / resolved\nauto-create service"]
         AUTH -->|"mode: test"| TEST["Test Mode\ncreate / delete"]
         WH --> CACHE[("In-Memory\nService Cache")]
         WH --> HIST[("history.jsonl")]
@@ -105,9 +108,12 @@ All Icinga2 communication uses a **single set of REST API credentials** (port 56
 
 ## Features
 
-- **Work Mode** — Forwards firing/resolved alerts as passive check results (exit status 0/1/2)
+- **Work Mode** — Forwards firing/resolved alerts as passive check results (exit status 0/1/2) with **automatic service creation** if the service doesn't exist yet
 - **Test Mode** — Creates and deletes dummy passive services directly via the Icinga2 REST API
-- **Multi-Key Auth** — Multiple API keys with source tracking (`WEBHOOK_KEY_*`)
+- **Multi-Key Auth** — Multiple API keys with source tracking (`WEBHOOK_KEY_*`), supports both `X-API-Key` and `Authorization` headers (compatible with Grafana webhook)
+- **Rate Limiting** — Semaphore-based concurrency control: max 5 concurrent create/delete, max 20 concurrent status updates, queue overflow protection
+- **Host Auto-Creation** — Automatically creates a dummy host on startup if it doesn't exist, with Icinga Director conflict detection
+- **Admin Panel** — Password-protected admin dashboard with service management (delete, bulk delete, sorting), system metrics (CPU, RAM, goroutines, GC), performance stats, and brute force detection
 - **In-Memory Cache** — TTL-based service cache prevents duplicate creation
 - **JSONL History** — Every webhook event is logged with rotation and query support
 - **Live Dashboard** — Dark-themed HTML dashboard at `/status/beauty` with 30s auto-refresh
@@ -184,7 +190,7 @@ curl http://localhost:8080/health
 
 ### Test Environment
 
-A complete test stack with Icinga2, Prometheus, Grafana, and the webhook bridge:
+A complete test stack with Icinga2, Icinga Web 2 + Director, MariaDB, Prometheus, Grafana, and the webhook bridge:
 
 ```bash
 cd testenv
@@ -197,11 +203,24 @@ docker compose ps
 
 # Services available:
 #   Icinga2 API     → https://localhost:5665  (apiuser / apipassword)
+#   Icinga Web 2    → http://localhost:8082   (admin / admin)
 #   Prometheus      → http://localhost:9090
 #   Grafana         → http://localhost:3000   (admin / admin)
 #   Webhook Bridge  → http://localhost:9080
 #   Dashboard       → http://localhost:9080/status/beauty
+#   Admin Panel     → http://localhost:9080/status/beauty?admin=1  (admin / admin123)
 ```
+
+The test environment includes:
+- **MariaDB** — databases for Icinga2 IDO, Icinga Web 2, and Director
+- **Icinga2** — with IDO MySQL for Web 2 backend, API enabled, dummy test host
+- **Icinga Web 2** — monitoring module (IDO backend) + Director module, fully provisioned via env vars
+- **Prometheus** — scraping its own metrics (data source for Grafana alerts)
+- **Grafana** — with provisioned alert rules, contact point configured to send to webhook-bridge
+- **Webhook Bridge** — connected to Icinga2, auto-creates dummy host on startup
+
+Grafana alert rules are pre-configured to fire test alerts that flow through the full pipeline:
+Grafana → webhook-bridge → Icinga2 → visible in Icinga Web 2.
 
 **Tear down:**
 
@@ -226,6 +245,14 @@ All settings are loaded from environment variables or a `.env` file in the worki
 | `ICINGA2_PASS` | Yes | — | Icinga2 API password |
 | `ICINGA2_HOST_NAME` | Yes | — | Target host name in Icinga2 for all service operations |
 | `ICINGA2_TLS_SKIP_VERIFY` | No | `false` | Skip TLS certificate verification (development only!) |
+| `ICINGA2_HOST_AUTO_CREATE` | No | `false` | Auto-create dummy host if it doesn't exist on startup |
+| `ICINGA2_HOST_DISPLAY` | No | `<host_name>` | Display name for auto-created host |
+| `ICINGA2_HOST_ADDRESS` | No | `127.0.0.1` | Address for auto-created host |
+| `ADMIN_USER` | No | — | Username for admin panel (HTTP Basic Auth) |
+| `ADMIN_PASS` | No | — | Password for admin panel |
+| `RATELIMIT_MUTATE_MAX` | No | `5` | Max concurrent create/delete operations |
+| `RATELIMIT_STATUS_MAX` | No | `20` | Max concurrent status update operations |
+| `RATELIMIT_MAX_QUEUE` | No | `100` | Max queued operations before rejecting |
 | `HISTORY_FILE` | No | `/var/log/webhook-bridge/history.jsonl` | Path to JSONL history file |
 | `HISTORY_MAX_ENTRIES` | No | `10000` | Max history entries before automatic rotation |
 | `CACHE_TTL_MINUTES` | No | `60` | In-memory service cache TTL in minutes |
@@ -241,8 +268,18 @@ WEBHOOK_KEY_GRAFANA_DEV=my-secret-key-dev
 ICINGA2_HOST=https://icinga2.example.com:5665
 ICINGA2_USER=apiuser
 ICINGA2_PASS=secretpassword
-ICINGA2_HOST_NAME=monitored-host
+ICINGA2_HOST_NAME=grafana-alerts
 ICINGA2_TLS_SKIP_VERIFY=false
+ICINGA2_HOST_AUTO_CREATE=true
+ICINGA2_HOST_DISPLAY=Grafana Alerts
+ICINGA2_HOST_ADDRESS=127.0.0.1
+
+ADMIN_USER=admin
+ADMIN_PASS=secretadminpass
+
+RATELIMIT_MUTATE_MAX=5
+RATELIMIT_STATUS_MAX=20
+RATELIMIT_MAX_QUEUE=100
 
 HISTORY_FILE=/var/log/webhook-bridge/history.jsonl
 HISTORY_MAX_ENTRIES=10000
@@ -258,7 +295,7 @@ LOG_FORMAT=json
 
 ### Sending Alerts (Work Mode)
 
-Work mode is the default. When Grafana fires or resolves an alert, the bridge maps it to an Icinga2 passive check result:
+Work mode is the default. When Grafana fires or resolves an alert, the bridge maps it to an Icinga2 passive check result. **If the service doesn't exist yet, it is automatically created as a dummy passive service** with all Grafana labels and annotations stored as Icinga2 vars.
 
 | Alert Status | Severity Label | Exit Status | Icinga2 State |
 |-------------|---------------|------------:|---------------|
@@ -341,13 +378,38 @@ Changes are **immediate** via the Icinga2 REST API (no deploy step). The cache p
 
 ### Grafana Contact Point Setup
 
+**Via Grafana UI:**
+
 1. In Grafana, go to **Alerting** -> **Contact points**
 2. Click **Add contact point**
 3. Choose type: **Webhook**
 4. Set URL: `http://<webhook-bridge-host>:8080/webhook`
 5. Set HTTP Method: **POST**
-6. Add HTTP Header: `X-API-Key` = `<your WEBHOOK_KEY value>`
-7. Save and test
+6. In **Optional Webhook settings**, set **Authorization Header** credentials to your `WEBHOOK_KEY` value
+7. Go to **Alerting** -> **Notification policies** and set the default contact point to your new webhook
+8. Save and test
+
+**Via provisioning YAML (recommended for test/dev):**
+
+```yaml
+# grafana/provisioning/alerting/contact-points.yml
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: webhook-bridge
+    receivers:
+      - uid: webhook-bridge-uid
+        type: webhook
+        settings:
+          url: http://webhook-bridge:8080/webhook
+          httpMethod: POST
+          authorization_scheme: ApiKey
+          authorization_credentials: your-secret-key
+```
+
+The bridge accepts API keys via two headers:
+- `X-API-Key: <key>` — direct key header
+- `Authorization: <scheme> <key>` — Grafana webhook format (scheme is stripped, only key is validated)
 
 ---
 
@@ -363,8 +425,11 @@ Main endpoint for receiving Grafana alert webhooks.
 
 | Header | Required | Description |
 |--------|----------|-------------|
-| `X-API-Key` | Yes | Webhook API key for authentication |
+| `X-API-Key` | Yes* | Webhook API key for authentication |
+| `Authorization` | Yes* | Alternative: `<Scheme> <key>` (e.g. `ApiKey my-secret`) |
 | `Content-Type` | Yes | Must be `application/json` |
+
+*One of `X-API-Key` or `Authorization` is required. `X-API-Key` takes precedence.
 
 **Request Body:** See [Grafana Webhook Payload Format](#grafana-webhook-payload-format)
 
@@ -404,6 +469,28 @@ Main endpoint for receiving Grafana alert webhooks.
 | `400` | Invalid JSON or empty alerts array |
 | `401` | Missing or invalid `X-API-Key` header |
 | `405` | HTTP method is not POST |
+
+---
+
+### Admin Endpoints
+
+All admin endpoints require HTTP Basic Auth (`ADMIN_USER` / `ADMIN_PASS`).
+
+#### `GET /admin/services`
+
+List all services managed by webhook-bridge on the target host.
+
+#### `DELETE /admin/services/{name}`
+
+Delete a single service from Icinga2.
+
+#### `POST /admin/services/bulk-delete`
+
+Delete multiple services at once. Request body: `{"services": ["svc1", "svc2"]}`.
+
+#### `GET /admin/ratelimit`
+
+Returns current rate limiter stats (queued, mutate/status slots available).
 
 ---
 
@@ -656,7 +743,12 @@ The bridge accepts the standard [Grafana Unified Alerting webhook format](https:
 
 ## Authentication
 
-The bridge uses API key authentication via the `X-API-Key` HTTP header.
+The bridge supports two authentication methods for webhook requests:
+
+1. **`X-API-Key` header** — direct key: `X-API-Key: abc123secret`
+2. **`Authorization` header** — scheme + key: `Authorization: ApiKey abc123secret` (the scheme prefix is stripped)
+
+This dual support ensures compatibility with both custom integrations (X-API-Key) and Grafana's built-in webhook contact point (Authorization header).
 
 Keys are configured through environment variables with the `WEBHOOK_KEY_` prefix:
 
@@ -674,6 +766,36 @@ WEBHOOK_KEY_MONITORING_SCRIPT=script789       # source: "monitoring-script"
 The resolved source name is recorded in every history entry for auditing.
 
 At least one `WEBHOOK_KEY_*` variable must be set or the application will refuse to start.
+
+---
+
+## Rate Limiting
+
+The bridge uses semaphore-based rate limiting to prevent overwhelming Icinga2 API:
+
+| Operation | Default Limit | Config Variable |
+|-----------|:------------:|-----------------|
+| Create/delete services | 5 concurrent | `RATELIMIT_MUTATE_MAX` |
+| Status updates (check results) | 20 concurrent | `RATELIMIT_STATUS_MAX` |
+| Queue overflow | 100 pending | `RATELIMIT_MAX_QUEUE` |
+
+When the queue is full, new requests are rejected with a `rate limit` error. Operations that can't acquire a slot within 30 seconds time out.
+
+---
+
+## Host Auto-Creation & Director Conflict Detection
+
+On startup, the bridge validates the target host in Icinga2:
+
+1. **Host exists and is a dummy host** — normal operation, services will be created here
+2. **Host exists but is NOT a dummy host** — warning logged about potential Director conflict (the host may be managed by Director or manual config)
+3. **Host doesn't exist + `ICINGA2_HOST_AUTO_CREATE=true`** — automatically creates a dummy host with:
+   - `check_command = "dummy"` (always UP, no active checks)
+   - `vars.managed_by = "webhook-bridge"`
+   - Configurable display name and address
+4. **Host doesn't exist + auto-create disabled** — startup fails with an error
+
+This prevents conflicts with Icinga Director: if someone manages the host through Director, the bridge warns but doesn't overwrite it.
 
 ---
 
@@ -733,9 +855,11 @@ LOG_FORMAT=json   # json | text
 
 ---
 
-## Dashboard
+## Admin Dashboard
 
-The `/status/beauty` endpoint serves a self-contained HTML dashboard with no external dependencies:
+The `/status/beauty` endpoint serves a self-contained HTML dashboard with no external dependencies.
+
+### Public View
 
 | Section | Content |
 |---------|---------|
@@ -747,9 +871,21 @@ The `/status/beauty` endpoint serves a self-contained HTML dashboard with no ext
 | **Recent Alerts** | Last 20 events — time, status, mode, action, service, source, Icinga result, duration |
 | **Recent Errors** | Last 10 failed events with error messages |
 
+### Admin View (`/status/beauty?admin=1`)
+
+Requires HTTP Basic Auth (`ADMIN_USER` / `ADMIN_PASS`). Adds:
+
+| Section | Content |
+|---------|---------|
+| **System Health** | Go runtime stats: goroutines, heap usage, GC cycles, uptime |
+| **Performance** | Request count, error rate, avg/max latency, throughput |
+| **Security** | Failed auth attempts, brute force detection (3+ failures from same IP), recent failure log with IP and key prefix |
+| **Service Management** | Sortable table of all Icinga2 services on the target host, with single and bulk delete buttons |
+
 - **Theme:** Dark (GitHub-inspired)
 - **Auto-refresh:** Every 30 seconds
 - **No external JS/CSS** — fully self-contained HTML
+- **Brute force detection** — flags IPs with 3+ failed auth attempts
 
 ---
 
@@ -757,12 +893,11 @@ The `/status/beauty` endpoint serves a self-contained HTML dashboard with no ext
 
 ```
 IcingaAlertForge/
-├── main.go                     # Entry point, route registration, server setup
+├── main.go                     # Entry point, host validation, route registration
 ├── Dockerfile                  # Multi-stage production build (golang:1.24 → alpine:3.19)
 ├── docker-compose.yml          # Production deployment
 ├── .env.example                # Environment variable template
-├── go.mod                      # Go module (google/uuid, godotenv)
-├── go.sum
+├── go.mod / go.sum
 │
 ├── config/
 │   ├── config.go               # Loads and validates all environment config
@@ -777,22 +912,27 @@ IcingaAlertForge/
 │   └── history.go              # HistoryEntry struct
 │
 ├── icinga/
-│   ├── api.go                  # Icinga2 REST API client (check results + CRUD)
-│   └── api_test.go
+│   ├── api.go                  # Icinga2 REST API client (CRUD + check results + host ops)
+│   ├── api_test.go
+│   └── ratelimiter.go          # Semaphore-based rate limiter
+│
+├── metrics/
+│   ├── metrics.go              # Thread-safe metrics collector (requests, auth, runtime)
+│   └── metrics_test.go
 │
 ├── cache/
 │   ├── services.go             # In-memory TTL service cache (sync.RWMutex)
 │   └── services_test.go
 │
 ├── handler/
-│   ├── webhook.go              # POST /webhook — main handler, auth, routing
-│   ├── work_mode.go            # Firing/resolved → passive check results
+│   ├── webhook.go              # POST /webhook — auth (X-API-Key + Authorization), routing
+│   ├── work_mode.go            # Firing/resolved → auto-create service + check results
 │   ├── test_mode.go            # Create/delete services via Icinga2 REST API
+│   ├── admin.go                # Admin API: list/delete/bulk-delete services, rate limit stats
+│   ├── dashboard.go            # GET /status/beauty — HTML dashboard + admin panel
 │   ├── status.go               # GET /status/{service_name}
-│   ├── dashboard.go            # GET /status/beauty — HTML dashboard
 │   ├── history_helper.go       # logHistory() convenience method
-│   ├── webhook_test.go
-│   └── work_mode_test.go
+│   └── *_test.go
 │
 ├── history/
 │   ├── logger.go               # Thread-safe JSONL logger with rotation & stats
@@ -800,17 +940,27 @@ IcingaAlertForge/
 │   └── logger_test.go
 │
 └── testenv/                    # Complete test environment
-    ├── docker-compose.yml      # Icinga2 + Prometheus + Grafana + Bridge
+    ├── docker-compose.yml      # MariaDB + Icinga2 + IcingaWeb2 + Prometheus + Grafana + Bridge
     ├── .env.test               # Test configuration
+    ├── mariadb/
+    │   └── init.sql            # Creates databases: icinga2_ido, icingaweb2, director
     ├── icinga2/
-    │   ├── Dockerfile          # Custom Icinga2 image with API + TLS certs
+    │   ├── Dockerfile          # Custom Icinga2 with IDO MySQL + API + TLS certs
+    │   ├── entrypoint-wrapper.sh  # IDO schema import before Icinga2 starts
     │   └── conf.d/
     │       ├── api-users.conf  # API user definition
-    │       └── hosts.conf      # Test host object
+    │       ├── hosts.conf      # Dummy test host (passive, no active checks)
+    │       └── ido-mysql.conf  # IDO MySQL connection config
+    ├── icingaweb2/
+    │   ├── Dockerfile          # Icinga Web 2 with mariadb-client
+    │   ├── entrypoint-wrapper.sh  # Director schema + admin user creation
+    │   └── create-admin.php    # PHP script for bcrypt-safe admin user creation
     ├── prometheus/
     │   └── prometheus.yml
     └── grafana/
-        ├── provisioning/       # Datasource and dashboard provisioning
+        ├── provisioning/
+        │   ├── alerting/       # Alert rules, contact points, notification policies
+        │   └── datasources/
         └── dashboards/
 ```
 
@@ -843,9 +993,10 @@ go tool cover -html=coverage.out
 | `auth` | Valid/invalid keys, multiple keys |
 | `cache` | States, TTL expiry, thread safety |
 | `config` | Valid config, missing vars, no keys, custom values, TLS flag |
-| `handler` | Auth (no key, wrong key), bad JSON, empty alerts, method check, firing (critical/warning), resolved, test mode (create/delete), cache deduplication, multiple keys |
+| `handler` | Auth (X-API-Key + Authorization header), bad JSON, empty alerts, method check, firing (critical/warning), resolved, test mode (create/delete), auto-create in work mode, cache deduplication, multiple keys |
 | `history` | Append, query with filters, stats aggregation, rotation |
 | `icinga` | SendCheckResult, CreateService, DeleteService (success + error), basic auth verification |
+| `metrics` | Request counting, auth failure tracking, brute force detection, runtime stats |
 
 ### End-to-End Testing
 
@@ -853,11 +1004,11 @@ go tool cover -html=coverage.out
 cd testenv
 docker compose up -d --build
 
-# Wait for Icinga2 health check to pass (~60s)
+# Wait for all services to become healthy (~60s)
 docker compose ps
 
-# Send a CRITICAL alert
-curl -s -X POST http://localhost:9080/webhook \
+# Send a CRITICAL alert (service is auto-created if it doesn't exist)
+curl -s http://localhost:9080/webhook \
   -H "Content-Type: application/json" \
   -H "X-API-Key: test-key-grafana-local" \
   -d '{
@@ -869,12 +1020,40 @@ curl -s -X POST http://localhost:9080/webhook \
     }]
   }' | jq .
 
+# Send with Authorization header (Grafana format)
+curl -s http://localhost:9080/webhook \
+  -H "Content-Type: application/json" \
+  -H "Authorization: ApiKey test-key-grafana-local" \
+  -d '{
+    "status": "firing",
+    "alerts": [{
+      "status": "firing",
+      "labels": {"alertname": "DiskFull", "severity": "warning"},
+      "annotations": {"summary": "Disk /data at 92%"}
+    }]
+  }' | jq .
+
+# Resolve an alert
+curl -s http://localhost:9080/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: test-key-grafana-local" \
+  -d '{
+    "status": "resolved",
+    "alerts": [{
+      "status": "resolved",
+      "labels": {"alertname": "HighCPU"},
+      "annotations": {"summary": "CPU back to normal"}
+    }]
+  }' | jq .
+
 # Check Icinga2 directly
 curl -sk -u apiuser:apipassword \
   'https://localhost:5665/v1/objects/services?filter=service.name=="HighCPU"&attrs=last_check_result' | jq .
 
-# View the dashboard
-open http://localhost:9080/status/beauty
+# View dashboards
+open http://localhost:9080/status/beauty          # Public dashboard
+open http://localhost:8082                         # Icinga Web 2 (admin/admin)
+open http://localhost:3000                         # Grafana (admin/admin)
 
 # Query history
 curl -s 'http://localhost:9080/history?service=HighCPU' | jq .

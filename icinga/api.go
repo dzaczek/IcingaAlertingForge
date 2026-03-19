@@ -82,6 +82,116 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 	return nil
 }
 
+// HostExists checks if the target host exists in Icinga2.
+func (c *APIClient) HostExists(host string) (bool, error) {
+	url := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, host)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return false, fmt.Errorf("icinga api: create request: %w", err)
+	}
+	req.SetBasicAuth(c.User, c.Pass)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("icinga api: send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return false, fmt.Errorf("icinga api: check host %q: status %d: %s", host, resp.StatusCode, string(respBody))
+	}
+	return true, nil
+}
+
+// ListServices returns all services for the given host from Icinga2.
+func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
+	filter := map[string]any{
+		"filter": fmt.Sprintf(`host.name==%q`, host),
+		"attrs":  []string{"name", "display_name", "last_check_result", "notes", "vars"},
+	}
+
+	body, err := json.Marshal(filter)
+	if err != nil {
+		return nil, fmt.Errorf("icinga api: marshal filter: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/objects/services", c.BaseURL)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("icinga api: create request: %w", err)
+	}
+	req.SetBasicAuth(c.User, c.Pass)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-HTTP-Method-Override", "GET")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("icinga api: send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("icinga api: list services: status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Results []struct {
+			Name  string `json:"name"`
+			Attrs struct {
+				Name        string  `json:"name"`
+				DisplayName string  `json:"display_name"`
+				Notes       string  `json:"notes"`
+				Vars        map[string]any `json:"vars"`
+				LastCheckResult *struct {
+					ExitStatus   float64 `json:"exit_status"`
+					Output       string  `json:"output"`
+					ExecutionEnd float64 `json:"execution_end"`
+				} `json:"last_check_result"`
+			} `json:"attrs"`
+		} `json:"results"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("icinga api: decode response: %w", err)
+	}
+
+	var services []ServiceInfo
+	for _, r := range result.Results {
+		svc := ServiceInfo{
+			Name:        r.Attrs.Name,
+			DisplayName: r.Attrs.DisplayName,
+			Notes:       r.Attrs.Notes,
+		}
+		if r.Attrs.LastCheckResult != nil {
+			svc.ExitStatus = int(r.Attrs.LastCheckResult.ExitStatus)
+			svc.Output = r.Attrs.LastCheckResult.Output
+			svc.LastCheck = time.Unix(int64(r.Attrs.LastCheckResult.ExecutionEnd), 0)
+			svc.HasCheckResult = true
+		}
+		services = append(services, svc)
+	}
+
+	return services, nil
+}
+
+// ServiceInfo holds basic service information from Icinga2.
+type ServiceInfo struct {
+	Name           string    `json:"name"`
+	DisplayName    string    `json:"display_name"`
+	Notes          string    `json:"notes"`
+	ExitStatus     int       `json:"exit_status"`
+	Output         string    `json:"output"`
+	LastCheck      time.Time `json:"last_check"`
+	HasCheckResult bool      `json:"has_check_result"`
+}
+
 // CreateService creates a dummy passive service in Icinga2 via the REST API.
 // Uses PUT /v1/objects/services/<host>!<service> to create the object directly.
 // Labels and annotations from the Grafana webhook are stored as Icinga2 attributes

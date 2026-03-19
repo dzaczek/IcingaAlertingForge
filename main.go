@@ -40,6 +40,21 @@ func main() {
 		cfg.Icinga2TLSSkipVerify,
 	)
 
+	// ── Validate host exists in Icinga2 ─────────────────────────────
+	hostExists := false
+	exists, err := apiClient.HostExists(cfg.Icinga2HostName)
+	if err != nil {
+		slog.Warn("Could not verify host in Icinga2 (will retry on requests)",
+			"host", cfg.Icinga2HostName, "error", err)
+	} else if !exists {
+		slog.Error("Host does not exist in Icinga2 — create it before starting the bridge",
+			"host", cfg.Icinga2HostName)
+		os.Exit(1)
+	} else {
+		hostExists = true
+		slog.Info("Host validated in Icinga2", "host", cfg.Icinga2HostName)
+	}
+
 	serviceCache := cache.NewServiceCache(cfg.CacheTTLMinutes)
 
 	historyLogger, err := history.NewLogger(cfg.HistoryFile, cfg.HistoryMaxEntries)
@@ -48,13 +63,27 @@ func main() {
 		os.Exit(1)
 	}
 
+	// ── Rate Limiter ────────────────────────────────────────────────
+	rateLimiter := icinga.NewRateLimiter(
+		cfg.RateLimitMutate,
+		cfg.RateLimitStatus,
+		cfg.RateLimitMaxQueue,
+	)
+	slog.Info("Rate limiter initialized",
+		"mutate_max", cfg.RateLimitMutate,
+		"status_max", cfg.RateLimitStatus,
+		"queue_max", cfg.RateLimitMaxQueue,
+	)
+
 	// ── Create Handlers ─────────────────────────────────────────────
 	webhookHandler := &handler.WebhookHandler{
-		KeyStore: keyStore,
-		Cache:    serviceCache,
-		API:      apiClient,
-		History:  historyLogger,
-		HostName: cfg.Icinga2HostName,
+		KeyStore:   keyStore,
+		Cache:      serviceCache,
+		API:        apiClient,
+		History:    historyLogger,
+		HostName:   cfg.Icinga2HostName,
+		Limiter:    rateLimiter,
+		HostExists: hostExists,
 	}
 
 	statusHandler := &handler.StatusHandler{
@@ -65,10 +94,25 @@ func main() {
 
 	historyHandler := history.NewHandler(historyLogger)
 
+	startedAt := time.Now()
+
 	dashboardHandler := &handler.DashboardHandler{
 		Cache:     serviceCache,
 		History:   historyLogger,
-		StartedAt: time.Now(),
+		API:       apiClient,
+		HostName:  cfg.Icinga2HostName,
+		AdminUser: cfg.AdminUser,
+		AdminPass: cfg.AdminPass,
+		StartedAt: startedAt,
+	}
+
+	adminHandler := &handler.AdminHandler{
+		Cache:    serviceCache,
+		API:      apiClient,
+		Limiter:  rateLimiter,
+		HostName: cfg.Icinga2HostName,
+		User:     cfg.AdminUser,
+		Pass:     cfg.AdminPass,
 	}
 
 	// ── Register Routes ─────────────────────────────────────────────
@@ -89,6 +133,12 @@ func main() {
 	mux.HandleFunc("/history", historyHandler.HandleHistory)
 	mux.HandleFunc("/history/export", historyHandler.HandleExport)
 
+	// Admin endpoints (password protected)
+	mux.HandleFunc("/admin/services/bulk-delete", adminHandler.HandleBulkDelete)
+	mux.HandleFunc("/admin/services/", adminHandler.HandleDeleteService)
+	mux.HandleFunc("/admin/services", adminHandler.HandleListServices)
+	mux.HandleFunc("/admin/ratelimit", adminHandler.HandleRateLimitStats)
+
 	// ── Start Server ────────────────────────────────────────────────
 	slog.Info("Routes registered",
 		"endpoints", []string{
@@ -98,8 +148,16 @@ func main() {
 			"GET  /status/{service_name}",
 			"GET  /history",
 			"GET  /history/export",
+			"GET  /admin/services",
+			"DELETE /admin/services/{name}",
+			"POST /admin/services/bulk-delete",
+			"GET  /admin/ratelimit",
 		},
 	)
+
+	if cfg.AdminPass == "" {
+		slog.Warn("ADMIN_PASS not set — admin endpoints and dashboard management will be disabled")
+	}
 
 	server := &http.Server{
 		Addr:         cfg.ListenAddr(),

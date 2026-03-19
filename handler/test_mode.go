@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -43,6 +44,22 @@ func (h *WebhookHandler) handleTestCreate(requestID, source, serviceName string,
 		}
 	}
 
+	// Rate limit: acquire mutation slot (blocks until available, max 5 concurrent)
+	if h.Limiter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := h.Limiter.AcquireMutate(ctx); err != nil {
+			slog.Warn("Rate limit timeout for service creation",
+				"service", serviceName, "request_id", requestID)
+			return map[string]any{
+				"error":   "rate limit: too many concurrent operations",
+				"status":  "error",
+				"service": serviceName,
+			}
+		}
+		defer h.Limiter.ReleaseMutate()
+	}
+
 	// Create via Icinga2 REST API (immediate, no deploy needed)
 	h.Cache.SetPending(serviceName)
 
@@ -80,6 +97,22 @@ func (h *WebhookHandler) handleTestCreate(requestID, source, serviceName string,
 
 // handleTestDelete removes a service from Icinga2 via the REST API.
 func (h *WebhookHandler) handleTestDelete(requestID, source, serviceName string, alert models.GrafanaAlert) map[string]any {
+	// Rate limit: acquire mutation slot
+	if h.Limiter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := h.Limiter.AcquireMutate(ctx); err != nil {
+			slog.Warn("Rate limit timeout for service deletion",
+				"service", serviceName, "request_id", requestID)
+			return map[string]any{
+				"error":   "rate limit: too many concurrent operations",
+				"status":  "error",
+				"service": serviceName,
+			}
+		}
+		defer h.Limiter.ReleaseMutate()
+	}
+
 	start := time.Now()
 	if err := h.API.DeleteService(h.HostName, serviceName); err != nil {
 		slog.Error("Failed to delete service via Icinga2 API",

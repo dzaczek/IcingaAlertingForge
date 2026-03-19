@@ -1,31 +1,41 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"time"
 
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/history"
+	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/models"
 )
 
 // DashboardHandler serves the GET /status/beauty HTML dashboard
 // with live statistics, recent alerts, and error information.
 type DashboardHandler struct {
-	Cache   *cache.ServiceCache
-	History *history.Logger
+	Cache     *cache.ServiceCache
+	History   *history.Logger
+	API       *icinga.APIClient
+	HostName  string
+	AdminUser string
+	AdminPass string
 	StartedAt time.Time
 }
 
 // dashboardData is the template context for the beauty dashboard.
 type dashboardData struct {
-	GeneratedAt   string
-	Uptime        string
-	Stats         history.HistoryStats
+	GeneratedAt    string
+	Uptime         string
+	Stats          history.HistoryStats
 	CachedServices map[string]cache.ServiceState
-	RecentAlerts  []dashboardAlert
-	RecentErrors  []dashboardAlert
+	RecentAlerts   []dashboardAlert
+	RecentErrors   []dashboardAlert
+	IsAdmin        bool
+	IcingaServices []icinga.ServiceInfo
+	HostName       string
 }
 
 type dashboardAlert struct {
@@ -82,10 +92,32 @@ func toDashboardAlert(e models.HistoryEntry) dashboardAlert {
 	}
 }
 
+// isAdmin checks if the request has valid admin credentials.
+func (h *DashboardHandler) isAdmin(r *http.Request) bool {
+	if h.AdminPass == "" {
+		return false
+	}
+	user, pass, ok := r.BasicAuth()
+	if !ok {
+		return false
+	}
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.AdminUser)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.AdminPass)) == 1
+	return userOK && passOK
+}
+
 // ServeHTTP renders the beauty dashboard.
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	// Check if admin login was requested
+	isAdmin := h.isAdmin(r)
+	if r.URL.Query().Get("admin") == "1" && !isAdmin {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -107,6 +139,17 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	uptime := time.Since(h.StartedAt).Round(time.Second)
 
+	// If admin, fetch live services from Icinga2
+	var icingaServices []icinga.ServiceInfo
+	if isAdmin {
+		svcs, err := h.API.ListServices(h.HostName)
+		if err != nil {
+			slog.Error("Dashboard: failed to list Icinga2 services", "error", err)
+		} else {
+			icingaServices = svcs
+		}
+	}
+
 	data := dashboardData{
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
@@ -114,6 +157,9 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CachedServices: h.Cache.All(),
 		RecentAlerts:   recentAlerts,
 		RecentErrors:   recentErrors,
+		IsAdmin:        isAdmin,
+		IcingaServices: icingaServices,
+		HostName:       h.HostName,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -185,6 +231,8 @@ const dashboardHTML = `<!DOCTYPE html>
     50% { opacity: 0.4; }
   }
   .header-meta { font-size: 13px; color: var(--text-dim); text-align: right; }
+  .header-meta a { color: var(--accent); text-decoration: none; }
+  .header-meta a:hover { text-decoration: underline; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
   .stat-card {
     background: var(--card-bg);
@@ -226,7 +274,12 @@ const dashboardHTML = `<!DOCTYPE html>
     text-transform: uppercase;
     letter-spacing: 0.04em;
     border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
   }
+  thead th:hover { color: var(--text); }
+  thead th .sort-arrow { margin-left: 4px; font-size: 10px; }
   tbody td {
     padding: 9px 14px;
     border-bottom: 1px solid var(--border);
@@ -249,11 +302,7 @@ const dashboardHTML = `<!DOCTYPE html>
   .badge.critical { background: var(--critical-bg); color: var(--critical); }
   .badge.test { background: var(--test-bg); color: var(--test); }
   .badge.error { background: var(--error-bg); color: var(--error); }
-
-  .bar-chart { display: flex; gap: 6px; align-items: flex-end; height: 60px; margin-top: 8px; }
-  .bar-item { display: flex; flex-direction: column; align-items: center; flex: 1; }
-  .bar { border-radius: 4px 4px 0 0; min-width: 24px; transition: height 0.3s; }
-  .bar-label { font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .badge.unknown { background: rgba(107,114,128,0.12); color: #9ca3af; }
 
   .source-list { display: flex; flex-wrap: wrap; gap: 8px; padding: 16px; }
   .source-tag {
@@ -293,20 +342,69 @@ const dashboardHTML = `<!DOCTYPE html>
   .icinga-ok { color: var(--ok); }
   .icinga-fail { color: var(--error); }
   .mono { font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+  /* Admin styles */
+  .btn {
+    padding: 4px 12px;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-danger { background: var(--critical); color: white; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-sm { padding: 2px 8px; font-size: 11px; }
+  .toolbar { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .toolbar label { font-size: 12px; color: var(--text-dim); }
+  .checkbox-cell { width: 30px; text-align: center; }
+  input[type="checkbox"] { cursor: pointer; accent-color: var(--accent); }
+  .admin-badge {
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+  }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    max-width: 400px;
+  }
+  .toast.show { opacity: 1; }
+  .toast.success { background: var(--ok); color: white; }
+  .toast.error { background: var(--critical); color: white; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1><span class="dot"></span> Webhook Bridge Dashboard</h1>
+  <h1>
+    <span class="dot"></span> Webhook Bridge Dashboard
+    {{if .IsAdmin}}<span class="admin-badge">ADMIN</span>{{end}}
+  </h1>
   <div class="header-meta">
     Generated: {{.GeneratedAt}}<br>
     Uptime: {{.Uptime}}<br>
-    <em>Auto-refresh every 30s</em>
+    <em>Auto-refresh every 30s</em><br>
+    {{if not .IsAdmin}}<a href="?admin=1">Admin Login</a>{{else}}<a href="/status/beauty">Logout</a>{{end}}
   </div>
 </div>
 
-<!-- ── Summary Statistics ────────────────────────────────── -->
+<!-- Summary Statistics -->
 <div class="grid">
   <div class="stat-card">
     <div class="label">Total Webhooks</div>
@@ -326,7 +424,7 @@ const dashboardHTML = `<!DOCTYPE html>
   </div>
 </div>
 
-<!-- ── Breakdown by Mode / Severity ──────────────────────── -->
+<!-- Breakdown by Mode / Severity -->
 <div class="grid">
   <div class="stat-card">
     <div class="label">Work Mode</div>
@@ -346,7 +444,7 @@ const dashboardHTML = `<!DOCTYPE html>
   </div>
 </div>
 
-<!-- ── Sources ───────────────────────────────────────────── -->
+<!-- Sources -->
 <div class="section">
   <h2>Sources</h2>
   <div class="card">
@@ -362,7 +460,7 @@ const dashboardHTML = `<!DOCTYPE html>
   </div>
 </div>
 
-<!-- ── Cached Services ───────────────────────────────────── -->
+<!-- Cached Services -->
 <div class="section">
   <h2>Cached Services</h2>
   <div class="card">
@@ -378,22 +476,76 @@ const dashboardHTML = `<!DOCTYPE html>
   </div>
 </div>
 
-<!-- ── Recent Alerts ─────────────────────────────────────── -->
+{{if .IsAdmin}}
+<!-- Admin: Icinga2 Services Management -->
+<div class="section">
+  <h2>Icinga2 Services on "{{.HostName}}" (Admin)</h2>
+  <div class="card">
+    {{if .IcingaServices}}
+    <div class="toolbar">
+      <input type="checkbox" id="selectAll" onclick="toggleAll(this)">
+      <label for="selectAll">Select All</label>
+      <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btnDeleteSelected" disabled>Delete Selected</button>
+      <span style="margin-left:auto; font-size:12px; color:var(--text-dim);">{{len .IcingaServices}} service(s)</span>
+    </div>
+    <table id="servicesTable">
+      <thead>
+        <tr>
+          <th class="checkbox-cell"></th>
+          <th onclick="sortTable(1,'string')">Name <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(2,'string')">Display Name <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(3,'string')">Status <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(4,'string')">Output <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(5,'date')">Last Check <span class="sort-arrow"></span></th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range .IcingaServices}}
+        <tr data-service="{{.Name}}">
+          <td class="checkbox-cell"><input type="checkbox" class="svc-check" value="{{.Name}}"></td>
+          <td><strong>{{.Name}}</strong></td>
+          <td>{{.DisplayName}}</td>
+          <td>
+            {{if .HasCheckResult}}
+              {{if eq .ExitStatus 0}}<span class="badge ok">OK</span>
+              {{else if eq .ExitStatus 1}}<span class="badge warning">WARNING</span>
+              {{else if eq .ExitStatus 2}}<span class="badge critical">CRITICAL</span>
+              {{else}}<span class="badge unknown">UNKNOWN</span>
+              {{end}}
+            {{else}}<span class="badge unknown">PENDING</span>
+            {{end}}
+          </td>
+          <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{.Output}}">{{.Output}}</td>
+          <td class="mono">{{if .HasCheckResult}}{{.LastCheck.Format "2006-01-02 15:04:05"}}{{else}}-{{end}}</td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteService('{{.Name}}', this)">Delete</button></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">No services found on host "{{.HostName}}"</div>
+    {{end}}
+  </div>
+</div>
+{{end}}
+
+<!-- Recent Alerts -->
 <div class="section">
   <h2>Recent Alerts (last 20)</h2>
   <div class="card">
     {{if .RecentAlerts}}
-    <table>
+    <table id="alertsTable">
       <thead>
         <tr>
-          <th>Time</th>
-          <th>Status</th>
-          <th>Mode</th>
-          <th>Action</th>
-          <th>Service</th>
-          <th>Source</th>
+          <th onclick="sortTable(0,'date',this.closest('table'))">Time <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(1,'string',this.closest('table'))">Status <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(2,'string',this.closest('table'))">Mode <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(3,'string',this.closest('table'))">Action <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(4,'string',this.closest('table'))">Service <span class="sort-arrow"></span></th>
+          <th onclick="sortTable(5,'string',this.closest('table'))">Source <span class="sort-arrow"></span></th>
           <th>Icinga</th>
-          <th>Duration</th>
+          <th onclick="sortTable(7,'number',this.closest('table'))">Duration <span class="sort-arrow"></span></th>
         </tr>
       </thead>
       <tbody>
@@ -417,7 +569,7 @@ const dashboardHTML = `<!DOCTYPE html>
   </div>
 </div>
 
-<!-- ── Recent Errors ─────────────────────────────────────── -->
+<!-- Recent Errors -->
 <div class="section">
   <h2>Recent Errors (last 10)</h2>
   <div class="card">
@@ -455,6 +607,142 @@ const dashboardHTML = `<!DOCTYPE html>
 <div class="footer">
   IcingaAlertForge &middot; Grafana &rarr; Webhook Bridge &rarr; Icinga2 &middot; v1.0
 </div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Table sorting
+function sortTable(colIdx, type, tableEl) {
+  const table = tableEl || document.getElementById('servicesTable');
+  if (!table) return;
+  const tbody = table.querySelector('tbody');
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  const th = table.querySelectorAll('thead th')[colIdx];
+
+  // Toggle sort direction
+  const dir = th.dataset.sortDir === 'asc' ? 'desc' : 'asc';
+  table.querySelectorAll('thead th').forEach(h => { h.dataset.sortDir = ''; });
+  th.dataset.sortDir = dir;
+
+  // Update arrows
+  table.querySelectorAll('.sort-arrow').forEach(a => a.textContent = '');
+  const arrow = th.querySelector('.sort-arrow');
+  if (arrow) arrow.textContent = dir === 'asc' ? ' \u25B2' : ' \u25BC';
+
+  rows.sort((a, b) => {
+    let va = a.cells[colIdx]?.textContent.trim() || '';
+    let vb = b.cells[colIdx]?.textContent.trim() || '';
+    let cmp = 0;
+    if (type === 'number') {
+      cmp = parseFloat(va) - parseFloat(vb);
+    } else if (type === 'date') {
+      cmp = new Date(va) - new Date(vb);
+    } else {
+      cmp = va.localeCompare(vb);
+    }
+    return dir === 'asc' ? cmp : -cmp;
+  });
+
+  rows.forEach(r => tbody.appendChild(r));
+}
+
+{{if .IsAdmin}}
+// Admin functions
+function getAuthHeader() {
+  // Re-use current Basic Auth credentials from the page load
+  // The browser sends them automatically for same-origin requests
+  return {};
+}
+
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+function deleteService(name, btn) {
+  if (!confirm('Delete service "' + name + '" from Icinga2?')) return;
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  fetch('/admin/services/' + encodeURIComponent(name), {
+    method: 'DELETE',
+  }).then(r => r.json()).then(data => {
+    if (data.status === 'deleted') {
+      showToast('Deleted: ' + name, 'success');
+      const row = btn.closest('tr');
+      if (row) row.remove();
+    } else {
+      showToast('Error: ' + (data.error || 'unknown'), 'error');
+      btn.disabled = false;
+      btn.textContent = 'Delete';
+    }
+  }).catch(err => {
+    showToast('Error: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  });
+}
+
+function toggleAll(master) {
+  document.querySelectorAll('.svc-check').forEach(cb => cb.checked = master.checked);
+  updateBulkBtn();
+}
+
+function updateBulkBtn() {
+  const checked = document.querySelectorAll('.svc-check:checked').length;
+  const btn = document.getElementById('btnDeleteSelected');
+  if (btn) {
+    btn.disabled = checked === 0;
+    btn.textContent = checked > 0 ? 'Delete Selected (' + checked + ')' : 'Delete Selected';
+  }
+}
+
+// Listen for checkbox changes
+document.addEventListener('change', function(e) {
+  if (e.target.classList.contains('svc-check')) updateBulkBtn();
+});
+
+function deleteSelected() {
+  const checked = Array.from(document.querySelectorAll('.svc-check:checked'));
+  const names = checked.map(cb => cb.value);
+  if (names.length === 0) return;
+  if (!confirm('Delete ' + names.length + ' service(s) from Icinga2?')) return;
+
+  const btn = document.getElementById('btnDeleteSelected');
+  btn.disabled = true;
+  btn.textContent = 'Deleting...';
+
+  fetch('/admin/services/bulk-delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({services: names}),
+  }).then(r => r.json()).then(data => {
+    let deleted = 0, errors = 0;
+    (data.results || []).forEach(r => {
+      if (r.status === 'deleted') {
+        deleted++;
+        const row = document.querySelector('tr[data-service="' + r.service + '"]');
+        if (row) row.remove();
+      } else {
+        errors++;
+      }
+    });
+    if (errors > 0) {
+      showToast('Deleted ' + deleted + ', errors: ' + errors, 'error');
+    } else {
+      showToast('Deleted ' + deleted + ' service(s)', 'success');
+    }
+    updateBulkBtn();
+  }).catch(err => {
+    showToast('Error: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Delete Selected';
+  });
+}
+{{end}}
+</script>
 
 </body>
 </html>`

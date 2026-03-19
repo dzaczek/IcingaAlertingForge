@@ -19,11 +19,13 @@ import (
 // It authenticates the request, parses the payload, and routes to the
 // appropriate mode handler (test or work).
 type WebhookHandler struct {
-	KeyStore *auth.KeyStore
-	Cache    *cache.ServiceCache
-	API      *icinga.APIClient
-	History  *history.Logger
-	HostName string
+	KeyStore    *auth.KeyStore
+	Cache       *cache.ServiceCache
+	API         *icinga.APIClient
+	History     *history.Logger
+	HostName    string
+	Limiter     *icinga.RateLimiter
+	HostExists  bool // set during startup after host validation
 }
 
 // ServeHTTP handles POST /webhook requests from Grafana.

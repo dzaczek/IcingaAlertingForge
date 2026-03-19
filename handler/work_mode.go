@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -72,6 +73,23 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 			"status":  "error",
 			"service": serviceName,
 		}
+	}
+
+	// Rate limit: acquire status slot (queue up to 100 concurrent updates)
+	if h.Limiter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		acquired, err := h.Limiter.AcquireStatus(ctx)
+		if err != nil || !acquired {
+			slog.Warn("Rate limit: status queue full, rejecting",
+				"service", serviceName, "request_id", requestID)
+			return map[string]any{
+				"error":   "rate limit: status update queue full",
+				"status":  "error",
+				"service": serviceName,
+			}
+		}
+		defer h.Limiter.ReleaseStatus()
 	}
 
 	// Send check result to Icinga2

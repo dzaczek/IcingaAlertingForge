@@ -35,6 +35,15 @@ type Config struct {
 	// Logging
 	LogLevel  string
 	LogFormat string
+
+	// Admin dashboard auth
+	AdminUser string
+	AdminPass string
+
+	// Rate limiting for Icinga2 API
+	RateLimitMutate   int // max concurrent create/delete operations
+	RateLimitStatus   int // max concurrent status update operations
+	RateLimitMaxQueue int // max queued status operations
 }
 
 // Load reads the .env file and populates the Config struct.
@@ -61,6 +70,13 @@ func Load() *Config {
 
 		LogLevel:  getEnvOrDefault("LOG_LEVEL", "info"),
 		LogFormat: getEnvOrDefault("LOG_FORMAT", "json"),
+
+		AdminUser: getEnvOrDefault("ADMIN_USER", "admin"),
+		AdminPass: getEnvOrDefault("ADMIN_PASS", ""),
+
+		RateLimitMutate:   getEnvInt("RATELIMIT_MUTATE_MAX", 5),
+		RateLimitStatus:   getEnvInt("RATELIMIT_STATUS_MAX", 20),
+		RateLimitMaxQueue: getEnvInt("RATELIMIT_MAX_QUEUE", 100),
 	}
 
 	if len(cfg.WebhookKeys) == 0 {

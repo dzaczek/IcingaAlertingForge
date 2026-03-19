@@ -40,19 +40,54 @@ func main() {
 		cfg.Icinga2TLSSkipVerify,
 	)
 
-	// ── Validate host exists in Icinga2 ─────────────────────────────
+	// ── Validate / auto-create host in Icinga2 ──────────────────────
 	hostExists := false
-	exists, err := apiClient.HostExists(cfg.Icinga2HostName)
+	hostInfo, err := apiClient.GetHostInfo(cfg.Icinga2HostName)
 	if err != nil {
 		slog.Warn("Could not verify host in Icinga2 (will retry on requests)",
 			"host", cfg.Icinga2HostName, "error", err)
-	} else if !exists {
-		slog.Error("Host does not exist in Icinga2 — create it before starting the bridge",
-			"host", cfg.Icinga2HostName)
-		os.Exit(1)
+	} else if !hostInfo.Exists {
+		if cfg.Icinga2HostAutoCreate {
+			slog.Info("Host not found in Icinga2, creating dummy host...",
+				"host", cfg.Icinga2HostName)
+			if err := apiClient.CreateHost(
+				cfg.Icinga2HostName,
+				cfg.Icinga2HostDisplay,
+				cfg.Icinga2HostAddress,
+			); err != nil {
+				slog.Error("Failed to create host in Icinga2",
+					"host", cfg.Icinga2HostName, "error", err)
+				os.Exit(1)
+			}
+			hostExists = true
+			slog.Info("Dummy host created in Icinga2",
+				"host", cfg.Icinga2HostName,
+				"address", cfg.Icinga2HostAddress,
+				"managed_by", "webhook-bridge")
+		} else {
+			slog.Error("Host does not exist in Icinga2 — set ICINGA2_HOST_AUTO_CREATE=true to create it automatically, or create it manually",
+				"host", cfg.Icinga2HostName)
+			os.Exit(1)
+		}
 	} else {
+		// Host exists — check for conflicts
 		hostExists = true
-		slog.Info("Host validated in Icinga2", "host", cfg.Icinga2HostName)
+		if hostInfo.IsManagedByUs() {
+			slog.Info("Host validated in Icinga2 (managed by webhook-bridge)",
+				"host", cfg.Icinga2HostName,
+				"check_command", hostInfo.CheckCommand)
+		} else if hostInfo.IsDummy() {
+			slog.Info("Host validated in Icinga2 (dummy, not managed by us)",
+				"host", cfg.Icinga2HostName,
+				"display_name", hostInfo.DisplayName)
+		} else {
+			slog.Warn("CONFLICT: Host exists but is NOT a dummy host — it may be managed by Director or manual config. "+
+				"Services created by webhook-bridge may conflict with existing configuration!",
+				"host", cfg.Icinga2HostName,
+				"check_command", hostInfo.CheckCommand,
+				"display_name", hostInfo.DisplayName,
+				"managed_by", hostInfo.ManagedBy)
+		}
 	}
 
 	serviceCache := cache.NewServiceCache(cfg.CacheTTLMinutes)

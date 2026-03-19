@@ -82,30 +82,144 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 	return nil
 }
 
-// HostExists checks if the target host exists in Icinga2.
-func (c *APIClient) HostExists(host string) (bool, error) {
+// HostInfo holds information about a host in Icinga2.
+type HostInfo struct {
+	Exists       bool
+	CheckCommand string
+	DisplayName  string
+	ManagedBy    string // value of vars.managed_by
+	Address      string
+}
+
+// IsManagedByUs returns true if the host was created by webhook-bridge.
+func (h HostInfo) IsManagedByUs() bool {
+	return h.ManagedBy == "webhook-bridge"
+}
+
+// IsDummy returns true if the host uses the "dummy" check command.
+func (h HostInfo) IsDummy() bool {
+	return h.CheckCommand == "dummy"
+}
+
+// GetHostInfo retrieves detailed host information from Icinga2.
+func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
 	url := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, host)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return false, fmt.Errorf("icinga api: create request: %w", err)
+		return HostInfo{}, fmt.Errorf("icinga api: create request: %w", err)
 	}
 	req.SetBasicAuth(c.User, c.Pass)
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return false, fmt.Errorf("icinga api: send request: %w", err)
+		return HostInfo{}, fmt.Errorf("icinga api: send request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return false, nil
+		return HostInfo{Exists: false}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
-		return false, fmt.Errorf("icinga api: check host %q: status %d: %s", host, resp.StatusCode, string(respBody))
+		return HostInfo{}, fmt.Errorf("icinga api: check host %q: status %d: %s", host, resp.StatusCode, string(respBody))
 	}
-	return true, nil
+
+	var result struct {
+		Results []struct {
+			Attrs struct {
+				CheckCommand string         `json:"check_command"`
+				DisplayName  string         `json:"display_name"`
+				Address      string         `json:"address"`
+				Vars         map[string]any `json:"vars"`
+			} `json:"attrs"`
+		} `json:"results"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return HostInfo{}, fmt.Errorf("icinga api: decode host response: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return HostInfo{Exists: false}, nil
+	}
+
+	attrs := result.Results[0].Attrs
+	info := HostInfo{
+		Exists:       true,
+		CheckCommand: attrs.CheckCommand,
+		DisplayName:  attrs.DisplayName,
+		Address:      attrs.Address,
+	}
+
+	if mb, ok := attrs.Vars["managed_by"].(string); ok {
+		info.ManagedBy = mb
+	}
+
+	return info, nil
+}
+
+// HostExists is a convenience wrapper around GetHostInfo.
+func (c *APIClient) HostExists(host string) (bool, error) {
+	info, err := c.GetHostInfo(host)
+	if err != nil {
+		return false, err
+	}
+	return info.Exists, nil
+}
+
+// CreateHost creates a dummy host in Icinga2 via the REST API.
+// The host is marked with vars.managed_by = "webhook-bridge" so we can
+// detect it on subsequent startups and avoid conflicts with Director.
+func (c *APIClient) CreateHost(name, displayName, address string) error {
+	if address == "" {
+		address = "127.0.0.1"
+	}
+	if displayName == "" {
+		displayName = name + " (webhook-bridge)"
+	}
+
+	attrs := map[string]any{
+		"attrs": map[string]any{
+			"check_command":        "dummy",
+			"enable_active_checks": false,
+			"address":              address,
+			"display_name":         displayName,
+			"vars": map[string]any{
+				"managed_by": "webhook-bridge",
+				"os":         "Linux",
+			},
+		},
+		"templates": []string{"generic-host"},
+	}
+
+	body, err := json.Marshal(attrs)
+	if err != nil {
+		return fmt.Errorf("icinga api: marshal host payload: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, name)
+	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("icinga api: create request: %w", err)
+	}
+
+	req.SetBasicAuth(c.User, c.Pass)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("icinga api: send create host request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("icinga api: create host %q: status %d: %s", name, resp.StatusCode, string(respBody))
+	}
+
+	return nil
 }
 
 // ListServices returns all services for the given host from Icinga2.

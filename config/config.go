@@ -23,6 +23,9 @@ type Config struct {
 	Icinga2User          string
 	Icinga2Pass          string
 	Icinga2HostName      string
+	Icinga2HostDisplay   string
+	Icinga2HostAddress   string
+	Icinga2HostAutoCreate bool
 	Icinga2TLSSkipVerify bool
 
 	// History
@@ -57,11 +60,14 @@ func Load() *Config {
 		ServerHost:  getEnvOrDefault("SERVER_HOST", "0.0.0.0"),
 		WebhookKeys: loadWebhookKeys(),
 
-		Icinga2Host:          requireEnv("ICINGA2_HOST"),
-		Icinga2User:          requireEnv("ICINGA2_USER"),
-		Icinga2Pass:          requireEnv("ICINGA2_PASS"),
-		Icinga2HostName:      requireEnv("ICINGA2_HOST_NAME"),
-		Icinga2TLSSkipVerify: getEnvBool("ICINGA2_TLS_SKIP_VERIFY", false),
+		Icinga2Host:           requireEnv("ICINGA2_HOST"),
+		Icinga2User:           requireEnv("ICINGA2_USER"),
+		Icinga2Pass:           requireEnv("ICINGA2_PASS"),
+		Icinga2HostName:       requireEnv("ICINGA2_HOST_NAME"),
+		Icinga2HostDisplay:    getEnvOrDefault("ICINGA2_HOST_DISPLAY", ""),
+		Icinga2HostAddress:    getEnvOrDefault("ICINGA2_HOST_ADDRESS", "127.0.0.1"),
+		Icinga2HostAutoCreate: getEnvBool("ICINGA2_HOST_AUTO_CREATE", false),
+		Icinga2TLSSkipVerify:  getEnvBool("ICINGA2_TLS_SKIP_VERIFY", false),
 
 		HistoryFile:       getEnvOrDefault("HISTORY_FILE", "/var/log/webhook-bridge/history.jsonl"),
 		HistoryMaxEntries: getEnvInt("HISTORY_MAX_ENTRIES", 10000),

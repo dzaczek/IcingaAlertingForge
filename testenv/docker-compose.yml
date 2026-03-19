@@ -6,10 +6,30 @@ volumes:
   icinga2_data:
   grafana_data:
   webhook_logs:
+  mariadb_data:
 
 services:
 
-  # ── Icinga2 (custom build with API + test host) ────────────────
+  # ── MariaDB (databases for IDO, Icinga Web 2, Director) ──────
+  mariadb:
+    image: mariadb:10.11
+    container_name: testenv-mariadb
+    hostname: mariadb
+    networks:
+      - monitoring
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./mariadb/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── Icinga2 (custom build with API + IDO MySQL + test host) ──
   icinga2:
     build:
       context: ./icinga2
@@ -22,6 +42,9 @@ services:
       - "5665:5665"
     volumes:
       - icinga2_data:/data
+    depends_on:
+      mariadb:
+        condition: service_healthy
     healthcheck:
       test: >-
         curl -fs -k -u apiuser:apipassword
@@ -30,6 +53,95 @@ services:
       timeout: 10s
       retries: 20
       start_period: 60s
+
+  # ── Icinga Web 2 + Director ──────────────────────────────────
+  icingaweb2:
+    build:
+      context: ./icingaweb2
+      dockerfile: Dockerfile
+    container_name: testenv-icingaweb2
+    hostname: icingaweb2
+    networks:
+      - monitoring
+    ports:
+      - "8082:8080"
+    environment:
+      # ── Resources ──
+      icingaweb.resources.icingaweb_db.type: db
+      icingaweb.resources.icingaweb_db.db: mysql
+      icingaweb.resources.icingaweb_db.host: mariadb
+      icingaweb.resources.icingaweb_db.dbname: icingaweb2
+      icingaweb.resources.icingaweb_db.username: icingaweb2
+      icingaweb.resources.icingaweb_db.password: icingaweb2pass
+      icingaweb.resources.icingaweb_db.charset: utf8mb4
+
+      icingaweb.resources.icinga_ido.type: db
+      icingaweb.resources.icinga_ido.db: mysql
+      icingaweb.resources.icinga_ido.host: mariadb
+      icingaweb.resources.icinga_ido.dbname: icinga2_ido
+      icingaweb.resources.icinga_ido.username: icinga2_ido
+      icingaweb.resources.icinga_ido.password: icinga2_idopass
+      icingaweb.resources.icinga_ido.charset: utf8mb4
+
+      icingaweb.resources.director_db.type: db
+      icingaweb.resources.director_db.db: mysql
+      icingaweb.resources.director_db.host: mariadb
+      icingaweb.resources.director_db.dbname: director
+      icingaweb.resources.director_db.username: director
+      icingaweb.resources.director_db.password: directorpass
+      icingaweb.resources.director_db.charset: utf8mb4
+
+      # ── Global config ──
+      icingaweb.config.global.show_stacktraces: "1"
+      icingaweb.config.global.config_backend: db
+      icingaweb.config.global.config_resource: icingaweb_db
+      icingaweb.config.logging.log: syslog
+      icingaweb.config.logging.level: ERROR
+
+      # ── Authentication ──
+      icingaweb.authentication.icingaweb2.backend: db
+      icingaweb.authentication.icingaweb2.resource: icingaweb_db
+
+      # ── Groups ──
+      icingaweb.groups.icingaweb2.backend: db
+      icingaweb.groups.icingaweb2.resource: icingaweb_db
+
+      # ── Roles ──
+      icingaweb.roles.Administrators.users: admin
+      icingaweb.roles.Administrators.permissions: "*"
+
+      # ── Enabled modules ──
+      icingaweb.enabledModules: monitoring, director, incubator
+
+      # ── Monitoring module ──
+      icingaweb.modules.monitoring.config.security.protected_customvars: "*pw*,*pass*,community"
+      icingaweb.modules.monitoring.backends.icinga2.type: ido
+      icingaweb.modules.monitoring.backends.icinga2.resource: icinga_ido
+      icingaweb.modules.monitoring.commandtransports.icinga2.transport: api
+      icingaweb.modules.monitoring.commandtransports.icinga2.host: icinga2
+      icingaweb.modules.monitoring.commandtransports.icinga2.port: "5665"
+      icingaweb.modules.monitoring.commandtransports.icinga2.username: apiuser
+      icingaweb.modules.monitoring.commandtransports.icinga2.password: apipassword
+
+      # ── Director module ──
+      icingaweb.modules.director.config.db.resource: director_db
+      icingaweb.modules.director.kickstart.config.endpoint: icinga2
+      icingaweb.modules.director.kickstart.config.host: icinga2
+      icingaweb.modules.director.kickstart.config.port: "5665"
+      icingaweb.modules.director.kickstart.config.username: apiuser
+      icingaweb.modules.director.kickstart.config.password: apipassword
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      icinga2:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null",
+             "http://localhost:8080/authentication/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
 
   # ── Prometheus ─────────────────────────────────────────────────
   prometheus:
@@ -87,9 +199,10 @@ services:
       - monitoring
     ports:
       - "9080:8080"
+    env_file:
+      - .env.test
     volumes:
       - webhook_logs:/var/log/webhook-bridge
-      - ./.env.test:/app/.env:ro
     depends_on:
       icinga2:
         condition: service_healthy

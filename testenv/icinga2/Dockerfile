@@ -2,13 +2,24 @@ FROM icinga/icinga2:latest
 
 USER root
 
+# IDO MySQL module is already built into the base image (libmysql_shim.so)
+# We only need the mariadb client for the init script
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    mariadb-client \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy custom configuration into the init directory
 COPY conf.d/api-users.conf /data-init/etc/icinga2/conf.d/api-users.conf
 COPY conf.d/hosts.conf /data-init/etc/icinga2/conf.d/hosts.conf
+COPY conf.d/ido-mysql.conf /data-init/etc/icinga2/features-available/ido-mysql.conf
 
 # Enable API feature
 RUN ln -sf /data-init/etc/icinga2/features-available/api.conf \
            /data-init/etc/icinga2/features-enabled/api.conf
+
+# Enable IDO MySQL feature
+RUN ln -sf /data-init/etc/icinga2/features-available/ido-mysql.conf \
+           /data-init/etc/icinga2/features-enabled/ido-mysql.conf
 
 # Generate CA and node certificates manually for the API to work
 RUN mkdir -p /data-init/var/lib/icinga2/certs /data-init/var/lib/icinga2/ca && \
@@ -32,4 +43,11 @@ RUN mkdir -p /data-init/var/lib/icinga2/certs /data-init/var/lib/icinga2/ca && \
     chown -R icinga:icinga /data-init/var/lib/icinga2/certs /data-init/var/lib/icinga2/ca && \
     rm -f /tmp/icinga2.csr
 
+# Custom entrypoint wrapper to import IDO schema before starting Icinga2
+COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
+RUN chmod +x /entrypoint-wrapper.sh
+
 USER icinga
+
+ENTRYPOINT ["/entrypoint-wrapper.sh"]
+CMD ["icinga2", "daemon"]

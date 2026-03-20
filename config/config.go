@@ -139,7 +139,7 @@ func getEnvBool(key string, defaultVal bool) bool {
 	}
 	b, err := strconv.ParseBool(val)
 	if err != nil {
-		return defaultVal
+		panic(fmt.Sprintf("config: invalid boolean for %s=%q (use true/false/1/0)", key, val))
 	}
 	return b
 }
@@ -151,7 +151,10 @@ func getEnvInt(key string, defaultVal int) int {
 	}
 	n, err := strconv.Atoi(val)
 	if err != nil {
-		return defaultVal
+		panic(fmt.Sprintf("config: invalid integer for %s=%q", key, val))
+	}
+	if n < 0 {
+		panic(fmt.Sprintf("config: negative value for %s=%d", key, n))
 	}
 	return n
 }

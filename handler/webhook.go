@@ -62,9 +62,13 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ── Parse payload ───────────────────────────────────────────────
+	// ── Parse payload (with body size limit) ────────────────────────
+	const maxWebhookBody = 1 << 20 // 1 MiB
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBody)
+
 	var payload models.GrafanaPayload
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&payload); err != nil {
 		slog.Error("Failed to decode webhook payload", "error", err, "source", source)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
 		return

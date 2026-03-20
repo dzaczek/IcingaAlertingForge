@@ -10,6 +10,16 @@ import (
 	"icinga-webhook-bridge/models"
 )
 
+// isAlreadyExistsError checks if an Icinga2 API error indicates the object
+// already exists (HTTP 409 / "already exists" in response).
+func isAlreadyExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "already exists") || strings.Contains(msg, "status 409")
+}
+
 // mapSeverityToExitStatus converts Grafana severity to Icinga2 exit status.
 //
 //	critical → 2 (CRITICAL)
@@ -93,13 +103,30 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 		defer h.Limiter.ReleaseStatus()
 	}
 
-	// Auto-create service if it doesn't exist in cache
+	// Auto-create service if it doesn't exist in cache.
+	// Use mutate semaphore to prevent thundering herd on Icinga2 API.
+	// Mark cache as pending before calling CreateService to prevent
+	// concurrent requests from racing into multiple create calls.
 	if !h.Cache.Exists(serviceName) {
+		h.Cache.SetPending(serviceName)
+
+		if h.Limiter != nil {
+			mutCtx, mutCancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := h.Limiter.AcquireMutate(mutCtx); err != nil {
+				mutCancel()
+				slog.Warn("Rate limit: mutate slot unavailable for auto-create",
+					"service", serviceName, "request_id", requestID)
+				// Still proceed — service may already exist
+			} else {
+				mutCancel()
+				defer h.Limiter.ReleaseMutate()
+			}
+		}
+
 		slog.Info("Service not in cache, auto-creating",
 			"service", serviceName, "request_id", requestID)
 		if err := h.API.CreateService(h.HostName, serviceName, alert.Labels, alert.Annotations); err != nil {
-			// Ignore "already exists" errors (409) — just means another request created it
-			if !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "409") {
+			if !isAlreadyExistsError(err) {
 				slog.Error("Failed to auto-create service",
 					"service", serviceName, "error", err, "request_id", requestID)
 			}

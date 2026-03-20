@@ -1,11 +1,15 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"icinga-webhook-bridge/auth"
@@ -98,6 +102,11 @@ func main() {
 		slog.Error("Failed to initialize history logger", "error", err)
 		os.Exit(1)
 	}
+
+	// Start history maintenance goroutine (rotation checks)
+	mainCtx, mainCancel := context.WithCancel(context.Background())
+	defer mainCancel()
+	historyLogger.StartMaintenance(mainCtx)
 
 	// ── Metrics Collector ────────────────────────────────────────────
 	metricsCollector := metrics.NewCollector()
@@ -207,16 +216,49 @@ func main() {
 	}
 
 	server := &http.Server{
-		Addr:         cfg.ListenAddr(),
-		Handler:      mux,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:              cfg.ListenAddr(),
+		Handler:           mux,
+		ReadTimeout:       15 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB
 	}
 
-	if err := server.ListenAndServe(); err != nil {
-		slog.Error("Server failed", "error", err)
-		os.Exit(1)
+	// ── Graceful Shutdown ───────────────────────────────────────────
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	slog.Info("Server started", "addr", cfg.ListenAddr())
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case sig := <-stop:
+		slog.Info("Received shutdown signal", "signal", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+
+		// Stop accepting new connections, drain in-flight requests
+		if err := server.Shutdown(ctx); err != nil {
+			slog.Error("Server shutdown error", "error", err)
+		}
+
+		// Stop history maintenance
+		historyLogger.Shutdown()
+		mainCancel()
+
+		slog.Info("Server stopped gracefully")
+
+	case err := <-errCh:
+		if !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("Server failed", "error", err)
+			historyLogger.Shutdown()
+			os.Exit(1)
+		}
 	}
 }
 

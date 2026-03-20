@@ -145,12 +145,15 @@ func TestLogger_Rotation(t *testing.T) {
 		t.Fatalf("failed to create logger: %v", err)
 	}
 
+	// Set low rotateEvery so inline rotation triggers during test
+	l.rotateEvery = 3
+
 	for i := 0; i < 10; i++ {
 		l.Append(sampleEntry("svc", "work", "firing", "src"))
 	}
 
-	// Give rotation goroutine time to complete
-	time.Sleep(100 * time.Millisecond)
+	// Also trigger explicit rotation to ensure it runs
+	l.rotateIfNeeded()
 
 	entries, err := l.Query(QueryFilter{Limit: 100})
 	if err != nil {
@@ -215,4 +218,12 @@ func TestLogger_FilePath(t *testing.T) {
 	if _, err := os.Stat(filepath.Dir(l.FilePath())); err != nil {
 		t.Errorf("expected parent directory to exist: %v", err)
 	}
+}
+
+func TestLogger_StartMaintenanceAndShutdown(t *testing.T) {
+	l := newTestLogger(t)
+
+	ctx := t.Context()
+	l.StartMaintenance(ctx)
+	l.Shutdown()
 }

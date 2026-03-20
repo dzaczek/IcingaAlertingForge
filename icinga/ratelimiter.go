@@ -76,7 +76,12 @@ func (rl *RateLimiter) ReleaseStatus() {
 
 // Stats returns current rate limiter statistics.
 func (rl *RateLimiter) Stats() (mutateInUse, mutateMax, statusInUse, statusMax, queued, maxQueue int) {
+	rl.mu.Lock()
+	q := rl.queued
+	mq := rl.maxQueue
+	rl.mu.Unlock()
+
 	return len(rl.mutateSem), cap(rl.mutateSem),
 		len(rl.statusSem), cap(rl.statusSem),
-		rl.queued, rl.maxQueue
+		q, mq
 }

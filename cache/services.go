@@ -98,3 +98,26 @@ func (c *ServiceCache) All() map[string]ServiceState {
 	}
 	return result
 }
+
+// EvictExpired removes expired entries from the cache to prevent unbounded memory growth.
+func (c *ServiceCache) EvictExpired() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	now := time.Now()
+	evicted := 0
+	for name, entry := range c.entries {
+		if now.Sub(entry.CreatedAt) > c.ttl {
+			delete(c.entries, name)
+			evicted++
+		}
+	}
+	return evicted
+}
+
+// Len returns the number of entries currently in the cache (including expired).
+func (c *ServiceCache) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.entries)
+}

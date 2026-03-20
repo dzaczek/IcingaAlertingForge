@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -58,8 +59,8 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 		return fmt.Errorf("icinga api: marshal payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/actions/process-check-result", c.BaseURL)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/v1/actions/process-check-result", c.BaseURL)
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("icinga api: create request: %w", err)
 	}
@@ -103,8 +104,8 @@ func (h HostInfo) IsDummy() bool {
 
 // GetHostInfo retrieves detailed host information from Icinga2.
 func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
-	url := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, host)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	reqURL := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, url.PathEscape(host))
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
 		return HostInfo{}, fmt.Errorf("icinga api: create request: %w", err)
 	}
@@ -198,8 +199,8 @@ func (c *APIClient) CreateHost(name, displayName, address string) error {
 		return fmt.Errorf("icinga api: marshal host payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, name)
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, url.PathEscape(name))
+	req, err := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("icinga api: create request: %w", err)
 	}
@@ -234,8 +235,8 @@ func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
 		return nil, fmt.Errorf("icinga api: marshal filter: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/objects/services", c.BaseURL)
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/v1/objects/services", c.BaseURL)
+	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("icinga api: create request: %w", err)
 	}
@@ -366,8 +367,8 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 		return fmt.Errorf("icinga api: marshal create payload: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/v1/objects/services/%s!%s", c.BaseURL, host, name)
-	req, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(body))
+	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s", c.BaseURL, url.PathEscape(host), url.PathEscape(name))
+	req, err := http.NewRequest(http.MethodPut, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("icinga api: create request: %w", err)
 	}
@@ -393,8 +394,8 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 // DeleteService removes a service from Icinga2 via the REST API.
 // Uses DELETE /v1/objects/services/<host>!<service> with cascade=true.
 func (c *APIClient) DeleteService(host, name string) error {
-	url := fmt.Sprintf("%s/v1/objects/services/%s!%s?cascade=1", c.BaseURL, host, name)
-	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s?cascade=1", c.BaseURL, url.PathEscape(host), url.PathEscape(name))
+	req, err := http.NewRequest(http.MethodDelete, reqURL, nil)
 	if err != nil {
 		return fmt.Errorf("icinga api: create delete request: %w", err)
 	}
@@ -418,10 +419,10 @@ func (c *APIClient) DeleteService(host, name string) error {
 
 // GetServiceStatus queries Icinga2 for the current status of a service on a host.
 func (c *APIClient) GetServiceStatus(host, service string) (exitStatus int, output string, checkTime time.Time, err error) {
-	url := fmt.Sprintf("%s/v1/objects/services?filter=host.name==%q&&service.name==%q&attrs=last_check_result",
+	reqURL := fmt.Sprintf("%s/v1/objects/services?filter=host.name==%q&&service.name==%q&attrs=last_check_result",
 		c.BaseURL, host, service)
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
 		return 0, "", time.Time{}, fmt.Errorf("icinga api: create request: %w", err)
 	}

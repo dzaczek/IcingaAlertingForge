@@ -2,11 +2,14 @@ package history
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"icinga-webhook-bridge/models"
@@ -14,9 +17,12 @@ import (
 
 // Logger provides thread-safe JSONL history logging with rotation and filtering.
 type Logger struct {
-	mu         sync.Mutex
-	filePath   string
-	maxEntries int
+	mu           sync.Mutex
+	filePath     string
+	maxEntries   int
+	appendCount  atomic.Int64 // tracks appends since last rotation check
+	rotateEvery  int64        // check rotation every N appends
+	cancelMaint  context.CancelFunc
 }
 
 // NewLogger creates a new history Logger.
@@ -27,14 +33,44 @@ func NewLogger(filePath string, maxEntries int) (*Logger, error) {
 		return nil, fmt.Errorf("history: create directory %s: %w", dir, err)
 	}
 
-	return &Logger{
-		filePath:   filePath,
-		maxEntries: maxEntries,
-	}, nil
+	l := &Logger{
+		filePath:    filePath,
+		maxEntries:  maxEntries,
+		rotateEvery: 100, // check rotation every 100 appends
+	}
+
+	return l, nil
+}
+
+// StartMaintenance starts a background goroutine that periodically checks
+// if the history file needs rotation. Call Shutdown to stop it.
+func (l *Logger) StartMaintenance(ctx context.Context) {
+	mCtx, cancel := context.WithCancel(ctx)
+	l.cancelMaint = cancel
+
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-mCtx.Done():
+				return
+			case <-ticker.C:
+				l.rotateIfNeeded()
+			}
+		}
+	}()
+}
+
+// Shutdown stops the maintenance goroutine.
+func (l *Logger) Shutdown() {
+	if l.cancelMaint != nil {
+		l.cancelMaint()
+	}
 }
 
 // Append writes a single HistoryEntry to the JSONL file.
-// It also triggers rotation if the file exceeds maxEntries.
+// Rotation is handled by the maintenance goroutine, not per-append.
 func (l *Logger) Append(entry models.HistoryEntry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -54,8 +90,11 @@ func (l *Logger) Append(entry models.HistoryEntry) error {
 		return fmt.Errorf("history: write entry: %w", err)
 	}
 
-	// Trigger async rotation check
-	go l.rotateIfNeeded()
+	// Trigger inline rotation check every N appends (bounded, no goroutine)
+	count := l.appendCount.Add(1)
+	if count%l.rotateEvery == 0 {
+		l.rotateLockedInline()
+	}
 
 	return nil
 }
@@ -144,10 +183,15 @@ func (l *Logger) readAll() ([]models.HistoryEntry, error) {
 }
 
 // rotateIfNeeded trims the history file to maxEntries if it exceeds the limit.
+// Called by the maintenance goroutine (takes its own lock).
 func (l *Logger) rotateIfNeeded() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.rotateLockedInline()
+}
 
+// rotateLockedInline performs rotation while the lock is already held.
+func (l *Logger) rotateLockedInline() {
 	entries, err := l.readAll()
 	if err != nil || len(entries) <= l.maxEntries {
 		return
@@ -158,6 +202,7 @@ func (l *Logger) rotateIfNeeded() {
 
 	f, err := os.Create(l.filePath)
 	if err != nil {
+		slog.Error("history: failed to rotate file", "error", err)
 		return
 	}
 	defer f.Close()
@@ -172,6 +217,8 @@ func (l *Logger) rotateIfNeeded() {
 		writer.WriteByte('\n')
 	}
 	writer.Flush()
+
+	slog.Info("history: rotated file", "kept", len(entries), "max", l.maxEntries)
 }
 
 // FilePath returns the path to the history JSONL file (used for export).

@@ -2,6 +2,8 @@
 
 > **Project Status: Under Construction — Ready for Deploy**
 
+<img src="header.png">
+
 A lightweight Go webhook bridge that receives Grafana Unified Alerting webhooks and forwards them to Icinga2 as passive check results via the REST API. Supports automatic service creation, multi-key authentication, rate limiting, host auto-creation with Director conflict detection, an admin panel with security monitoring, JSONL history logging, an in-memory service cache, and a live HTML dashboard.
 
 ---

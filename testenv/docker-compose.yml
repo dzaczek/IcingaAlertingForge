@@ -193,6 +193,8 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      args:
+        VERSION: ${IAF_VERSION:-dev}
     container_name: testenv-webhook-bridge
     networks:
       - monitoring

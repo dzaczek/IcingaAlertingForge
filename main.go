@@ -141,6 +141,7 @@ func main() {
 		API:       apiClient,
 		Limiter:   rateLimiter,
 		History:   historyLogger,
+		Metrics:   metricsCollector,
 		DebugRing: debugRing,
 		Targets:   cfg.Targets,
 		User:      cfg.AdminUser,

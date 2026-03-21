@@ -10,7 +10,10 @@ RUN go mod download
 
 COPY . .
 ARG VERSION=dev
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o webhook-bridge .
+RUN if [ "$VERSION" = "dev" ] && command -v git >/dev/null 2>&1 && git describe --tags >/dev/null 2>&1; then \
+      VERSION=$(git describe --tags --always --dirty); \
+    fi && \
+    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o webhook-bridge .
 
 # ── Runtime stage ────────────────────────────────────────────────
 FROM alpine:3.19

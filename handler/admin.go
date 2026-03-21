@@ -13,6 +13,7 @@ import (
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/metrics"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -21,6 +22,7 @@ type AdminHandler struct {
 	API       *icinga.APIClient
 	Limiter   *icinga.RateLimiter
 	History   *history.Logger
+	Metrics   *metrics.Collector
 	DebugRing *icinga.DebugRing
 	Targets   map[string]config.TargetConfig
 	User      string
@@ -37,6 +39,10 @@ func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
 	if !ok || !userOK || !passOK {
+		if h.Metrics != nil {
+			h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+		}
+		slog.Warn("Admin auth failed", "remote_addr", r.RemoteAddr, "user", user)
 		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false

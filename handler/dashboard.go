@@ -172,6 +172,10 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if admin login was requested
 	isAdmin := h.isAdmin(r)
 	if r.URL.Query().Get("admin") == "1" && !isAdmin {
+		user, _, _ := r.BasicAuth()
+		if h.Metrics != nil && user != "" {
+			h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+		}
 		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -254,7 +258,7 @@ const dashboardHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LCARS - IcingaAlertForge</title>
+<title>IAF - IcingaAlertForge</title>
 <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {

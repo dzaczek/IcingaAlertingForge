@@ -48,7 +48,8 @@ So you do not create separate HTTP paths for each team. You keep one URL and let
 | `ICINGA2_TLS_SKIP_VERIFY` | No | `false` | Skip TLS verification |
 | `HISTORY_FILE` | No | `/var/log/webhook-bridge/history.jsonl` | JSONL history file |
 | `HISTORY_MAX_ENTRIES` | No | `10000` | Rotation limit for history |
-| `CACHE_TTL_MINUTES` | No | `60` | TTL for the in memory service cache |
+<!-- LANG: hyphenation -->
+| `CACHE_TTL_MINUTES` | No | `60` | TTL for the in-memory service cache |
 | `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
 | `LOG_FORMAT` | No | `json` | `json` or `text` |
 | `ADMIN_USER` | No | `admin` | Admin username |
@@ -89,19 +90,20 @@ If `SOURCE` is missing, the bridge falls back to the normalized target ID.
 | `IAF_TARGET_<ID>_HOST_NAME` | Yes | — | Icinga host name created or used for this target |
 | `IAF_TARGET_<ID>_HOST_DISPLAY` | No | `<HOST_NAME>` | Host display name |
 | `IAF_TARGET_<ID>_HOST_ADDRESS` | No | empty | Optional metadata stored as `vars.iaf_host_address` |
-| `IAF_TARGET_<ID>_API_KEYS` | Yes | — | Comma separated webhook keys for this host |
+| `IAF_TARGET_<ID>_API_KEYS` | Yes | — | Comma-separated webhook keys for this host |
 | `IAF_TARGET_<ID>_SOURCE` | No | normalized target ID | Source label stored in logs and history |
-| `IAF_TARGET_<ID>_NOTIFICATION_USERS` | No | empty | Comma separated Icinga users |
-| `IAF_TARGET_<ID>_NOTIFICATION_GROUPS` | No | empty | Comma separated Icinga groups and user groups |
-| `IAF_TARGET_<ID>_NOTIFICATION_SERVICE_STATES` | No | empty | Comma separated service states such as `critical,warning` |
-| `IAF_TARGET_<ID>_NOTIFICATION_HOST_STATES` | No | empty | Comma separated host states such as `down` |
+| `IAF_TARGET_<ID>_NOTIFICATION_USERS` | No | empty | Comma-separated Icinga users |
+| `IAF_TARGET_<ID>_NOTIFICATION_GROUPS` | No | empty | Comma-separated Icinga groups and user groups |
+| `IAF_TARGET_<ID>_NOTIFICATION_SERVICE_STATES` | No | empty | Comma-separated service states such as `critical,warning` |
+| `IAF_TARGET_<ID>_NOTIFICATION_HOST_STATES` | No | empty | Comma-separated host states such as `down` |
 
 Important details:
 
 - API keys must be unique across the whole deployment
 - more than one key can point to the same host
 - one incoming key always resolves to exactly one host
-- `NOTIFICATION_GROUPS` is written into both `groups` and `user_groups`
+<!-- LANG: clarified wording -->
+- `NOTIFICATION_GROUPS` is written into both `groups` and `user_groups` in Icinga
 
 ## How The Dynamic Variables Work
 
@@ -138,10 +140,11 @@ This is the host notification state filter for one target block.
 
 What the parts mean:
 
-- `IAF_TARGET_` means it belongs to the target based config model
+<!-- LANG: hyphenation -->
+- `IAF_TARGET_` means it belongs to the target-based config model
 - `HOME_CRITICAL` is the variable prefix that becomes target ID `home-critical`
 - `NOTIFICATION_HOST_STATES` means host notification states, not service notification states
-- `down` is the value that will be parsed as a comma separated list
+- `down` is the value that will be parsed as a comma-separated list
 
 You can also write:
 
@@ -256,7 +259,8 @@ Rules in legacy mode:
 - all keys go to one shared host
 - `WEBHOOK_KEY_<NAME>` still becomes a source name by lowercasing and replacing `_` with `-`
 
-If any `IAF_TARGET_*` variables exist, the bridge switches to the new host based routing model.
+<!-- LANG: hyphenation -->
+If any `IAF_TARGET_*` variables exist, the bridge switches to the new host-based routing model.
 
 ## Migrating From The Old Setup
 
@@ -306,6 +310,9 @@ vars.iaf_created_at = "<RFC3339>"
 vars.iaf_host_address = "<HOST_ADDRESS if configured>"
 ```
 
+<!-- LANG: naming clarification -->
+> *Note: the marker value is `IcingaAlertingForge` (with "Alerting") for historical reasons — this differs from the project name `IcingaAlertForge`.*
+
 Notification variables are written in a neutral form:
 
 ```text
@@ -336,6 +343,9 @@ vars.bridge_created_at = "<RFC3339>"
 vars.grafana_label_<name> = "<value>"
 vars.grafana_annotation_<name> = "<value>"
 ```
+
+<!-- LANG: naming clarification -->
+> *Note: the marker value is `IcingaAlertingForge` (with "Alerting") for historical reasons — this differs from the project name `IcingaAlertForge`.*
 
 ## Next Step
 

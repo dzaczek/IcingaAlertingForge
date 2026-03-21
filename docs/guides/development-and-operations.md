@@ -27,7 +27,8 @@ IcingaAlertForge/
 Important folders:
 
 - `auth/` handles API key validation
-- `cache/` stores the in memory service registry
+<!-- LANG: hyphenation -->
+- `cache/` stores the in-memory service registry
 - `config/` parses environment variables
 - `handler/` holds webhook, admin, status, and panel logic
 - `history/` stores and serves the JSONL history
@@ -44,9 +45,10 @@ go vet ./...
 
 ## What The Tests Cover
 
-- config parsing for the multi host setup and the legacy mode
+<!-- LANG: hyphenation -->
+- config parsing for the multi-host setup and the legacy mode
 - API key routing
-- host aware cache behaviour
+- host-aware cache behaviour
 - webhook routing to different hosts
 - history filtering by host
 - Icinga host creation payloads
@@ -88,7 +90,29 @@ Expected result:
 - host auto creation runs for every configured host, not just one
 - the bridge writes routing variables only
 - your Icinga apply rules must consume those variables
-- the cleanest long term production model is API key based routing plus group based notifications in Icinga
+<!-- LANG: hyphenation -->
+- the cleanest long-term production model is API-key-based routing plus group-based notifications in Icinga
+
+<!-- CHANGED: added build flags and graceful shutdown documentation -->
+
+## Building
+
+Build with version info embedded via linker flags:
+
+```bash
+go build -ldflags="-s -w -X main.version=1.2.3" -o webhook-bridge .
+```
+
+The Dockerfile uses the same flags with a `VERSION` build argument.
+
+## Graceful Shutdown
+
+The bridge handles `SIGINT` and `SIGTERM`. On receiving either signal it:
+
+1. stops accepting new connections
+2. drains in-flight requests with a 20-second timeout
+3. stops history maintenance goroutines
+4. exits cleanly
 
 ## Load Test Reference
 

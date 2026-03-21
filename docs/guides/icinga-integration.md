@@ -124,6 +124,12 @@ vars.iaf_component = "IcingaAlertingForge"
 vars.bridge_created_at = "<RFC3339>"
 ```
 
+<!-- LANG: naming clarification -->
+> *Note: the marker value is `IcingaAlertingForge` (with "Alerting") for historical reasons — this differs from the project name `IcingaAlertForge`.*
+
+<!-- LANG: cross-reference -->
+For the complete list of Icinga2 object variables, see [Configuration — What the Bridge Writes](configuration.md#what-the-bridge-writes-into-icinga).
+
 These markers matter because they let the bridge:
 
 - recognise managed dummy hosts on startup

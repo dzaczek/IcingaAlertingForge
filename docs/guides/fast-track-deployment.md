@@ -76,8 +76,9 @@ That gives you two logical webhook destinations on the same `/webhook` endpoint.
 
 Example:
 
-- `/webhook` + first key -> `home-critical`
-- `/webhook` + second key -> `home-warning`
+<!-- LANG: consistent arrow style -->
+- `/webhook` + first key → `home-critical`
+- `/webhook` + second key → `home-warning`
 
 ## Run It With Docker
 
@@ -195,7 +196,8 @@ Once the smoke test works, the usual next steps are:
 ## Common Fast Track Mistakes
 
 - using the wrong Icinga API URL or wrong port
-- forgetting `objects/create/Host` when auto creation is enabled
+<!-- LANG: clarified permission name -->
+- forgetting the `objects/create/Host` permission when auto creation is enabled
 - using the same API key for several host blocks
 - assuming Grafana chooses the target host from the payload
 - expecting notifications to work before Icinga apply rules read `host.vars.notification.*`

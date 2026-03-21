@@ -90,14 +90,20 @@ flowchart TD
 
 - routing for several teams and dummy hosts
 - more than one API key for the same host or team
-- host specific notification settings
+<!-- LANG: hyphenation -->
+- host-specific notification settings
 - dynamic dummy host creation on startup
 - dynamic service creation in work mode
 - test mode for manual create and delete actions
 - JSONL history with filters
 - a service cache with TTL and cleanup
 - an admin API and a live panel
-- a ready to use lab in `testenv`
+<!-- CHANGED: added SSE broker, debug ring buffer, and metrics features -->
+- SSE broker for real-time event streaming to the dashboard
+- debug ring buffer for API traffic inspection
+- metrics collector with brute force detection
+<!-- LANG: hyphenation -->
+- a ready-to-use lab in `testenv`
 
 ## Requirements
 
@@ -128,7 +134,7 @@ If host auto creation is enabled, `objects/query/Host` and `objects/create/Host`
 ### From Source
 
 ```bash
-git clone https://github.com/your-org/IcingaAlertForge.git
+git clone https://github.com/dzaczek/IcingaAlertForge.git
 cd IcingaAlertForge
 
 cp .env.example .env

@@ -1,6 +1,10 @@
 package auth
 
-import "icinga-webhook-bridge/config"
+import (
+	"crypto/subtle"
+
+	"icinga-webhook-bridge/config"
+)
 
 // KeyStore holds the mapping of API key values to their source identifiers.
 type KeyStore struct {
@@ -13,11 +17,20 @@ func NewKeyStore(routes map[string]config.WebhookRoute) *KeyStore {
 }
 
 // ValidateKey checks if the given API key is valid.
-// Returns the resolved route and true if the key is found.
+// Uses constant-time comparison to prevent timing attacks.
 func (ks *KeyStore) ValidateKey(key string) (route config.WebhookRoute, ok bool) {
 	if key == "" {
 		return config.WebhookRoute{}, false
 	}
-	route, ok = ks.routes[key]
-	return route, ok
+
+	var matched config.WebhookRoute
+	found := false
+	keyBytes := []byte(key)
+	for k, r := range ks.routes {
+		if subtle.ConstantTimeCompare(keyBytes, []byte(k)) == 1 {
+			matched = r
+			found = true
+		}
+	}
+	return matched, found
 }

@@ -11,6 +11,7 @@ import (
 func (h *WebhookHandler) logHistory(
 	requestID, source, hostName, mode, action, serviceName, severity string,
 	exitStatus int, message string, icingaOK bool, durationMs int64, errorMsg string,
+	remoteAddr string,
 ) {
 	entry := models.HistoryEntry{
 		Timestamp:   time.Now().UTC(),
@@ -25,6 +26,7 @@ func (h *WebhookHandler) logHistory(
 		Message:     message,
 		IcingaOK:    icingaOK,
 		DurationMs:  durationMs,
+		RemoteAddr:  remoteAddr,
 	}
 
 	if errorMsg != "" {

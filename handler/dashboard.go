@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/subtle"
+	"bytes"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -27,6 +28,14 @@ type DashboardHandler struct {
 	AdminUser string
 	AdminPass string
 	StartedAt time.Time
+	DebugRing *icinga.DebugRing
+}
+
+// ipEntry represents one IP address entry for template display.
+type ipEntry struct {
+	IP       string
+	Count    int
+	LastSeen string
 }
 
 // dashboardData is the template context for the beauty dashboard.
@@ -34,6 +43,9 @@ type dashboardData struct {
 	GeneratedAt    string
 	Uptime         string
 	Stats          history.HistoryStats
+	SourceIPs      map[string]map[string]int
+	SourceTopIPs   map[string][]ipEntry // top 10 by count
+	SourceLastIPs  map[string][]ipEntry // last 10 by time
 	CachedServices []cache.CacheEntry
 	RecentAlerts   []dashboardAlert
 	RecentErrors   []dashboardAlert
@@ -113,6 +125,43 @@ func (h *DashboardHandler) isAdmin(r *http.Request) bool {
 	return userOK && passOK
 }
 
+// buildSourceIPLists creates Top 10 (by count) and Last 10 (by time) IP lists per source.
+func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string][]ipEntry) {
+	topIPs = make(map[string][]ipEntry)
+	lastIPs = make(map[string][]ipEntry)
+
+	for source, ipCounts := range stats.BySourceIP {
+		var entries []ipEntry
+		for ip, count := range ipCounts {
+			lastSeen := ""
+			if ts, ok := stats.BySourceIPLastSeen[source][ip]; ok {
+				lastSeen = ts.Format("2006-01-02 15:04:05 UTC")
+			}
+			entries = append(entries, ipEntry{IP: ip, Count: count, LastSeen: lastSeen})
+		}
+
+		// Top 10 by count (descending)
+		top := make([]ipEntry, len(entries))
+		copy(top, entries)
+		sort.Slice(top, func(i, j int) bool { return top[i].Count > top[j].Count })
+		if len(top) > 10 {
+			top = top[:10]
+		}
+		topIPs[source] = top
+
+		// Last 10 by time (most recent first)
+		last := make([]ipEntry, len(entries))
+		copy(last, entries)
+		sort.Slice(last, func(i, j int) bool { return last[i].LastSeen > last[j].LastSeen })
+		if len(last) > 10 {
+			last = last[:10]
+		}
+		lastIPs[source] = last
+	}
+
+	return topIPs, lastIPs
+}
+
 // ServeHTTP renders the beauty dashboard.
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -170,10 +219,15 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sysStats = h.Metrics.Snapshot()
 	}
 
+	sourceTopIPs, sourceLastIPs := buildSourceIPLists(stats)
+
 	data := dashboardData{
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
 		Stats:          stats,
+		SourceIPs:      stats.BySourceIP,
+		SourceTopIPs:   sourceTopIPs,
+		SourceLastIPs:  sourceLastIPs,
 		CachedServices: h.Cache.AllEntries(),
 		RecentAlerts:   recentAlerts,
 		RecentErrors:   recentErrors,
@@ -183,10 +237,14 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		SysStats:       sysStats,
 	}
 
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := dashboardTemplate.Execute(w, data); err != nil {
+	var buf bytes.Buffer
+	if err := dashboardTemplate.Execute(&buf, data); err != nil {
+		slog.Error("Dashboard: template render failed", "error", err)
 		http.Error(w, "Failed to render dashboard", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(buf.Bytes())
 }
 
 var dashboardTemplate = template.Must(template.New("dashboard").Parse(dashboardHTML))
@@ -197,7 +255,6 @@ const dashboardHTML = `<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LCARS - IcingaAlertForge</title>
-<meta http-equiv="refresh" content="30">
 <link href="https://fonts.googleapis.com/css2?family=Antonio:wght@400;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -236,7 +293,7 @@ const dashboardHTML = `<!DOCTYPE html>
   .lcars-frame {
     display: grid;
     grid-template-columns: var(--lcars-sidebar-w) 1fr;
-    grid-template-rows: var(--lcars-header-h) 1fr auto;
+    grid-template-rows: var(--lcars-header-h) auto 1fr auto;
     min-height: 100vh;
     gap: var(--lcars-gap);
     padding: var(--lcars-gap);
@@ -549,6 +606,68 @@ const dashboardHTML = `<!DOCTYPE html>
     text-transform: uppercase;
   }
   .source-tag .count { color: var(--lcars-tan); margin-left: 6px; }
+  .source-tag.clickable { cursor: pointer; transition: filter 0.15s, background 0.15s; }
+  .source-tag.clickable:hover { filter: brightness(1.3); background: rgba(153,204,255,0.2); }
+  .source-detail {
+    margin-top: 8px;
+    padding: 10px 16px;
+    background: rgba(153,204,255,0.05);
+    border: 1px solid rgba(153,204,255,0.15);
+    border-radius: 12px;
+    margin-bottom: 8px;
+  }
+  .source-detail-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--lcars-blue);
+    margin-bottom: 6px;
+  }
+  .ip-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  .ip-tab {
+    padding: 3px 14px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--lcars-tan);
+    border: 1px solid rgba(153,204,255,0.2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .ip-tab:hover { border-color: var(--lcars-blue); color: var(--lcars-blue); }
+  .ip-tab.active { background: rgba(153,204,255,0.15); border-color: var(--lcars-blue); color: var(--lcars-blue); }
+  .ip-entry {
+    font-size: 13px;
+    color: var(--lcars-tan);
+    padding: 3px 0;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .ip-addr {
+    font-family: 'SF Mono', SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--lcars-blue);
+    min-width: 160px;
+  }
+  .ip-meta {
+    font-size: 11px;
+    color: rgba(255,204,153,0.6);
+    flex: 1;
+  }
+  .ip-count {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--lcars-orange);
+  }
   .service-tag {
     padding: 4px 14px;
     border-radius: 20px;
@@ -563,6 +682,116 @@ const dashboardHTML = `<!DOCTYPE html>
   .service-tag.pending_delete { background: rgba(204,102,102,0.1); border-color: var(--lcars-critical); color: var(--lcars-critical); }
 
   .empty-state { padding: 24px; text-align: center; color: var(--lcars-tan); font-size: 14px; letter-spacing: 1px; }
+
+  /* ── Service History Popup ── */
+  .svc-history-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .svc-history-panel {
+    background: var(--lcars-bg);
+    border: 2px solid var(--lcars-blue);
+    border-radius: 16px;
+    width: 600px;
+    max-width: 90vw;
+    max-height: 80vh;
+    overflow-y: auto;
+    padding: 0;
+  }
+  .svc-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 2px solid var(--lcars-blue);
+    background: rgba(153,153,255,0.08);
+    border-radius: 14px 14px 0 0;
+  }
+  .svc-history-title {
+    color: var(--lcars-blue);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .svc-history-close {
+    background: var(--lcars-critical);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 14px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .svc-history-close:hover { opacity: 0.8; }
+  .svc-history-body {
+    padding: 16px 20px;
+  }
+  .svc-history-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(153,153,255,0.1);
+    flex-wrap: wrap;
+  }
+  .svc-history-row:last-child { border-bottom: none; }
+  .svc-history-time {
+    color: rgba(255,204,153,0.6);
+    font-size: 11px;
+    min-width: 140px;
+  }
+  .svc-history-action {
+    font-weight: 700;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .svc-history-action-firing { background: var(--lcars-critical); color: #000; }
+  .svc-history-action-resolved { background: var(--lcars-ok); color: #000; }
+  .svc-history-action-create { background: var(--lcars-blue); color: #000; }
+  .svc-history-action-delete { background: var(--lcars-warning); color: #000; }
+  .svc-history-msg {
+    color: var(--lcars-text-light);
+    font-size: 12px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .svc-history-exit {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .svc-history-exit-0 { color: var(--lcars-ok); border: 1px solid var(--lcars-ok); }
+  .svc-history-exit-1 { color: var(--lcars-warning); border: 1px solid var(--lcars-warning); }
+  .svc-history-exit-2 { color: var(--lcars-critical); border: 1px solid var(--lcars-critical); }
+  .svc-history-exit-3 { color: var(--lcars-purple); border: 1px solid var(--lcars-purple); }
+  .svc-history-empty {
+    text-align: center;
+    color: var(--lcars-tan);
+    padding: 20px;
+    font-size: 13px;
+    letter-spacing: 1px;
+  }
+  .svc-history-loading {
+    text-align: center;
+    color: var(--lcars-blue);
+    padding: 20px;
+    font-size: 13px;
+  }
 
   .mono { font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 12px; }
   .duration { color: var(--lcars-tan); font-size: 11px; }
@@ -700,9 +929,299 @@ const dashboardHTML = `<!DOCTYPE html>
     :root { --lcars-sidebar-w: 0px; }
   }
 
+  /* ── Webhook Flow Line ── */
+  .webhook-flow-line {
+    grid-column: 1 / -1;
+    position: relative;
+    height: 3px;
+    background: linear-gradient(90deg, transparent 0%, var(--lcars-blue-dark) 15%, var(--lcars-blue) 50%, var(--lcars-blue-dark) 85%, transparent 100%);
+    opacity: 0.6;
+    overflow: visible;
+    z-index: 10;
+  }
+
+  @keyframes orb-traverse {
+    0% { left: -20px; opacity: 0; }
+    5% { opacity: 0.9; }
+    90% { opacity: 0.9; }
+    100% { left: calc(100% + 20px); opacity: 0; }
+  }
+
+  .webhook-orb {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    filter: blur(1.5px);
+    animation: orb-traverse 4s linear forwards;
+    pointer-events: none;
+  }
+  .webhook-orb.critical {
+    background: radial-gradient(circle at 40% 40%, #ff9999, var(--lcars-critical) 50%, rgba(204,102,102,0.2));
+    box-shadow: 0 0 8px 3px rgba(204,102,102,0.5), 0 0 16px 6px rgba(204,102,102,0.2);
+  }
+  .webhook-orb.warning {
+    background: radial-gradient(circle at 40% 40%, #ffcc66, var(--lcars-warning) 50%, rgba(255,153,0,0.2));
+    box-shadow: 0 0 8px 3px rgba(255,153,0,0.5), 0 0 16px 6px rgba(255,153,0,0.2);
+  }
+  .webhook-orb.ok {
+    background: radial-gradient(circle at 40% 40%, #ccff99, var(--lcars-ok) 50%, rgba(153,204,102,0.2));
+    box-shadow: 0 0 8px 3px rgba(153,204,102,0.5), 0 0 16px 6px rgba(153,204,102,0.2);
+  }
+
+  /* ── Dev Panel ── */
+  .dev-entry {
+    border-bottom: 1px solid rgba(204,153,204,0.15);
+    padding: 8px 0;
+  }
+  .dev-entry:last-child { border-bottom: none; }
+  .dev-entry-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .dev-method {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 1px;
+    color: #000;
+    min-width: 55px;
+    text-align: center;
+  }
+  .dev-method-GET { background: var(--lcars-blue); }
+  .dev-method-POST { background: var(--lcars-ok); }
+  .dev-method-PUT { background: var(--lcars-warning); }
+  .dev-method-DELETE { background: var(--lcars-critical); }
+  .dev-dir {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .dev-dir-inbound { background: var(--lcars-purple); color: #000; }
+  .dev-dir-outbound { background: var(--lcars-gold); color: #000; }
+  .dev-source {
+    font-size: 11px;
+    color: var(--lcars-blue);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .dev-remote {
+    font-size: 11px;
+    color: rgba(255,204,153,0.5);
+  }
+  .dev-url {
+    color: var(--lcars-tan);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 200px;
+  }
+  .dev-status {
+    font-weight: 700;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .dev-status-ok { color: var(--lcars-ok); border: 1px solid var(--lcars-ok); }
+  .dev-status-err { color: var(--lcars-critical); border: 1px solid var(--lcars-critical); }
+  .dev-duration { color: var(--lcars-lavender); font-size: 11px; }
+  .dev-time { color: rgba(255,204,153,0.5); font-size: 11px; }
+  .dev-error-tag {
+    background: var(--lcars-critical);
+    color: #000;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .dev-details {
+    margin: 4px 0 4px 65px;
+  }
+  .dev-details summary {
+    cursor: pointer;
+    color: var(--lcars-lavender);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 0;
+  }
+  .dev-details summary:hover { color: var(--lcars-purple); }
+  .dev-pre-wrap {
+    position: relative;
+  }
+  .dev-pre {
+    background: rgba(153,153,255,0.05);
+    border: 1px solid rgba(153,153,255,0.15);
+    border-radius: 6px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--lcars-text-light);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .dev-copy-btn {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: var(--lcars-purple);
+    color: #000;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    z-index: 1;
+  }
+  .dev-copy-btn:hover { opacity: 1; }
+  .j-key { color: var(--lcars-blue); }
+  .j-str { color: var(--lcars-ok); }
+  .j-num { color: var(--lcars-warning); }
+  .j-bool { color: var(--lcars-lavender); }
+  .j-null { color: var(--lcars-red); opacity: 0.7; }
+  .j-brace { color: var(--lcars-tan); opacity: 0.6;
+  }
+  .dev-error-msg {
+    margin: 4px 0 0 65px;
+    color: var(--lcars-critical);
+    font-size: 12px;
+  }
+
   /* ── Nav sections ── */
   .nav-section { display: none; }
   .nav-section.active { display: block; }
+
+  /* ── Info Trigger & Popup ── */
+  .info-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--lcars-blue);
+    background: transparent;
+    color: var(--lcars-blue);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 5;
+    line-height: 1;
+  }
+  .info-trigger:hover {
+    background: var(--lcars-blue);
+    color: #000;
+  }
+  .lcars-panel-title-bar .info-trigger {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin-left: 10px;
+    flex-shrink: 0;
+  }
+  .lcars-sidebar .sidebar-btn .info-trigger {
+    position: relative;
+    top: auto;
+    right: auto;
+    display: inline-flex;
+    margin-left: 6px;
+    width: 16px;
+    height: 16px;
+    font-size: 9px;
+    border-color: rgba(0,0,0,0.4);
+    color: rgba(0,0,0,0.5);
+    vertical-align: middle;
+  }
+  .lcars-sidebar .sidebar-btn .info-trigger:hover {
+    background: rgba(0,0,0,0.2);
+    color: #000;
+  }
+  .info-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: #000000aa;
+    z-index: 999;
+    animation: info-fade-in 0.2s ease;
+  }
+  .info-popup {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    background: #000;
+    border: 2px solid var(--lcars-blue);
+    border-radius: 20px;
+    max-width: 400px;
+    width: 90%;
+    overflow: hidden;
+    animation: info-scale-in 0.2s ease;
+  }
+  .info-popup-header {
+    background: var(--lcars-blue);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+  }
+  .info-popup-header span {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .info-popup-close {
+    background: none;
+    border: none;
+    color: #000;
+    font-size: 18px;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .info-popup-close:hover { opacity: 0.6; }
+  .info-popup-body {
+    padding: 16px 20px;
+    color: var(--lcars-tan);
+    font-family: 'Antonio', sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.5px;
+    line-height: 1.5;
+  }
+  @keyframes info-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes info-scale-in {
+    from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
 </style>
 </head>
 <body>
@@ -711,7 +1230,7 @@ const dashboardHTML = `<!DOCTYPE html>
 
   <!-- ══════ TOP HEADER BAR ══════ -->
   <div class="lcars-header">
-    <div class="lcars-header-cap"><span>LCARS</span></div>
+    <div class="lcars-header-cap"><span>IAF</span></div>
     <div class="lcars-header-bar">
       <div class="bar-segment bar-seg-1">Stardate {{.GeneratedAt}}</div>
       <div class="bar-segment bar-seg-2">{{.Uptime}}</div>
@@ -723,17 +1242,21 @@ const dashboardHTML = `<!DOCTYPE html>
     </div>
   </div>
 
+  <!-- ══════ WEBHOOK FLOW LINE ══════ -->
+  <div class="webhook-flow-line" id="webhookFlowLine"><span class="info-trigger" data-info="webhook_flow_line" style="position:absolute;top:-8px;right:12px;">?</span></div>
+
   <!-- ══════ LEFT SIDEBAR ══════ -->
   <div class="lcars-sidebar">
-    <button class="sidebar-btn active" data-section="overview" onclick="showSection('overview', this, true)">Overview</button>
-    <button class="sidebar-btn tan" data-section="alerts" onclick="showSection('alerts', this, true)">Alerts</button>
-    <button class="sidebar-btn purple" data-section="errors" onclick="showSection('errors', this, true)">Errors</button>
-    <button class="sidebar-btn blue" data-section="services" onclick="showSection('services', this, true)">Services</button>
+    <button class="sidebar-btn active" data-section="overview" onclick="showSection('overview', this, true)">Overview <span class="info-trigger" data-info="overview">?</span></button>
+    <button class="sidebar-btn tan" data-section="alerts" onclick="showSection('alerts', this, true)">Alerts <span class="info-trigger" data-info="alerts">?</span></button>
+    <button class="sidebar-btn purple" data-section="errors" onclick="showSection('errors', this, true)">Errors <span class="info-trigger" data-info="errors">?</span></button>
+    <button class="sidebar-btn blue" data-section="services" onclick="showSection('services', this, true)">Services <span class="info-trigger" data-info="services">?</span></button>
     {{if .IsAdmin}}
     <div class="sidebar-decoration"></div>
-    <button class="sidebar-btn gold" data-section="system" onclick="showSection('system', this, true)">System</button>
-    <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security</button>
-    <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt</button>
+    <button class="sidebar-btn gold" data-section="system" onclick="showSection('system', this, true)">System <span class="info-trigger" data-info="diagnostics">?</span></button>
+    <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security <span class="info-trigger" data-info="diagnostics">?</span></button>
+    <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt <span class="info-trigger" data-info="management">?</span></button>
+    <button class="sidebar-btn purple" data-section="devpanel" onclick="showSection('devpanel', this, true)">Dev Panel <span class="info-trigger" data-info="dev_panel">?</span></button>
     {{end}}
     <div class="sidebar-decoration purple"></div>
     <div class="sidebar-spacer"></div>
@@ -754,23 +1277,34 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text">Operations Summary</span>
+            <span class="info-trigger" data-info="system_diagnostics">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
           <div class="stat-grid">
             <div class="stat-cell">
-              <div class="stat-label">Total Webhooks</div>
+              <span class="info-trigger" data-info="total_since_start">?</span>
+              <div class="stat-label">Total (since start)</div>
+              <div class="stat-value" id="stat-total">{{.SysStats.TotalRequests}}</div>
+            </div>
+            <div class="stat-cell">
+              <span class="info-trigger" data-info="history_entries">?</span>
+              <div class="stat-label">History Entries</div>
               <div class="stat-value">{{.Stats.TotalEntries}}</div>
+              {{if .IsAdmin}}<button class="btn btn-danger btn-sm" style="margin-top:6px" onclick="clearHistory()">Clear</button> <span class="info-trigger" data-info="clear_history_button" style="position:relative;top:auto;right:auto;display:inline-flex;vertical-align:middle;">?</span>{{end}}
             </div>
             <div class="stat-cell {{if gt .Stats.ErrorCount 0}}critical{{end}}">
+              <span class="info-trigger" data-info="errors">?</span>
               <div class="stat-label">Errors</div>
-              <div class="stat-value {{if gt .Stats.ErrorCount 0}}error{{else}}ok{{end}}">{{.Stats.ErrorCount}}</div>
+              <div class="stat-value {{if gt .Stats.ErrorCount 0}}error{{else}}ok{{end}}" id="stat-errors">{{.Stats.ErrorCount}}</div>
             </div>
             <div class="stat-cell blue">
+              <span class="info-trigger" data-info="avg_duration">?</span>
               <div class="stat-label">Avg Duration</div>
               <div class="stat-value blue">{{.Stats.AvgDurationMs}}ms</div>
             </div>
             <div class="stat-cell purple">
+              <span class="info-trigger" data-info="cached_services">?</span>
               <div class="stat-label">Cached Services</div>
               <div class="stat-value purple">{{len .CachedServices}}</div>
             </div>
@@ -785,25 +1319,35 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text purple">Tactical Analysis</span>
+            <span class="info-trigger" data-info="system_diagnostics">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
           <div class="stat-grid">
             <div class="stat-cell ok">
-              <div class="stat-label">Work Mode</div>
-              <div class="stat-value ok">{{index .Stats.ByMode "work"}}</div>
+              <span class="info-trigger" data-info="firing">?</span>
+              <div class="stat-label">Firing</div>
+              <div class="stat-value ok" id="stat-work">{{index .Stats.ByAction "firing"}}</div>
+            </div>
+            <div class="stat-cell blue">
+              <span class="info-trigger" data-info="resolved">?</span>
+              <div class="stat-label">Resolved</div>
+              <div class="stat-value blue">{{index .Stats.ByAction "resolved"}}</div>
             </div>
             <div class="stat-cell purple">
+              <span class="info-trigger" data-info="test_mode">?</span>
               <div class="stat-label">Test Mode</div>
-              <div class="stat-value purple">{{index .Stats.ByMode "test"}}</div>
+              <div class="stat-value purple" id="stat-test">{{index .Stats.ByMode "test"}}</div>
             </div>
             <div class="stat-cell critical">
-              <div class="stat-label">Critical Alerts</div>
-              <div class="stat-value critical">{{index .Stats.BySeverity "critical"}}</div>
+              <span class="info-trigger" data-info="critical_firing">?</span>
+              <div class="stat-label">Critical (firing)</div>
+              <div class="stat-value critical" id="stat-critical">{{index .Stats.BySeverityFiring "critical"}}</div>
             </div>
             <div class="stat-cell warning">
-              <div class="stat-label">Warning Alerts</div>
-              <div class="stat-value warning">{{index .Stats.BySeverity "warning"}}</div>
+              <span class="info-trigger" data-info="warning_firing">?</span>
+              <div class="stat-label">Warning (firing)</div>
+              <div class="stat-value warning" id="stat-warning">{{index .Stats.BySeverityFiring "warning"}}</div>
             </div>
           </div>
           <div class="scanner-line"></div>
@@ -822,15 +1366,36 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text blue">Signal Sources</span>
+            <span class="info-trigger" data-info="signal_sources">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
           {{if .Stats.BySource}}
           <div class="tag-list">
             {{range $source, $count := .Stats.BySource}}
-            <span class="source-tag">{{$source}} <span class="count">({{$count}})</span></span>
+            <span class="source-tag clickable" onclick="toggleSourceDetail('{{$source}}')">{{$source}} <span class="count">({{$count}})</span></span>
             {{end}}
           </div>
+          {{range $source, $count := .Stats.BySource}}
+          <div class="source-detail" id="source-detail-{{$source}}" style="display:none">
+            <div class="ip-tabs">
+              <span class="ip-tab active" onclick="switchIPTab('{{$source}}', 'last', this)">Last 10</span>
+              <span class="ip-tab" onclick="switchIPTab('{{$source}}', 'top', this)">Top 10</span>
+            </div>
+            <div class="ip-tab-content" id="ip-last-{{$source}}">
+              <div class="source-detail-title">Recent connections</div>
+              {{with index $.SourceLastIPs $source}}{{range .}}
+              <div class="ip-entry"><span class="ip-addr">{{.IP}}</span><span class="ip-meta">{{.LastSeen}}</span><span class="ip-count">{{.Count}}x</span></div>
+              {{end}}{{else}}<div class="ip-entry">No data</div>{{end}}
+            </div>
+            <div class="ip-tab-content" id="ip-top-{{$source}}" style="display:none">
+              <div class="source-detail-title">Most active</div>
+              {{with index $.SourceTopIPs $source}}{{range .}}
+              <div class="ip-entry"><span class="ip-addr">{{.IP}}</span><span class="ip-count">{{.Count}} webhooks</span></div>
+              {{end}}{{else}}<div class="ip-entry">No data</div>{{end}}
+            </div>
+          </div>
+          {{end}}
           {{else}}
           <div class="empty-state">No signal sources detected</div>
           {{end}}
@@ -847,6 +1412,7 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text tan">Recent Transmissions (Last 20)</span>
+            <span class="info-trigger" data-info="recent_alerts">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
@@ -896,6 +1462,7 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text red">Anomaly Log (Last 10)</span>
+            <span class="info-trigger" data-info="recent_errors">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
@@ -941,13 +1508,14 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text blue">Service Cache Registry</span>
+            <span class="info-trigger" data-info="cached_services_section">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
           <div class="tag-list">
             {{range .CachedServices}}
-            <span class="service-tag {{.State}}">{{if .Host}}{{.Host}} / {{end}}{{.Service}} ({{.State}})</span>
+            <span class="service-tag {{.State}}" onclick="showServiceHistory('{{.Service}}', '{{.Host}}')" style="cursor:pointer;">{{if .Host}}{{.Host}} / {{end}}{{.Service}} ({{.State}})</span>
             {{end}}
           </div>
           {{else}}
@@ -1126,6 +1694,7 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
             <span class="title-text">Icinga2 Services - "{{.HostLabel}}" [Command Level]</span>
+            <span class="info-trigger" data-info="service_management">?</span>
           </div>
         </div>
         <div class="lcars-panel-body">
@@ -1179,6 +1748,31 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
       </div>
     </div><!-- /icinga -->
+
+    <!-- ── DEV PANEL SECTION ── -->
+    <div class="nav-section" id="sec-devpanel">
+      <div class="lcars-panel purple">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow purple"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill"></div>
+            <span class="title-text purple">Icinga2 API Traffic Inspector</span>
+            <span class="info-trigger" data-info="dev_panel">?</span>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div class="toolbar">
+            <label style="flex:1;">Real-time API traffic inspector</label>
+            <button class="btn btn-sm" id="devToggleBtn" onclick="devToggle()" style="background:var(--lcars-ok);min-width:70px;">OFF</button>
+            <button class="btn btn-sm" id="devPauseBtn" onclick="devPause()" style="background:var(--lcars-lavender);min-width:70px;display:none;">PAUSE</button>
+            <button class="btn btn-primary btn-sm" onclick="clearDevLog()">Clear</button>
+          </div>
+          <div id="devLogContainer" style="max-height:600px;overflow-y:auto;font-family:'SF Mono',SFMono-Regular,Menlo,monospace;font-size:12px;">
+            <div class="empty-state" id="devEmptyState">Debug collection is OFF. Click the toggle to start capturing API traffic.</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /devpanel -->
     {{end}}
 
   </div><!-- /lcars-content -->
@@ -1351,7 +1945,204 @@ function deleteSelected() {
     btn.textContent = 'Delete Selected';
   });
 }
+
+// ── Dev Panel: SSE debug stream with ON/OFF + PAUSE ──
+var devEnabled = false;
+var devPaused = false;
+
+function clearDevLog() {
+  var container = document.getElementById('devLogContainer');
+  if (container) container.innerHTML = '<div class="empty-state" id="devEmptyState">Debug collection is OFF. Click the toggle to start capturing API traffic.</div>';
+}
+
+function devToggle() {
+  var newState = !devEnabled;
+  fetch('/admin/debug/toggle', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({enabled: newState})
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    devEnabled = data.enabled;
+    devPaused = false;
+    devUpdateButtons();
+    if (!devEnabled) {
+      var container = document.getElementById('devLogContainer');
+      if (container) {
+        var info = document.createElement('div');
+        info.className = 'empty-state';
+        info.textContent = 'Debug collection stopped.';
+        container.insertBefore(info, container.firstChild);
+      }
+    } else {
+      var empty = document.getElementById('devEmptyState');
+      if (empty) empty.textContent = 'Collecting... waiting for API traffic.';
+    }
+  }).catch(function() {});
+}
+
+function devPause() {
+  devPaused = !devPaused;
+  devUpdateButtons();
+}
+
+function devUpdateButtons() {
+  var toggleBtn = document.getElementById('devToggleBtn');
+  var pauseBtn = document.getElementById('devPauseBtn');
+  if (toggleBtn) {
+    toggleBtn.textContent = devEnabled ? 'ON' : 'OFF';
+    toggleBtn.style.background = devEnabled ? 'var(--lcars-ok)' : 'var(--lcars-red)';
+  }
+  if (pauseBtn) {
+    pauseBtn.style.display = devEnabled ? '' : 'none';
+    pauseBtn.textContent = devPaused ? 'RESUME' : 'PAUSE';
+    pauseBtn.style.background = devPaused ? 'var(--lcars-warning)' : 'var(--lcars-lavender)';
+  }
+}
+
+function colorizeJSON(str) {
+  var obj;
+  try { obj = JSON.parse(str); } catch(e) { return escHtml(str); }
+  var pretty = JSON.stringify(obj, null, 2);
+  return pretty.replace(/("(?:\\.|[^"\\])*")\s*:/g, function(m, key) {
+    return '<span class="j-key">' + escHtml(key) + '</span>:';
+  }).replace(/:\s*("(?:\\.|[^"\\])*")/g, function(m, val) {
+    return ': <span class="j-str">' + escHtml(val) + '</span>';
+  }).replace(/:\s*(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g, function(m, val) {
+    return ': <span class="j-num">' + val + '</span>';
+  }).replace(/:\s*(true|false)/g, function(m, val) {
+    return ': <span class="j-bool">' + val + '</span>';
+  }).replace(/:\s*(null)/g, function(m, val) {
+    return ': <span class="j-null">' + val + '</span>';
+  }).replace(/([{}\[\]])/g, '<span class="j-brace">$1</span>');
+}
+
+function devCopyJSON(btn) {
+  var pre = btn.parentElement.querySelector('.dev-pre');
+  if (!pre) return;
+  var text = pre.textContent || pre.innerText;
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+  }).catch(function() {
+    btn.textContent = 'Failed';
+    setTimeout(function() { btn.textContent = 'Copy'; }, 1500);
+  });
+}
+
+function appendDevEntry(d) {
+  if (devPaused) return;
+  var container = document.getElementById('devLogContainer');
+  if (!container) return;
+  var empty = document.getElementById('devEmptyState');
+  if (empty) empty.remove();
+
+  var isInbound = d.direction === 'inbound';
+  var statusOk = d.status_code >= 200 && d.status_code < 300;
+  var method = d.method || '?';
+  var ts = '';
+  if (d.timestamp) {
+    var dt = new Date(d.timestamp);
+    ts = dt.toLocaleTimeString('en-GB', {hour12:false}) + '.' + String(dt.getMilliseconds()).padStart(3,'0');
+  }
+
+  var html = '<div class="dev-entry">';
+  html += '<div class="dev-entry-header">';
+  html += '<span class="dev-dir dev-dir-' + (d.direction||'outbound') + '">' + (isInbound ? 'IN' : 'OUT') + '</span>';
+  html += '<span class="dev-method dev-method-' + method + '">' + method + '</span>';
+  html += '<span class="dev-url">' + escHtml(d.url||'') + '</span>';
+  if (d.source) html += '<span class="dev-source">' + escHtml(d.source) + '</span>';
+  if (d.status_code) html += '<span class="dev-status dev-status-' + (statusOk?'ok':'err') + '">' + d.status_code + '</span>';
+  if (d.duration_ms) html += '<span class="dev-duration">' + d.duration_ms + 'ms</span>';
+  html += '<span class="dev-time">' + ts + '</span>';
+  if (d.remote_addr) html += '<span class="dev-remote">' + escHtml(d.remote_addr) + '</span>';
+  if (d.error) html += '<span class="dev-error-tag">ERR</span>';
+  html += '</div>';
+  if (d.request_body) {
+    var bodyLabel = isInbound ? 'Webhook Payload' : 'Request Body';
+    html += '<details class="dev-details"><summary>' + bodyLabel + '</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.request_body) + '</pre></div></details>';
+  }
+  if (d.response_body) {
+    html += '<details class="dev-details"><summary>Response Body</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.response_body) + '</pre></div></details>';
+  }
+  if (d.error) {
+    html += '<div class="dev-error-msg">' + escHtml(d.error) + '</div>';
+  }
+  html += '</div>';
+
+  container.insertAdjacentHTML('afterbegin', html);
+
+  while (container.children.length > 200) {
+    container.removeChild(container.lastChild);
+  }
+}
+
+function escHtml(s) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(s));
+  return div.innerHTML;
+}
+
+// Check initial debug state from server
+fetch('/admin/debug/toggle').then(function(r) { return r.json(); }).then(function(data) {
+  devEnabled = data.enabled;
+  devUpdateButtons();
+}).catch(function() {});
+
+if (typeof EventSource !== 'undefined') {
+  var devEs = new EventSource('/status/beauty/events');
+  devEs.addEventListener('debug', function(e) {
+    try {
+      var data = JSON.parse(e.data);
+      appendDevEntry(data);
+    } catch(err) {}
+  });
+}
 {{end}}
+
+function showServiceHistory(service, host) {
+  var overlay = document.createElement('div');
+  overlay.className = 'svc-history-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  var panel = document.createElement('div');
+  panel.className = 'svc-history-panel';
+  var title = host ? host + ' / ' + service : service;
+  panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div><div class="svc-history-body"><div class="svc-history-loading">Loading history...</div></div>';
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  var url = '/history?service=' + encodeURIComponent(service) + '&limit=5';
+  if (host) url += '&host=' + encodeURIComponent(host);
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    var body = panel.querySelector('.svc-history-body');
+    var entries = data.entries || data;
+    if (!entries || entries.length === 0) {
+      body.innerHTML = '<div class="svc-history-empty">No history entries found</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var ts = '';
+      if (e.timestamp) {
+        var dt = new Date(e.timestamp);
+        ts = dt.toLocaleDateString('en-GB') + ' ' + dt.toLocaleTimeString('en-GB', {hour12:false});
+      }
+      var action = (e.action || '').toLowerCase();
+      var actionClass = 'svc-history-action-' + action;
+      var exitClass = 'svc-history-exit-' + (e.exit_status || 0);
+      html += '<div class="svc-history-row">';
+      html += '<span class="svc-history-time">' + ts + '</span>';
+      html += '<span class="svc-history-action ' + actionClass + '">' + escHtml(e.action || '') + '</span>';
+      html += '<span class="svc-history-exit ' + exitClass + '">EXIT ' + (e.exit_status != null ? e.exit_status : '?') + '</span>';
+      html += '<span class="svc-history-msg" title="' + escHtml(e.message || '') + '">' + escHtml(e.message || '') + '</span>';
+      html += '</div>';
+    }
+    body.innerHTML = html;
+  }).catch(function(err) {
+    var body = panel.querySelector('.svc-history-body');
+    body.innerHTML = '<div class="svc-history-empty">Failed to load history</div>';
+  });
+}
 
 function doLogout() {
   window.location.href = '/status/beauty/logout';
@@ -1365,6 +2156,170 @@ function applySectionFromHash() {
 
 window.addEventListener('hashchange', applySectionFromHash);
 applySectionFromHash();
+
+// ── Auto-refresh (preserves URL hash unlike meta refresh) ──
+setTimeout(function() { window.location.reload(); }, 30000);
+
+// ── Signal Sources toggle ──
+function toggleSourceDetail(source) {
+  var el = document.getElementById('source-detail-' + source);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function clearHistory() {
+  if (!confirm('Clear all history entries? This cannot be undone.')) return;
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/admin/history/clear', true);
+  xhr.withCredentials = true;
+  xhr.onload = function() {
+    if (xhr.status === 200) { location.reload(); }
+    else { alert('Error: HTTP ' + xhr.status); }
+  };
+  xhr.onerror = function() { alert('Request failed'); };
+  xhr.send();
+}
+
+function switchIPTab(source, tab, btn) {
+  var lastEl = document.getElementById('ip-last-' + source);
+  var topEl = document.getElementById('ip-top-' + source);
+  if (!lastEl || !topEl) return;
+  lastEl.style.display = tab === 'last' ? 'block' : 'none';
+  topEl.style.display = tab === 'top' ? 'block' : 'none';
+  var tabs = btn.parentElement.querySelectorAll('.ip-tab');
+  for (var i = 0; i < tabs.length; i++) tabs[i].classList.remove('active');
+  btn.classList.add('active');
+}
+
+// ── Webhook Flow Animation (SSE real-time) ──
+(function() {
+  var flowLine = document.getElementById('webhookFlowLine');
+  if (!flowLine) return;
+
+  function spawnOrb(statusClass) {
+    var orbClass = 'ok';
+    if (statusClass === 'critical' || statusClass === 'error') orbClass = 'critical';
+    else if (statusClass === 'warning') orbClass = 'warning';
+
+    var orb = document.createElement('div');
+    orb.className = 'webhook-orb ' + orbClass;
+    flowLine.appendChild(orb);
+    orb.addEventListener('animationend', function() { orb.remove(); });
+  }
+
+  // Spawn initial orbs from page data (last alerts)
+  var recentAlerts = [
+    {{range .RecentAlerts}}{status: "{{.StatusClass}}"},
+    {{end}}
+  ];
+  var initCount = Math.min(recentAlerts.length, 5);
+  for (var i = 0; i < initCount; i++) {
+    (function(idx) {
+      setTimeout(function() { spawnOrb(recentAlerts[idx].status); }, idx * 600);
+    })(i);
+  }
+
+  // SSE real-time connection
+  function incCounter(id) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = parseInt(el.textContent || '0') + 1;
+  }
+
+  if (typeof EventSource !== 'undefined') {
+    var es = new EventSource('/status/beauty/events');
+    es.onmessage = function(e) {
+      try {
+        var data = JSON.parse(e.data);
+        spawnOrb(data.status || 'ok');
+        incCounter('stat-total');
+        if (data.mode === 'work') incCounter('stat-work');
+        if (data.mode === 'test') incCounter('stat-test');
+        if (data.status === 'critical') incCounter('stat-critical');
+        if (data.status === 'warning') incCounter('stat-warning');
+      } catch(err) {}
+    };
+    es.onerror = function() {
+      // Reconnect is automatic with EventSource
+    };
+  }
+})();
+
+// ── LCARS Info Popup System ──
+var lcarsInfo = {
+  total_since_start: "Cumulative count of all subspace relay transmissions received since last system initialization. This metric represents total signal traffic processed through the bridge relay array.",
+  history_entries: "Number of sensor log entries currently stored in the ship's computer memory banks. Each entry documents a fully processed subspace relay event with complete telemetry data.",
+  errors: "Anomalous signal events detected during relay processing. Elevated readings may indicate subspace interference, target system communication failures, or protocol misalignment requiring diagnostic review.",
+  avg_duration: "Mean chronometric duration for full signal relay processing \u2014 from initial subspace reception through final acknowledgment from the Icinga tactical grid. Measured in standard milliseconds.",
+  cached_services: "Number of Icinga tactical grid service endpoints currently held in the navigational deflector cache. Cached entries reduce subspace query overhead during alert correlation sequences.",
+  firing: "Active threat signatures currently propagating through the alert relay network. These signals indicate unresolved conditions requiring tactical response from the Icinga defense grid.",
+  resolved: "Threat signatures that have been neutralized and confirmed stable. These relay events indicate successful remediation \u2014 the alert condition has returned to nominal parameters.",
+  test_mode: "Holodeck simulation signals \u2014 relay transmissions processed in diagnostic mode without propagation to the live Icinga tactical grid. Used for system calibration and crew training exercises.",
+  critical_firing: "Red Alert conditions currently active across the sensor network. Critical-priority threat signatures demanding immediate bridge crew attention. These represent the highest severity level in the tactical classification matrix.",
+  warning_firing: "Yellow Alert conditions currently active. Warning-priority anomalies detected by the sensor array that may escalate to Red Alert status if left unaddressed. Recommend monitoring at regular intervals.",
+  signal_sources: "Subspace Relay Origin Registry \u2014 identifies all transmission sources currently feeding the bridge relay system. Displays source designation tags and point-of-origin coordinates for each incoming signal carrier.",
+  recent_alerts: "Tactical Operations Log \u2014 chronological record of recent subspace relay events processed by the bridge system. Displays signal classification, source designation, target service endpoint, and processing timestamp.",
+  recent_errors: "Anomaly Report \u2014 detailed log of processing failures and subspace relay disruptions. Each entry includes fault classification, diagnostic trace data, and chronometric stamp for engineering review.",
+  system_diagnostics: "Engineering Systems Status Panel \u2014 real-time telemetry from the bridge relay computer core. Monitors processing thread allocation, memory bank utilization, waste reclamation cycles, computational core load, continuous uptime, and signal throughput rate.",
+  cached_services_section: "Deflector Cache Manifest \u2014 complete inventory of Icinga tactical grid service endpoints currently stored in local memory banks. Enables rapid lookup and reduces subspace communication latency during high-volume alert processing.",
+  service_management: "Starfleet Command Authorization Required \u2014 administrative interface for direct manipulation of Icinga tactical grid service registrations. Restricted to officers with command-level clearance.",
+  webhook_flow_line: "Subspace Relay Flow Conduit \u2014 visual representation of signal propagation through the bridge relay system. Illuminated pathway orbs indicate active data transit from Grafana sensor arrays through processing cores to the Icinga tactical defense grid.",
+  clear_history_button: "Initiate memory bank purge sequence \u2014 clears all stored sensor log entries from the ship's computer. This operation is irreversible. Recommend archival backup before executing purge authorization.",
+  overview: "Bridge Operations Overview \u2014 primary command interface displaying consolidated telemetry from all relay subsystems. Provides commanding officer with immediate situational awareness of system-wide operational status.",
+  alerts: "Tactical Alert Monitor \u2014 real-time feed of all subspace relay signals classified by threat level and resolution status. Standard bridge crew interface for monitoring active and recently resolved alert conditions.",
+  services: "Service Registry Viewer \u2014 read-only manifest of all Icinga tactical grid endpoints tracked by the bridge relay system. Displays cached service configurations and operational status within the defense grid.",
+  diagnostics: "Computer Core Diagnostics \u2014 Level 3 diagnostic readout of bridge relay system internals. Displays computational resource allocation, memory utilization curves, and processing efficiency metrics.",
+  management: "Command Operations Console \u2014 Starfleet Command authorization required. Full administrative control over tactical grid service registrations. Access restricted to authorized personnel only.",
+  dev_panel: "Subspace Relay Diagnostic Console \u2014 Level 1 engineering interface for monitoring all communications between the bridge relay system and the Icinga tactical defense grid. Displays raw transmission payloads, response telemetry, and chronometric data for each API interaction. Authorized engineering personnel only."
+};
+
+function showInfoPopup(key, text) {
+  closeInfoPopup();
+  var overlay = document.createElement('div');
+  overlay.className = 'info-overlay';
+  overlay.id = 'infoOverlay';
+  overlay.addEventListener('click', closeInfoPopup);
+
+  var popup = document.createElement('div');
+  popup.className = 'info-popup';
+  popup.id = 'infoPopup';
+
+  var header = document.createElement('div');
+  header.className = 'info-popup-header';
+  var title = document.createElement('span');
+  title.textContent = 'COMPUTER DATABASE \u2014 ' + key.toUpperCase().replace(/_/g, ' ');
+  var closeBtn = document.createElement('button');
+  closeBtn.className = 'info-popup-close';
+  closeBtn.innerHTML = '\u00D7';
+  closeBtn.addEventListener('click', closeInfoPopup);
+  header.appendChild(title);
+  header.appendChild(closeBtn);
+
+  var body = document.createElement('div');
+  body.className = 'info-popup-body';
+  body.textContent = text;
+
+  popup.appendChild(header);
+  popup.appendChild(body);
+
+  document.body.appendChild(overlay);
+  document.body.appendChild(popup);
+}
+
+function closeInfoPopup() {
+  var overlay = document.getElementById('infoOverlay');
+  var popup = document.getElementById('infoPopup');
+  if (overlay) overlay.remove();
+  if (popup) popup.remove();
+}
+
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('info-trigger')) {
+    e.stopPropagation();
+    e.preventDefault();
+    var key = e.target.getAttribute('data-info');
+    var text = lcarsInfo[key] || 'No data available in computer database.';
+    showInfoPopup(key, text);
+  }
+});
 </script>
 
 </body>

@@ -65,11 +65,11 @@ func TestCollector_KeyPrefixTruncation(t *testing.T) {
 	if len(snap.FailedAuthRecent) != 2 {
 		t.Fatalf("expected 2 recent failures, got %d", len(snap.FailedAuthRecent))
 	}
-	if snap.FailedAuthRecent[0].KeyPrefix != "super-lo..." {
-		t.Errorf("expected truncated key, got %q", snap.FailedAuthRecent[0].KeyPrefix)
+	if len(snap.FailedAuthRecent[0].KeyPrefix) != 12 {
+		t.Errorf("expected 12-char hash, got %q", snap.FailedAuthRecent[0].KeyPrefix)
 	}
-	if snap.FailedAuthRecent[1].KeyPrefix != "(empty)..." {
-		t.Errorf("expected (empty)..., got %q", snap.FailedAuthRecent[1].KeyPrefix)
+	if snap.FailedAuthRecent[1].KeyPrefix != "(empty)" {
+		t.Errorf("expected (empty), got %q", snap.FailedAuthRecent[1].KeyPrefix)
 	}
 }
 

@@ -1,6 +1,8 @@
 package metrics
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -85,18 +87,15 @@ func (c *Collector) RecordError() {
 func (c *Collector) RecordAuthFailure(ip, keyUsed string) {
 	c.failedAuthTotal.Add(1)
 
-	prefix := keyUsed
-	if len(prefix) > 8 {
-		prefix = prefix[:8]
-	}
-	if prefix == "" {
-		prefix = "(empty)"
+	keyHash := "(empty)"
+	if keyUsed != "" {
+		keyHash = fmt.Sprintf("%x", sha256.Sum256([]byte(keyUsed)))[:12]
 	}
 
 	failure := AuthFailure{
 		Timestamp: time.Now(),
 		IP:        ip,
-		KeyPrefix: prefix + "...",
+		KeyPrefix: keyHash,
 	}
 
 	c.mu.Lock()
@@ -144,15 +143,15 @@ func (c *Collector) Snapshot() SystemStats {
 	for _, f := range c.failedAuths {
 		if f.Timestamp.After(cutoff) {
 			recentFailures = append(recentFailures, f)
-		}
-		if bf, ok := ipCounts[f.IP]; ok {
-			bf.Attempts++
-			bf.LastSeen = f.Timestamp.Format("2006-01-02 15:04:05")
-		} else {
-			ipCounts[f.IP] = &BruteForceIP{
-				IP:       f.IP,
-				Attempts: 1,
-				LastSeen: f.Timestamp.Format("2006-01-02 15:04:05"),
+			if bf, ok := ipCounts[f.IP]; ok {
+				bf.Attempts++
+				bf.LastSeen = f.Timestamp.Format("2006-01-02 15:04:05")
+			} else {
+				ipCounts[f.IP] = &BruteForceIP{
+					IP:       f.IP,
+					Attempts: 1,
+					LastSeen: f.Timestamp.Format("2006-01-02 15:04:05"),
+				}
 			}
 		}
 	}

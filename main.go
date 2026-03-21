@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -22,7 +23,9 @@ import (
 	"icinga-webhook-bridge/metrics"
 )
 
-const version = "1.0.0"
+// version is set at build time via -ldflags "-X main.version=..."
+// Falls back to "dev" when built without ldflags.
+var version = "dev"
 
 func main() {
 	// ── Load Configuration ──────────────────────────────────────────
@@ -45,6 +48,8 @@ func main() {
 		cfg.Icinga2Pass,
 		cfg.Icinga2TLSSkipVerify,
 	)
+	debugRing := icinga.NewDebugRing()
+	apiClient.Debug = debugRing
 
 	// ── Validate / auto-create hosts in Icinga2 ─────────────────────
 	if err := ensureConfiguredHosts(apiClient, cfg.Targets, cfg.Icinga2HostAutoCreate); err != nil {
@@ -84,15 +89,29 @@ func main() {
 		"queue_max", cfg.RateLimitMaxQueue,
 	)
 
+	// ── SSE Broker ─────────────────────────────────────────────────
+	sseBroker := handler.NewSSEBroker()
+
+	// Wire debug ring to SSE for real-time dev panel
+	debugRing.SetListener(func(entry icinga.DebugEntry) {
+		data, err := json.Marshal(entry)
+		if err != nil {
+			return
+		}
+		sseBroker.PublishRaw("debug", data)
+	})
+
 	// ── Create Handlers ─────────────────────────────────────────────
 	webhookHandler := &handler.WebhookHandler{
-		KeyStore: keyStore,
-		Cache:    serviceCache,
-		API:      apiClient,
-		History:  historyLogger,
-		Targets:  cfg.Targets,
-		Limiter:  rateLimiter,
-		Metrics:  metricsCollector,
+		KeyStore:  keyStore,
+		Cache:     serviceCache,
+		API:       apiClient,
+		History:   historyLogger,
+		Targets:   cfg.Targets,
+		Limiter:   rateLimiter,
+		Metrics:   metricsCollector,
+		SSE:       sseBroker,
+		DebugRing: debugRing,
 	}
 
 	statusHandler := &handler.StatusHandler{
@@ -114,15 +133,18 @@ func main() {
 		AdminUser: cfg.AdminUser,
 		AdminPass: cfg.AdminPass,
 		StartedAt: startedAt,
+		DebugRing: debugRing,
 	}
 
 	adminHandler := &handler.AdminHandler{
-		Cache:   serviceCache,
-		API:     apiClient,
-		Limiter: rateLimiter,
-		Targets: cfg.Targets,
-		User:    cfg.AdminUser,
-		Pass:    cfg.AdminPass,
+		Cache:     serviceCache,
+		API:       apiClient,
+		Limiter:   rateLimiter,
+		History:   historyLogger,
+		DebugRing: debugRing,
+		Targets:   cfg.Targets,
+		User:      cfg.AdminUser,
+		Pass:      cfg.AdminPass,
 	}
 
 	// ── Register Routes ─────────────────────────────────────────────
@@ -136,6 +158,7 @@ func main() {
 
 	// Core endpoints
 	mux.Handle("/webhook", webhookHandler)
+	mux.Handle("/status/beauty/events", sseBroker)
 	mux.Handle("/status/beauty", dashboardHandler)
 	mux.HandleFunc("/status/beauty/logout", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
@@ -154,12 +177,15 @@ func main() {
 	mux.HandleFunc("/admin/services/", adminHandler.HandleDeleteService)
 	mux.HandleFunc("/admin/services", adminHandler.HandleListServices)
 	mux.HandleFunc("/admin/ratelimit", adminHandler.HandleRateLimitStats)
+	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)
+	mux.HandleFunc("/admin/debug/toggle", adminHandler.HandleDebugToggle)
 
 	// ── Start Server ────────────────────────────────────────────────
 	slog.Info("Routes registered",
 		"endpoints", []string{
 			"GET  /health",
 			"POST /webhook",
+			"GET  /status/beauty/events",
 			"GET  /status/beauty",
 			"GET  /status/{service_name}",
 			"GET  /history",
@@ -168,6 +194,9 @@ func main() {
 			"DELETE /admin/services/{name}",
 			"POST /admin/services/bulk-delete",
 			"GET  /admin/ratelimit",
+			"POST /admin/history/clear",
+			"GET  /admin/debug/toggle",
+			"POST /admin/debug/toggle",
 		},
 	)
 

@@ -247,7 +247,8 @@ DELETE /admin/services/HighCPU?host=a-dummy-dev
 
 #### `POST /admin/services/bulk-delete`
 
-Preferred request body in a multi host setup:
+<!-- LANG: hyphenation -->
+Preferred request body in a multi-host setup:
 
 ```json
 {
@@ -267,6 +268,52 @@ The older string array form still works if exactly one host is configured:
 #### `GET /admin/ratelimit`
 
 Returns the current mutate and status slot usage, plus queue depth.
+
+<!-- CHANGED: added history clear and debug toggle admin endpoints -->
+
+#### `POST /admin/history/clear`
+
+Clears all history entries.
+
+```bash
+curl -u admin:secret -X POST http://localhost:8080/admin/history/clear
+```
+
+Response:
+
+```json
+{"status": "history cleared"}
+```
+
+#### `GET /admin/debug/toggle`
+
+Returns the current state of the API debug ring buffer.
+
+```bash
+curl -u admin:secret http://localhost:8080/admin/debug/toggle
+```
+
+Response:
+
+```json
+{"enabled": false}
+```
+
+#### `POST /admin/debug/toggle`
+
+Enables or disables the API debug capture ring buffer.
+
+```bash
+curl -u admin:secret -X POST http://localhost:8080/admin/debug/toggle \
+  -H "Content-Type: application/json" \
+  -d '{"enabled": true}'
+```
+
+Response:
+
+```json
+{"enabled": true}
+```
 
 ### Status Endpoints
 
@@ -339,6 +386,35 @@ Each history row includes `host_name`.
 #### `GET /history/export`
 
 Downloads the raw JSONL file.
+
+<!-- CHANGED: added SSE and logout endpoints -->
+
+### SSE Endpoint
+
+#### `GET /status/beauty/events`
+
+Server-Sent Events stream for real-time dashboard updates. No authentication required.
+
+Event types:
+
+| Event | Description |
+|---|---|
+| `webhook` | Alert data (default unnamed event) |
+| `debug` | API traffic when debug capture is enabled |
+
+The broker accepts up to 50 concurrent clients. When the limit is exceeded, the server returns `503 Service Unavailable`.
+
+Example:
+
+```bash
+curl -N http://localhost:8080/status/beauty/events
+```
+
+### Logout Endpoint
+
+#### `GET /status/beauty/logout`
+
+Forces the browser to clear cached HTTP Basic Auth credentials. Returns `401` with a `WWW-Authenticate` header and a meta-refresh redirect to `/status/beauty`.
 
 ### Health Endpoint
 

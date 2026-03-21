@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -96,6 +97,19 @@ func (l *Logger) Append(entry models.HistoryEntry) error {
 		l.rotateLockedInline()
 	}
 
+	return nil
+}
+
+// Clear truncates the history file, removing all entries.
+func (l *Logger) Clear() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if err := os.Truncate(l.filePath, 0); err != nil {
+		return fmt.Errorf("history: truncate file: %w", err)
+	}
+	l.appendCount.Store(0)
+	slog.Info("History cleared", "file", l.filePath)
 	return nil
 }
 
@@ -244,8 +258,11 @@ func (l *Logger) Stats() (HistoryStats, error) {
 		TotalEntries:  len(entries),
 		ByMode:        make(map[string]int),
 		ByAction:      make(map[string]int),
-		BySeverity:    make(map[string]int),
-		BySource:      make(map[string]int),
+		BySeverity:       make(map[string]int),
+		BySeverityFiring: make(map[string]int),
+		BySource:         make(map[string]int),
+		BySourceIP:         make(map[string]map[string]int),
+		BySourceIPLastSeen: make(map[string]map[string]time.Time),
 		ErrorCount:    0,
 		RecentErrors:  []models.HistoryEntry{},
 		RecentEntries: []models.HistoryEntry{},
@@ -256,8 +273,24 @@ func (l *Logger) Stats() (HistoryStats, error) {
 		stats.ByAction[e.Action]++
 		if e.Severity != "" {
 			stats.BySeverity[e.Severity]++
+			if e.Action == "firing" || e.Action == "create" {
+				stats.BySeverityFiring[e.Severity]++
+			}
 		}
 		stats.BySource[e.SourceKey]++
+		if e.RemoteAddr != "" && e.SourceKey != "" {
+			ip := stripPort(e.RemoteAddr)
+			if stats.BySourceIP[e.SourceKey] == nil {
+				stats.BySourceIP[e.SourceKey] = make(map[string]int)
+			}
+			stats.BySourceIP[e.SourceKey][ip]++
+			if stats.BySourceIPLastSeen[e.SourceKey] == nil {
+				stats.BySourceIPLastSeen[e.SourceKey] = make(map[string]time.Time)
+			}
+			if e.Timestamp.After(stats.BySourceIPLastSeen[e.SourceKey][ip]) {
+				stats.BySourceIPLastSeen[e.SourceKey][ip] = e.Timestamp
+			}
+		}
 		if !e.IcingaOK {
 			stats.ErrorCount++
 		}
@@ -291,14 +324,26 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 // HistoryStats holds aggregate statistics about the webhook history.
 type HistoryStats struct {
-	TotalEntries    int                   `json:"total_entries"`
-	ByMode          map[string]int        `json:"by_mode"`
-	ByAction        map[string]int        `json:"by_action"`
-	BySeverity      map[string]int        `json:"by_severity"`
-	BySource        map[string]int        `json:"by_source"`
-	ErrorCount      int                   `json:"error_count"`
-	TotalDurationMs int64                 `json:"total_duration_ms"`
-	AvgDurationMs   int64                 `json:"avg_duration_ms"`
-	RecentErrors    []models.HistoryEntry `json:"recent_errors"`
-	RecentEntries   []models.HistoryEntry `json:"recent_entries"`
+	TotalEntries    int                          `json:"total_entries"`
+	ByMode          map[string]int               `json:"by_mode"`
+	ByAction        map[string]int               `json:"by_action"`
+	BySeverity        map[string]int               `json:"by_severity"`
+	BySeverityFiring  map[string]int               `json:"by_severity_firing"`
+	BySource        map[string]int               `json:"by_source"`
+	BySourceIP         map[string]map[string]int       `json:"by_source_ip"`
+	BySourceIPLastSeen map[string]map[string]time.Time `json:"-"`
+	ErrorCount      int                          `json:"error_count"`
+	TotalDurationMs int64                        `json:"total_duration_ms"`
+	AvgDurationMs   int64                        `json:"avg_duration_ms"`
+	RecentErrors    []models.HistoryEntry        `json:"recent_errors"`
+	RecentEntries   []models.HistoryEntry        `json:"recent_entries"`
+}
+
+// stripPort removes the port from a host:port address, returning just the IP.
+func stripPort(addr string) string {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return addr
+	}
+	return host
 }

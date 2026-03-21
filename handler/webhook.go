@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -22,13 +23,15 @@ import (
 // It authenticates the request, parses the payload, and routes to the
 // appropriate mode handler (test or work).
 type WebhookHandler struct {
-	KeyStore *auth.KeyStore
-	Cache    *cache.ServiceCache
-	API      *icinga.APIClient
-	History  *history.Logger
-	Targets  map[string]config.TargetConfig
-	Limiter  *icinga.RateLimiter
-	Metrics  *metrics.Collector
+	KeyStore  *auth.KeyStore
+	Cache     *cache.ServiceCache
+	API       *icinga.APIClient
+	History   *history.Logger
+	Targets   map[string]config.TargetConfig
+	Limiter   *icinga.RateLimiter
+	Metrics   *metrics.Collector
+	SSE       *SSEBroker
+	DebugRing *icinga.DebugRing
 }
 
 // ServeHTTP handles POST /webhook requests from Grafana.
@@ -75,9 +78,15 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	const maxWebhookBody = 1 << 20 // 1 MiB
 	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBody)
 
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		slog.Error("Failed to read webhook body", "error", err, "source", route.Source)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		return
+	}
+
 	var payload models.GrafanaPayload
-	dec := json.NewDecoder(r.Body)
-	if err := dec.Decode(&payload); err != nil {
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		slog.Error("Failed to decode webhook payload", "error", err, "source", route.Source, "host", target.HostName)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
 		return
@@ -89,6 +98,19 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestID := uuid.New().String()
+
+	// Record inbound webhook in debug ring
+	if h.DebugRing != nil {
+		h.DebugRing.Push(icinga.DebugEntry{
+			Timestamp:   time.Now(),
+			Direction:   "inbound",
+			Method:      r.Method,
+			URL:         r.URL.String(),
+			RequestBody: string(rawBody),
+			Source:      route.Source,
+			RemoteAddr:  r.RemoteAddr,
+		})
+	}
 	slog.Info("Webhook received",
 		"request_id", requestID,
 		"source", route.Source,
@@ -104,7 +126,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hasErrors := false
 	for _, alert := range payload.Alerts {
 		start := time.Now()
-		result := h.processAlert(requestID, route.Source, target, alert)
+		result := h.processAlert(requestID, route.Source, target, alert, r.RemoteAddr)
 		result["duration_ms"] = time.Since(start).Milliseconds()
 		if resultHasError(result) {
 			hasErrors = true
@@ -148,7 +170,7 @@ func resultHasError(result map[string]any) bool {
 }
 
 // processAlert routes a single alert to the appropriate handler based on mode.
-func (h *WebhookHandler) processAlert(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) processAlert(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert, remoteAddr string) map[string]any {
 	if alert.AlertName() == "" {
 		return map[string]any{
 			"error":  "missing alertname label",
@@ -157,14 +179,16 @@ func (h *WebhookHandler) processAlert(requestID, source string, target config.Ta
 	}
 
 	if alert.IsTestMode() {
-		return h.handleTestMode(requestID, source, target, alert)
+		return h.handleTestMode(requestID, source, target, alert, remoteAddr)
 	}
-	return h.handleWorkMode(requestID, source, target, alert)
+	return h.handleWorkMode(requestID, source, target, alert, remoteAddr)
 }
 
 // writeJSON writes a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, statusCode int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Debug("writeJSON encode error", "error", err)
+	}
 }

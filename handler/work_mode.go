@@ -101,7 +101,7 @@ func (h *WebhookHandler) ensureServiceExists(requestID string, target config.Tar
 }
 
 // handleWorkMode processes production alerts (firing/resolved).
-func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert, remoteAddr string) map[string]any {
 	serviceName := alert.AlertName()
 	severity := alert.Severity()
 	summary := alert.Summary()
@@ -179,7 +179,18 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	}
 
 	h.logHistory(requestID, source, target.HostName, "work", action, serviceName, severity,
-		exitStatus, message, icingaOK, durationMs, errMsg)
+		exitStatus, message, icingaOK, durationMs, errMsg, remoteAddr)
+
+	if h.SSE != nil {
+		sseStatus := "ok"
+		if exitStatus == 1 {
+			sseStatus = "warning"
+		}
+		if exitStatus == 2 {
+			sseStatus = "critical"
+		}
+		h.SSE.Publish(SSEEvent{Status: sseStatus, ServiceName: serviceName, Source: source, Mode: "work", RemoteAddr: remoteAddr})
+	}
 
 	result := map[string]any{
 		"status":      "processed",

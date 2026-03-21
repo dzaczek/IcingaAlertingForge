@@ -17,4 +17,5 @@ type HistoryEntry struct {
 	IcingaOK    bool      `json:"icinga_ok"`
 	DurationMs  int64     `json:"duration_ms"`
 	Error       string    `json:"error,omitempty"`
+	RemoteAddr  string    `json:"remote_addr,omitempty"`
 }

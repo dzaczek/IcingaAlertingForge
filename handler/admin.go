@@ -11,17 +11,20 @@ import (
 
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
+	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 )
 
 // AdminHandler serves admin API endpoints for service management.
 type AdminHandler struct {
-	Cache   *cache.ServiceCache
-	API     *icinga.APIClient
-	Limiter *icinga.RateLimiter
-	Targets map[string]config.TargetConfig
-	User    string
-	Pass    string
+	Cache     *cache.ServiceCache
+	API       *icinga.APIClient
+	Limiter   *icinga.RateLimiter
+	History   *history.Logger
+	DebugRing *icinga.DebugRing
+	Targets   map[string]config.TargetConfig
+	User      string
+	Pass      string
 }
 
 // checkAuth validates HTTP Basic Auth credentials for admin endpoints.
@@ -64,12 +67,13 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 	}
 
 	services := make([]icinga.ServiceInfo, 0)
+	var fetchErrors []string
 	for _, target := range targets {
 		hostServices, err := h.API.ListServices(target.HostName)
 		if err != nil {
 			slog.Error("Failed to list services from Icinga2", "host", target.HostName, "error", err)
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to list services: " + err.Error()})
-			return
+			fetchErrors = append(fetchErrors, target.HostName+": "+err.Error())
+			continue
 		}
 		services = append(services, hostServices...)
 	}
@@ -86,12 +90,17 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		hostNames = append(hostNames, target.HostName)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	resp := map[string]any{
 		"host":     firstHostName(hostNames),
 		"hosts":    hostNames,
 		"services": services,
 		"count":    len(services),
-	})
+	}
+	if len(fetchErrors) > 0 {
+		resp["errors"] = fetchErrors
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleDeleteService deletes a service from Icinga2.
@@ -118,11 +127,13 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Use rate limiter for mutation
-	if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
-		return
+	if h.Limiter != nil {
+		if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
+			return
+		}
+		defer h.Limiter.ReleaseMutate()
 	}
-	defer h.Limiter.ReleaseMutate()
 
 	if err := h.API.DeleteService(target.HostName, serviceName); err != nil {
 		slog.Error("Admin: failed to delete service", "host", target.HostName, "service", serviceName, "error", err)
@@ -155,6 +166,8 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+
 	refs, err := h.parseBulkDeleteRequest(r)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
@@ -167,18 +180,22 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 
 	var results []map[string]any
 	for _, ref := range refs {
-		if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
-			results = append(results, map[string]any{
-				"host":    ref.Host,
-				"service": ref.Service,
-				"status":  "error",
-				"error":   "rate limit: " + err.Error(),
-			})
-			continue
+		if h.Limiter != nil {
+			if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
+				results = append(results, map[string]any{
+					"host":    ref.Host,
+					"service": ref.Service,
+					"status":  "error",
+					"error":   "rate limit: " + err.Error(),
+				})
+				continue
+			}
 		}
 
 		if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
-			h.Limiter.ReleaseMutate()
+			if h.Limiter != nil {
+				h.Limiter.ReleaseMutate()
+			}
 			slog.Error("Admin: bulk delete failed", "host", ref.Host, "service", ref.Service, "error", err)
 			results = append(results, map[string]any{
 				"host":    ref.Host,
@@ -188,7 +205,9 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 			})
 			continue
 		}
-		h.Limiter.ReleaseMutate()
+		if h.Limiter != nil {
+			h.Limiter.ReleaseMutate()
+		}
 		h.Cache.Remove(ref.Host, ref.Service)
 		results = append(results, map[string]any{
 			"host":    ref.Host,
@@ -208,6 +227,11 @@ func (h *AdminHandler) HandleRateLimitStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+
+	if h.Limiter == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "rate limiter not configured"})
 		return
 	}
 
@@ -270,4 +294,59 @@ func firstHostName(hosts []string) string {
 		return hosts[0]
 	}
 	return "ALL TARGETS"
+}
+
+// HandleClearHistory clears the history file.
+// POST /admin/history/clear
+func (h *AdminHandler) HandleClearHistory(w http.ResponseWriter, r *http.Request) {
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if h.History == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "history not configured"})
+		return
+	}
+	if err := h.History.Clear(); err != nil {
+		slog.Error("Failed to clear history", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "history cleared"})
+}
+
+// HandleDebugToggle enables/disables the API debug ring buffer.
+// POST /admin/debug/toggle  body: {"enabled": true|false}
+func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request) {
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.DebugRing == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "debug ring not configured"})
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]bool{"enabled": h.DebugRing.Enabled()})
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	h.DebugRing.SetEnabled(body.Enabled)
+	slog.Info("Debug ring toggled", "enabled", body.Enabled)
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": body.Enabled})
 }

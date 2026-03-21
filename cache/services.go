@@ -193,9 +193,17 @@ func (c *ServiceCache) EvictExpired() int {
 	return evicted
 }
 
-// Len returns the number of entries currently in the cache (including expired).
+// Len returns the number of non-expired entries currently in the cache.
 func (c *ServiceCache) Len() int {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return len(c.entries)
+
+	now := time.Now()
+	count := 0
+	for _, e := range c.entries {
+		if now.Sub(e.CreatedAt) <= c.ttl {
+			count++
+		}
+	}
+	return count
 }

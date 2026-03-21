@@ -2,7 +2,8 @@
 
 Back to the [Documentation Index](../README.md)
 
-> Note: these measurements were captured before the multi host refactor, when the lab used one shared target host named `test-host`. The current `testenv` uses multiple dynamic hosts (`a-dummy-dev`, `b-dummy-device`), host aware cache keys, and host scoped routing. The load test script now targets `b-dummy-device` unless overridden, so treat the numbers below as a historical baseline rather than a benchmark for the current setup.
+<!-- LANG: hyphenation -->
+> Note: these measurements were captured before the multi-host refactor, when the lab used one shared target host named `test-host`. The current `testenv` uses multiple dynamic hosts (`a-dummy-dev`, `b-dummy-device`), host-aware cache keys, and host-scoped routing. The load test script now targets `b-dummy-device` unless overridden, so treat the numbers below as a historical baseline rather than a benchmark for the current setup.
 
 **Date:** 2026-03-20
 
@@ -89,4 +90,5 @@ The test levelled off around `3.3 alerts/s`. That was expected because the rate 
 
 ## Conclusion
 
-These numbers are useful as a historical baseline for the older single host lab. They should not be read as a benchmark for the current multi host setup.
+<!-- LANG: hyphenation -->
+These numbers are useful as a historical baseline for the older single-host lab. They should not be read as a benchmark for the current multi-host setup.

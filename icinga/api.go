@@ -19,6 +19,7 @@ type APIClient struct {
 	User       string
 	Pass       string
 	HTTPClient *http.Client
+	Debug      *DebugRing // optional: captures request/response pairs for dev panel
 }
 
 const (
@@ -63,6 +64,27 @@ func NewAPIClient(baseURL, user, pass string, tlsSkipVerify bool) *APIClient {
 	}
 }
 
+// recordDebug stores an API interaction in the debug ring buffer if present.
+func (c *APIClient) recordDebug(method, url string, reqBody []byte, statusCode int, respBody []byte, dur time.Duration, reqErr error) {
+	if c.Debug == nil {
+		return
+	}
+	entry := DebugEntry{
+		Timestamp:    time.Now(),
+		Direction:    "outbound",
+		Method:       method,
+		URL:          url,
+		RequestBody:  string(reqBody),
+		StatusCode:   statusCode,
+		ResponseBody: string(respBody),
+		DurationMs:   dur.Milliseconds(),
+	}
+	if reqErr != nil {
+		entry.Error = reqErr.Error()
+	}
+	c.Debug.Push(entry)
+}
+
 // processCheckResultPayload is the JSON body sent to the Icinga2 process-check-result endpoint.
 type processCheckResultPayload struct {
 	Type         string `json:"type"`
@@ -96,14 +118,18 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(req.Method, reqURL, body, 0, nil, time.Since(start), err)
 		return fmt.Errorf("icinga api: send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(req.Method, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("icinga api: unexpected status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -161,17 +187,21 @@ func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
 	req.SetBasicAuth(c.User, c.Pass)
 	req.Header.Set("Accept", "application/json")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodGet, reqURL, nil, 0, nil, time.Since(start), err)
 		return HostInfo{}, fmt.Errorf("icinga api: send request: %w", err)
 	}
 	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodGet, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode == http.StatusNotFound {
 		return HostInfo{Exists: false}, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return HostInfo{}, fmt.Errorf("icinga api: check host %q: status %d: %s", host, resp.StatusCode, string(respBody))
 	}
 
@@ -186,7 +216,7 @@ func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
 		} `json:"results"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return HostInfo{}, fmt.Errorf("icinga api: decode host response: %w", err)
 	}
 
@@ -287,14 +317,18 @@ func (c *APIClient) CreateHost(spec HostSpec) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodPut, reqURL, body, 0, nil, time.Since(start), err)
 		return fmt.Errorf("icinga api: send create host request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodPut, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("icinga api: create host %q: status %d: %s", spec.Name, resp.StatusCode, string(respBody))
 	}
 
@@ -331,14 +365,18 @@ func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-HTTP-Method-Override", "GET")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodPost, reqURL, body, 0, nil, time.Since(start), err)
 		return nil, fmt.Errorf("icinga api: send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodPost, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("icinga api: list services: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -360,7 +398,7 @@ func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
 		} `json:"results"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("icinga api: decode response: %w", err)
 	}
 
@@ -499,14 +537,18 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodPut, reqURL, body, 0, nil, time.Since(start), err)
 		return fmt.Errorf("icinga api: send create request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodPut, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("icinga api: create service %q: status %d: %s", name, resp.StatusCode, string(respBody))
 	}
 
@@ -525,14 +567,18 @@ func (c *APIClient) DeleteService(host, name string) error {
 	req.SetBasicAuth(c.User, c.Pass)
 	req.Header.Set("Accept", "application/json")
 
+	start := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodDelete, reqURL, nil, 0, nil, time.Since(start), err)
 		return fmt.Errorf("icinga api: send delete request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodDelete, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("icinga api: delete service %q: status %d: %s", name, resp.StatusCode, string(respBody))
 	}
 
@@ -561,14 +607,18 @@ func (c *APIClient) GetServiceStatus(host, service string) (exitStatus int, outp
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-HTTP-Method-Override", "GET")
 
+	startT := time.Now()
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
+		c.recordDebug(http.MethodPost, reqURL, body, 0, nil, time.Since(startT), err)
 		return 0, "", time.Time{}, fmt.Errorf("icinga api: send request: %w", err)
 	}
 	defer resp.Body.Close()
 
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodPost, reqURL, body, resp.StatusCode, respBody, time.Since(startT), nil)
+
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
 		return 0, "", time.Time{}, fmt.Errorf("icinga api: status %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -585,7 +635,7 @@ func (c *APIClient) GetServiceStatus(host, service string) (exitStatus int, outp
 		} `json:"results"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(respBody, &result); err != nil {
 		return 0, "", time.Time{}, fmt.Errorf("icinga api: decode response: %w", err)
 	}
 

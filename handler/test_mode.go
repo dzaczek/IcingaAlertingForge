@@ -10,15 +10,15 @@ import (
 )
 
 // handleTestMode processes test mode alerts (create/delete dummy services).
-func (h *WebhookHandler) handleTestMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) handleTestMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert, remoteAddr string) map[string]any {
 	serviceName := alert.AlertName()
 	action := alert.TestAction()
 
 	switch action {
 	case "create":
-		return h.handleTestCreate(requestID, source, target, serviceName, alert)
+		return h.handleTestCreate(requestID, source, target, serviceName, alert, remoteAddr)
 	case "delete":
-		return h.handleTestDelete(requestID, source, target, serviceName, alert)
+		return h.handleTestDelete(requestID, source, target, serviceName, alert, remoteAddr)
 	default:
 		slog.Warn("Unknown test action", "action", action, "service", serviceName)
 		return map[string]any{
@@ -31,14 +31,14 @@ func (h *WebhookHandler) handleTestMode(requestID, source string, target config.
 }
 
 // handleTestCreate creates a dummy passive service in Icinga2 via the REST API.
-func (h *WebhookHandler) handleTestCreate(requestID, source string, target config.TargetConfig, serviceName string, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) handleTestCreate(requestID, source string, target config.TargetConfig, serviceName string, alert models.GrafanaAlert, remoteAddr string) map[string]any {
 	// Check cache — avoid duplicate creation
 	if h.Cache.Exists(target.HostName, serviceName) {
 		slog.Info("Service already exists in cache, skipping creation",
 			"host", target.HostName, "service", serviceName, "request_id", requestID)
 
 		h.logHistory(requestID, source, target.HostName, "test", "create", serviceName, "", 0,
-			"Service already exists (cached)", true, 0, "")
+			"Service already exists (cached)", true, 0, "", remoteAddr)
 
 		return map[string]any{
 			"status":  "already_exists",
@@ -74,7 +74,7 @@ func (h *WebhookHandler) handleTestCreate(requestID, source string, target confi
 			"host", target.HostName, "service", serviceName, "error", err, "request_id", requestID)
 
 		h.logHistory(requestID, source, target.HostName, "test", "create", serviceName, "", 0,
-			"Failed: "+err.Error(), false, time.Since(start).Milliseconds(), err.Error())
+			"Failed: "+err.Error(), false, time.Since(start).Milliseconds(), err.Error(), remoteAddr)
 
 		return map[string]any{
 			"error":   err.Error(),
@@ -92,7 +92,11 @@ func (h *WebhookHandler) handleTestCreate(requestID, source string, target confi
 		"host", target.HostName, "service", serviceName, "request_id", requestID, "duration_ms", durationMs)
 
 	h.logHistory(requestID, source, target.HostName, "test", "create", serviceName, "", 0,
-		"Service created", true, durationMs, "")
+		"Service created", true, durationMs, "", remoteAddr)
+
+	if h.SSE != nil {
+		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr})
+	}
 
 	return map[string]any{
 		"status":  "created",
@@ -102,7 +106,7 @@ func (h *WebhookHandler) handleTestCreate(requestID, source string, target confi
 }
 
 // handleTestDelete removes a service from Icinga2 via the REST API.
-func (h *WebhookHandler) handleTestDelete(requestID, source string, target config.TargetConfig, serviceName string, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) handleTestDelete(requestID, source string, target config.TargetConfig, serviceName string, alert models.GrafanaAlert, remoteAddr string) map[string]any {
 	// Rate limit: acquire mutation slot
 	if h.Limiter != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -126,7 +130,7 @@ func (h *WebhookHandler) handleTestDelete(requestID, source string, target confi
 			"host", target.HostName, "service", serviceName, "error", err, "request_id", requestID)
 
 		h.logHistory(requestID, source, target.HostName, "test", "delete", serviceName, "", 0,
-			"Failed: "+err.Error(), false, time.Since(start).Milliseconds(), err.Error())
+			"Failed: "+err.Error(), false, time.Since(start).Milliseconds(), err.Error(), remoteAddr)
 
 		return map[string]any{
 			"error":   err.Error(),
@@ -143,7 +147,11 @@ func (h *WebhookHandler) handleTestDelete(requestID, source string, target confi
 		"host", target.HostName, "service", serviceName, "request_id", requestID, "duration_ms", durationMs)
 
 	h.logHistory(requestID, source, target.HostName, "test", "delete", serviceName, "", 0,
-		"Service deleted", true, durationMs, "")
+		"Service deleted", true, durationMs, "", remoteAddr)
+
+	if h.SSE != nil {
+		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr})
+	}
 
 	return map[string]any{
 		"status":  "deleted",

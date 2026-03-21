@@ -32,7 +32,8 @@ If you are new to the project, this order usually works best:
   What the service does, how the pieces fit together, what it needs, and how to run it.
 
 - [Configuration](guides/configuration.md)
-  Environment variables, the multi host routing model, naming rules, migration from the old single host setup, and what the bridge writes into Icinga.
+<!-- LANG: hyphenation -->
+  Environment variables, the multi-host routing model, naming rules, migration from the old single-host setup, and what the bridge writes into Icinga.
 
 - [Usage and API](guides/usage-and-api.md)
   Work mode, test mode, Grafana contact points, request authentication, and the HTTP endpoints.
@@ -40,8 +41,10 @@ If you are new to the project, this order usually works best:
 - [Icinga Integration](guides/icinga-integration.md)
   Dynamic host creation, service creation, notification variables, cache behaviour, history, and ghost cleanup.
 
+<!-- LANG: expanded Beauty Panel description -->
 - [Beauty Panel](guides/beauty-panel.md)
-  Public and admin views, multi host behaviour, and panel navigation.
+<!-- LANG: hyphenation -->
+  Public and admin views, dev panel, real-time SSE updates, multi-host behaviour, and panel navigation.
 
 - [Test Environment](guides/test-environment.md)
   The bundled lab stack, endpoints, synthetic alerts, notification rules, resets, cleanup, and screenshots.

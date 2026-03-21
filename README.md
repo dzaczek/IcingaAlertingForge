@@ -32,6 +32,7 @@ The full documentation now lives in [docs/README.md](docs/README.md).
 Start here:
 
 - [Documentation Index](docs/README.md)
+- [Fast Track Deployment](docs/guides/fast-track-deployment.md)
 - [Architecture and Setup](docs/guides/architecture-and-setup.md)
 - [Configuration](docs/guides/configuration.md)
 - [Usage and API](docs/guides/usage-and-api.md)

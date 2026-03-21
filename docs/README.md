@@ -6,13 +6,17 @@ This folder holds the full documentation for IcingaAlertForge. The top level [RE
 
 If you are new to the project, this order usually works best:
 
-1. [Architecture and Setup](guides/architecture-and-setup.md)
-2. [Configuration](guides/configuration.md)
-3. [Usage and API](guides/usage-and-api.md)
-4. [Icinga Integration](guides/icinga-integration.md)
-5. [Test Environment](guides/test-environment.md)
+1. [Fast Track Deployment](guides/fast-track-deployment.md)
+2. [Architecture and Setup](guides/architecture-and-setup.md)
+3. [Configuration](guides/configuration.md)
+4. [Usage and API](guides/usage-and-api.md)
+5. [Icinga Integration](guides/icinga-integration.md)
+6. [Test Environment](guides/test-environment.md)
 
 ## Guides
+
+- [Fast Track Deployment](guides/fast-track-deployment.md)
+  The shortest path to a working deployment with a minimal `.env`, Docker run command, smoke test, and first Grafana contact point.
 
 - [Architecture and Setup](guides/architecture-and-setup.md)
   What the service does, how the pieces fit together, what it needs, and how to run it.

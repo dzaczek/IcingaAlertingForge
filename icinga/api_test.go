@@ -117,6 +117,27 @@ func TestCreateService_Success(t *testing.T) {
 
 		// Verify vars contain labels and annotations
 		vars, _ := attrs["vars"].(map[string]any)
+		if vars["managed_by"] != ManagedByIAF {
+			t.Errorf("expected managed_by=%s, got %v", ManagedByIAF, vars["managed_by"])
+		}
+		if vars["iaf_managed"] != true {
+			t.Errorf("expected iaf_managed=true, got %v", vars["iaf_managed"])
+		}
+		if vars["iaf_component"] != ManagedByIAF {
+			t.Errorf("expected iaf_component=%s, got %v", ManagedByIAF, vars["iaf_component"])
+		}
+		if vars["iaf_host"] != "test-host" {
+			t.Errorf("expected iaf_host=test-host, got %v", vars["iaf_host"])
+		}
+		if vars["iaf_created_at"] == "" {
+			t.Error("expected iaf_created_at to be set")
+		}
+		if vars["bridge_host"] != "test-host" {
+			t.Errorf("expected bridge_host=test-host, got %v", vars["bridge_host"])
+		}
+		if vars["bridge_created_at"] == "" {
+			t.Error("expected bridge_created_at to be set")
+		}
 		if vars["grafana_label_severity"] != "critical" {
 			t.Errorf("expected grafana_label_severity=critical, got %v", vars["grafana_label_severity"])
 		}
@@ -170,6 +191,106 @@ func TestCreateService_Error(t *testing.T) {
 	}
 }
 
+func TestListServices_ParsesManagedMetadata(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Errorf("expected POST, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"results": [{
+				"attrs": {
+					"name": "Synthetic Device 01",
+					"display_name": "Synthetic Device 01 - CRITICAL",
+					"state": 2,
+					"notes": "Managed by IcingaAlertingForge",
+					"vars": {
+						"managed_by": "IcingaAlertingForge",
+						"iaf_created_at": "2026-03-20T19:40:00Z"
+					},
+					"last_check_result": {
+						"state": 2,
+						"output": "CRITICAL",
+						"execution_end": 1700000000
+					}
+				}
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		BaseURL:    server.URL,
+		User:       "test",
+		Pass:       "test",
+		HTTPClient: server.Client(),
+	}
+
+	services, err := client.ListServices("test-host")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	if services[0].HostName != "test-host" {
+		t.Fatalf("expected host test-host, got %q", services[0].HostName)
+	}
+	if services[0].ManagedBy != ManagedByIAF {
+		t.Fatalf("expected managed_by %s, got %q", ManagedByIAF, services[0].ManagedBy)
+	}
+	if services[0].BridgeCreatedAt != "2026-03-20T19:40:00Z" {
+		t.Fatalf("unexpected bridge_created_at: %q", services[0].BridgeCreatedAt)
+	}
+	if !services[0].IsManagedByUs() {
+		t.Fatal("expected service to be recognized as managed by us")
+	}
+	if services[0].IsLegacyManagedByUs() {
+		t.Fatal("expected service to use the new managed_by marker")
+	}
+}
+
+func TestListServices_ParsesLegacyCreatedAtFallback(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"results": [{
+				"attrs": {
+					"name": "Legacy Service",
+					"display_name": "Legacy Service",
+					"notes": "Managed by webhook-bridge",
+					"vars": {
+						"managed_by": "webhook-bridge",
+						"bridge_created_at": "2026-03-19T10:00:00Z"
+					}
+				}
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		BaseURL:    server.URL,
+		User:       "test",
+		Pass:       "test",
+		HTTPClient: server.Client(),
+	}
+
+	services, err := client.ListServices("test-host")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	if services[0].BridgeCreatedAt != "2026-03-19T10:00:00Z" {
+		t.Fatalf("unexpected legacy bridge_created_at: %q", services[0].BridgeCreatedAt)
+	}
+	if !services[0].IsLegacyManagedByUs() {
+		t.Fatal("expected service to be recognized as legacy-managed")
+	}
+}
+
 func TestDeleteService_Success(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
@@ -220,6 +341,59 @@ func TestDeleteService_Error(t *testing.T) {
 	}
 }
 
+func TestGetServiceStatus_UsesPostFilterAndReturnsState(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			t.Fatalf("expected POST, got %s", r.Method)
+		}
+		if r.Header.Get("X-HTTP-Method-Override") != "GET" {
+			t.Fatalf("expected X-HTTP-Method-Override=GET, got %q", r.Header.Get("X-HTTP-Method-Override"))
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("failed to decode payload: %v", err)
+		}
+		if payload["filter"] != `host.name=="b-dummy-device" && service.name=="Team B Manual Check"` {
+			t.Fatalf("unexpected filter: %v", payload["filter"])
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{
+			"results": [{
+				"attrs": {
+					"state": 2,
+					"last_check_result": {
+						"state": 2,
+						"output": "CRITICAL: Manual Team B routing test",
+						"execution_end": 1700000000
+					}
+				}
+			}]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		BaseURL:    server.URL,
+		User:       "test",
+		Pass:       "test",
+		HTTPClient: server.Client(),
+	}
+
+	exitStatus, output, checkTime, err := client.GetServiceStatus("b-dummy-device", "Team B Manual Check")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exitStatus != 2 {
+		t.Fatalf("expected exit status 2, got %d", exitStatus)
+	}
+	if output != "CRITICAL: Manual Team B routing test" {
+		t.Fatalf("unexpected output: %q", output)
+	}
+	if checkTime.IsZero() {
+		t.Fatal("expected non-zero checkTime")
+	}
+}
+
 func TestGetHostInfo_ExistsManagedByUs(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/objects/hosts/test-host" {
@@ -228,9 +402,9 @@ func TestGetHostInfo_ExistsManagedByUs(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"results":[{"attrs":{
 			"check_command":"dummy",
-			"display_name":"Test Host (webhook-bridge)",
+			"display_name":"Test Host",
 			"address":"127.0.0.1",
-			"vars":{"managed_by":"webhook-bridge","os":"Linux"}
+			"vars":{"managed_by":"IcingaAlertingForge","iaf_managed":true,"os":"Linux"}
 		}}]}`))
 	}))
 	defer server.Close()
@@ -253,7 +427,41 @@ func TestGetHostInfo_ExistsManagedByUs(t *testing.T) {
 		t.Errorf("expected dummy, got check_command=%q", info.CheckCommand)
 	}
 	if !info.IsManagedByUs() {
-		t.Errorf("expected managed_by=webhook-bridge, got %q", info.ManagedBy)
+		t.Errorf("expected managed_by=%s, got %q", ManagedByIAF, info.ManagedBy)
+	}
+	if info.IsLegacyManagedByUs() {
+		t.Error("expected host to use the new managed_by marker")
+	}
+}
+
+func TestGetHostInfo_ExistsManagedByLegacyMarker(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"attrs":{
+			"check_command":"dummy",
+			"display_name":"Test Host (webhook-bridge)",
+			"address":"127.0.0.1",
+			"vars":{"managed_by":"webhook-bridge","os":"Linux"}
+		}}]}`))
+	}))
+	defer server.Close()
+
+	client := &APIClient{
+		BaseURL:    server.URL,
+		User:       "test",
+		Pass:       "test",
+		HTTPClient: server.Client(),
+	}
+
+	info, err := client.GetHostInfo("test-host")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !info.IsManagedByUs() {
+		t.Fatal("expected legacy host to still be recognized as managed by us")
+	}
+	if !info.IsLegacyManagedByUs() {
+		t.Fatal("expected legacy host marker to be detected")
 	}
 }
 
@@ -330,9 +538,45 @@ func TestCreateHost_Success(t *testing.T) {
 		if attrs["check_command"] != "dummy" {
 			t.Errorf("expected check_command dummy, got %v", attrs["check_command"])
 		}
+		if _, ok := attrs["address"]; ok {
+			t.Errorf("expected passive dummy host without address attr, got %v", attrs["address"])
+		}
+		if attrs["max_check_attempts"] != float64(1) && attrs["max_check_attempts"] != 1 {
+			t.Errorf("expected max_check_attempts=1, got %v", attrs["max_check_attempts"])
+		}
 		vars := attrs["vars"].(map[string]any)
-		if vars["managed_by"] != "webhook-bridge" {
-			t.Errorf("expected managed_by webhook-bridge, got %v", vars["managed_by"])
+		if vars["managed_by"] != ManagedByIAF {
+			t.Errorf("expected managed_by %s, got %v", ManagedByIAF, vars["managed_by"])
+		}
+		if vars["iaf_managed"] != true {
+			t.Errorf("expected iaf_managed=true, got %v", vars["iaf_managed"])
+		}
+		if vars["iaf_created_at"] == "" {
+			t.Error("expected iaf_created_at to be set")
+		}
+		if vars["iaf_host_address"] != "127.0.0.1" {
+			t.Errorf("expected iaf_host_address=127.0.0.1, got %v", vars["iaf_host_address"])
+		}
+		notification := vars["notification"].(map[string]any)
+		users := notification["users"].([]any)
+		if len(users) != 2 || users[0] != "alpha" || users[1] != "omega" {
+			t.Errorf("unexpected notification users: %#v", users)
+		}
+		groups := notification["groups"].([]any)
+		if len(groups) != 1 || groups[0] != "sre-oncall" {
+			t.Errorf("unexpected notification groups: %#v", groups)
+		}
+		userGroups := notification["user_groups"].([]any)
+		if len(userGroups) != 1 || userGroups[0] != "sre-oncall" {
+			t.Errorf("unexpected notification user_groups: %#v", userGroups)
+		}
+		serviceStates := notification["service_states"].([]any)
+		if len(serviceStates) != 1 || serviceStates[0] != "critical" {
+			t.Errorf("unexpected notification service_states: %#v", serviceStates)
+		}
+		sms := notification["sms"].(map[string]any)
+		if sms["users"].([]any)[0] != "alpha" {
+			t.Errorf("expected sms alias to mirror users, got %#v", sms["users"])
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -347,7 +591,16 @@ func TestCreateHost_Success(t *testing.T) {
 		HTTPClient: server.Client(),
 	}
 
-	err := client.CreateHost("new-host", "New Host (test)", "127.0.0.1")
+	err := client.CreateHost(HostSpec{
+		Name:        "new-host",
+		DisplayName: "New Host (test)",
+		Address:     "127.0.0.1",
+		Notification: HostNotificationConfig{
+			Users:         []string{"alpha", "omega"},
+			Groups:        []string{"sre-oncall"},
+			ServiceStates: []string{"critical"},
+		},
+	})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -367,7 +620,7 @@ func TestCreateHost_Error(t *testing.T) {
 		HTTPClient: server.Client(),
 	}
 
-	err := client.CreateHost("bad-host", "", "")
+	err := client.CreateHost(HostSpec{Name: "bad-host"})
 	if err == nil {
 		t.Error("expected error for 500 response")
 	}

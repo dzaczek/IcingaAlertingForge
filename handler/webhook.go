@@ -11,6 +11,7 @@ import (
 
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
@@ -21,14 +22,13 @@ import (
 // It authenticates the request, parses the payload, and routes to the
 // appropriate mode handler (test or work).
 type WebhookHandler struct {
-	KeyStore    *auth.KeyStore
-	Cache       *cache.ServiceCache
-	API         *icinga.APIClient
-	History     *history.Logger
-	HostName    string
-	Limiter     *icinga.RateLimiter
-	Metrics     *metrics.Collector
-	HostExists  bool // set during startup after host validation
+	KeyStore *auth.KeyStore
+	Cache    *cache.ServiceCache
+	API      *icinga.APIClient
+	History  *history.Logger
+	Targets  map[string]config.TargetConfig
+	Limiter  *icinga.RateLimiter
+	Metrics  *metrics.Collector
 }
 
 // ServeHTTP handles POST /webhook requests from Grafana.
@@ -52,13 +52,22 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	source, ok := h.KeyStore.ValidateKey(apiKey)
+	route, ok := h.KeyStore.ValidateKey(apiKey)
 	if !ok {
 		slog.Warn("Unauthorized webhook request", "remote_addr", r.RemoteAddr)
 		if h.Metrics != nil {
 			h.Metrics.RecordAuthFailure(r.RemoteAddr, apiKey)
 		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	target, ok := h.Targets[route.TargetID]
+	if !ok {
+		slog.Error("Webhook route points to unknown target",
+			"target_id", route.TargetID,
+			"remote_addr", r.RemoteAddr)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "webhook route misconfigured"})
 		return
 	}
 
@@ -69,7 +78,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var payload models.GrafanaPayload
 	dec := json.NewDecoder(r.Body)
 	if err := dec.Decode(&payload); err != nil {
-		slog.Error("Failed to decode webhook payload", "error", err, "source", source)
+		slog.Error("Failed to decode webhook payload", "error", err, "source", route.Source, "host", target.HostName)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
 		return
 	}
@@ -82,7 +91,9 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestID := uuid.New().String()
 	slog.Info("Webhook received",
 		"request_id", requestID,
-		"source", source,
+		"source", route.Source,
+		"target_id", target.ID,
+		"host", target.HostName,
 		"status", payload.Status,
 		"alert_count", len(payload.Alerts),
 	)
@@ -93,9 +104,9 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	hasErrors := false
 	for _, alert := range payload.Alerts {
 		start := time.Now()
-		result := h.processAlert(requestID, source, alert)
+		result := h.processAlert(requestID, route.Source, target, alert)
 		result["duration_ms"] = time.Since(start).Milliseconds()
-		if result["status"] == "error" {
+		if resultHasError(result) {
 			hasErrors = true
 		}
 		results = append(results, result)
@@ -110,16 +121,34 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	statusCode := http.StatusOK
+	if hasErrors {
+		statusCode = http.StatusBadGateway
+	}
 
 	writeJSON(w, statusCode, map[string]any{
 		"request_id": requestID,
-		"source":     source,
+		"source":     route.Source,
+		"target_id":  target.ID,
+		"host":       target.HostName,
 		"results":    results,
 	})
 }
 
+func resultHasError(result map[string]any) bool {
+	if status, ok := result["status"].(string); ok && status == "error" {
+		return true
+	}
+	if icingaOK, ok := result["icinga_ok"].(bool); ok && !icingaOK {
+		return true
+	}
+	if errMsg, ok := result["error"].(string); ok && errMsg != "" {
+		return true
+	}
+	return false
+}
+
 // processAlert routes a single alert to the appropriate handler based on mode.
-func (h *WebhookHandler) processAlert(requestID, source string, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) processAlert(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert) map[string]any {
 	if alert.AlertName() == "" {
 		return map[string]any{
 			"error":  "missing alertname label",
@@ -128,9 +157,9 @@ func (h *WebhookHandler) processAlert(requestID, source string, alert models.Gra
 	}
 
 	if alert.IsTestMode() {
-		return h.handleTestMode(requestID, source, alert)
+		return h.handleTestMode(requestID, source, target, alert)
 	}
-	return h.handleWorkMode(requestID, source, alert)
+	return h.handleWorkMode(requestID, source, target, alert)
 }
 
 // writeJSON writes a JSON response with the given status code.

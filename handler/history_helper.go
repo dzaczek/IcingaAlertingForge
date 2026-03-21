@@ -9,13 +9,14 @@ import (
 
 // logHistory is a convenience method to record a webhook event in the history.
 func (h *WebhookHandler) logHistory(
-	requestID, source, mode, action, serviceName, severity string,
-	exitStatus int, message string, icingaOK bool, durationMs int64,
+	requestID, source, hostName, mode, action, serviceName, severity string,
+	exitStatus int, message string, icingaOK bool, durationMs int64, errorMsg string,
 ) {
 	entry := models.HistoryEntry{
 		Timestamp:   time.Now().UTC(),
 		RequestID:   requestID,
 		SourceKey:   source,
+		HostName:    hostName,
 		Mode:        mode,
 		Action:      action,
 		ServiceName: serviceName,
@@ -26,7 +27,9 @@ func (h *WebhookHandler) logHistory(
 		DurationMs:  durationMs,
 	}
 
-	if !icingaOK {
+	if errorMsg != "" {
+		entry.Error = errorMsg
+	} else if !icingaOK {
 		entry.Error = message
 	}
 

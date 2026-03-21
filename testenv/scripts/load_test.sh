@@ -13,7 +13,7 @@ API_KEY="${API_KEY:-test-key-script-dev}"
 ICINGA2_URL="${ICINGA2_URL:-https://localhost:5665}"
 ICINGA2_USER="${ICINGA2_USER:-apiuser}"
 ICINGA2_PASS="${ICINGA2_PASS:-apipassword}"
-ICINGA2_HOST="${ICINGA2_HOST_NAME:-test-host}"
+ICINGA2_HOST="${ICINGA2_HOST_NAME:-${IAF_TARGET_TEAM_B_HOST_NAME:-b-dummy-device}}"
 CONCURRENCY="${CONCURRENCY:-10}"
 RESULTS_DIR="${RESULTS_DIR:-/tmp/loadtest_results}"
 

@@ -11,6 +11,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy custom configuration into the init directory
 COPY conf.d/api-users.conf /data-init/etc/icinga2/conf.d/api-users.conf
 COPY conf.d/hosts.conf /data-init/etc/icinga2/conf.d/hosts.conf
+COPY conf.d/users.conf /data-init/etc/icinga2/conf.d/users.conf
+COPY conf.d/notifications.conf /data-init/etc/icinga2/conf.d/notifications.conf
 COPY conf.d/ido-mysql.conf /data-init/etc/icinga2/features-available/ido-mysql.conf
 
 # Enable API feature

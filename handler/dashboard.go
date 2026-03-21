@@ -5,9 +5,11 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
@@ -21,7 +23,7 @@ type DashboardHandler struct {
 	History   *history.Logger
 	API       *icinga.APIClient
 	Metrics   *metrics.Collector
-	HostName  string
+	Targets   map[string]config.TargetConfig
 	AdminUser string
 	AdminPass string
 	StartedAt time.Time
@@ -32,12 +34,12 @@ type dashboardData struct {
 	GeneratedAt    string
 	Uptime         string
 	Stats          history.HistoryStats
-	CachedServices map[string]cache.ServiceState
+	CachedServices []cache.CacheEntry
 	RecentAlerts   []dashboardAlert
 	RecentErrors   []dashboardAlert
 	IsAdmin        bool
 	IcingaServices []icinga.ServiceInfo
-	HostName       string
+	HostLabel      string
 	SysStats       metrics.SystemStats
 }
 
@@ -45,6 +47,7 @@ type dashboardAlert struct {
 	Timestamp   string
 	RequestID   string
 	Source      string
+	HostName    string
 	Mode        string
 	Action      string
 	ServiceName string
@@ -81,6 +84,7 @@ func toDashboardAlert(e models.HistoryEntry) dashboardAlert {
 		Timestamp:   e.Timestamp.Format("2006-01-02 15:04:05 UTC"),
 		RequestID:   e.RequestID,
 		Source:      e.SourceKey,
+		HostName:    e.HostName,
 		Mode:        e.Mode,
 		Action:      e.Action,
 		ServiceName: e.ServiceName,
@@ -145,12 +149,20 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If admin, fetch live services from Icinga2
 	var icingaServices []icinga.ServiceInfo
 	if isAdmin {
-		svcs, err := h.API.ListServices(h.HostName)
-		if err != nil {
-			slog.Error("Dashboard: failed to list Icinga2 services", "error", err)
-		} else {
-			icingaServices = svcs
+		for _, target := range sortedTargets(h.Targets) {
+			svcs, err := h.API.ListServices(target.HostName)
+			if err != nil {
+				slog.Error("Dashboard: failed to list Icinga2 services", "host", target.HostName, "error", err)
+				continue
+			}
+			icingaServices = append(icingaServices, svcs...)
 		}
+		sort.Slice(icingaServices, func(i, j int) bool {
+			if icingaServices[i].HostName == icingaServices[j].HostName {
+				return icingaServices[i].Name < icingaServices[j].Name
+			}
+			return icingaServices[i].HostName < icingaServices[j].HostName
+		})
 	}
 
 	var sysStats metrics.SystemStats
@@ -162,12 +174,12 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
 		Stats:          stats,
-		CachedServices: h.Cache.All(),
+		CachedServices: h.Cache.AllEntries(),
 		RecentAlerts:   recentAlerts,
 		RecentErrors:   recentErrors,
 		IsAdmin:        isAdmin,
 		IcingaServices: icingaServices,
-		HostName:       h.HostName,
+		HostLabel:      firstHostName(targetHostNames(h.Targets)),
 		SysStats:       sysStats,
 	}
 
@@ -713,15 +725,15 @@ const dashboardHTML = `<!DOCTYPE html>
 
   <!-- ══════ LEFT SIDEBAR ══════ -->
   <div class="lcars-sidebar">
-    <button class="sidebar-btn active" onclick="showSection('overview')">Overview</button>
-    <button class="sidebar-btn tan" onclick="showSection('alerts')">Alerts</button>
-    <button class="sidebar-btn purple" onclick="showSection('errors')">Errors</button>
-    <button class="sidebar-btn blue" onclick="showSection('services')">Services</button>
+    <button class="sidebar-btn active" data-section="overview" onclick="showSection('overview', this, true)">Overview</button>
+    <button class="sidebar-btn tan" data-section="alerts" onclick="showSection('alerts', this, true)">Alerts</button>
+    <button class="sidebar-btn purple" data-section="errors" onclick="showSection('errors', this, true)">Errors</button>
+    <button class="sidebar-btn blue" data-section="services" onclick="showSection('services', this, true)">Services</button>
     {{if .IsAdmin}}
     <div class="sidebar-decoration"></div>
-    <button class="sidebar-btn gold" onclick="showSection('system')">System</button>
-    <button class="sidebar-btn peach" onclick="showSection('security')">Security</button>
-    <button class="sidebar-btn" onclick="showSection('icinga')">Icinga Mgmt</button>
+    <button class="sidebar-btn gold" data-section="system" onclick="showSection('system', this, true)">System</button>
+    <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security</button>
+    <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt</button>
     {{end}}
     <div class="sidebar-decoration purple"></div>
     <div class="sidebar-spacer"></div>
@@ -846,10 +858,11 @@ const dashboardHTML = `<!DOCTYPE html>
                 <th onclick="sortTable(1,'string',this.closest('table'))">Status <span class="sort-arrow"></span></th>
                 <th onclick="sortTable(2,'string',this.closest('table'))">Mode <span class="sort-arrow"></span></th>
                 <th onclick="sortTable(3,'string',this.closest('table'))">Action <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(4,'string',this.closest('table'))">Service <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(5,'string',this.closest('table'))">Source <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(4,'string',this.closest('table'))">Host <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(5,'string',this.closest('table'))">Service <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(6,'string',this.closest('table'))">Source <span class="sort-arrow"></span></th>
                 <th>Icinga</th>
-                <th onclick="sortTable(7,'number',this.closest('table'))">Duration <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(8,'number',this.closest('table'))">Duration <span class="sort-arrow"></span></th>
               </tr>
             </thead>
             <tbody>
@@ -859,6 +872,7 @@ const dashboardHTML = `<!DOCTYPE html>
                 <td><span class="badge {{.StatusClass}}">{{.StatusLabel}}</span></td>
                 <td>{{.Mode}}</td>
                 <td>{{.Action}}</td>
+                <td class="mono">{{if .HostName}}{{.HostName}}{{else}}-{{end}}</td>
                 <td><strong>{{.ServiceName}}</strong></td>
                 <td class="mono">{{.Source}}</td>
                 <td>{{if .IcingaOK}}<span class="icinga-ok">OK</span>{{else}}<span class="icinga-fail">FAIL</span>{{end}}</td>
@@ -890,6 +904,7 @@ const dashboardHTML = `<!DOCTYPE html>
             <thead>
               <tr>
                 <th>Stardate</th>
+                <th>Host</th>
                 <th>Service</th>
                 <th>Action</th>
                 <th>Source</th>
@@ -901,6 +916,7 @@ const dashboardHTML = `<!DOCTYPE html>
               {{range .RecentErrors}}
               <tr>
                 <td class="mono">{{.Timestamp}}</td>
+                <td class="mono">{{if .HostName}}{{.HostName}}{{else}}-{{end}}</td>
                 <td><strong>{{.ServiceName}}</strong></td>
                 <td>{{.Action}}</td>
                 <td class="mono">{{.Source}}</td>
@@ -930,8 +946,8 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
           <div class="tag-list">
-            {{range $name, $state := .CachedServices}}
-            <span class="service-tag {{$state}}">{{$name}} ({{$state}})</span>
+            {{range .CachedServices}}
+            <span class="service-tag {{.State}}">{{if .Host}}{{.Host}} / {{end}}{{.Service}} ({{.State}})</span>
             {{end}}
           </div>
           {{else}}
@@ -1109,7 +1125,7 @@ const dashboardHTML = `<!DOCTYPE html>
           <div class="lcars-panel-elbow"></div>
           <div class="lcars-panel-title-bar">
             <div class="bar-fill"></div>
-            <span class="title-text">Icinga2 Services - "{{.HostName}}" [Command Level]</span>
+            <span class="title-text">Icinga2 Services - "{{.HostLabel}}" [Command Level]</span>
           </div>
         </div>
         <div class="lcars-panel-body">
@@ -1124,18 +1140,20 @@ const dashboardHTML = `<!DOCTYPE html>
             <thead>
               <tr>
                 <th class="checkbox-cell"></th>
-                <th onclick="sortTable(1,'string')">Designation <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(2,'string')">Display <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(3,'string')">Status <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(4,'string')">Output <span class="sort-arrow"></span></th>
-                <th onclick="sortTable(5,'date')">Last Scan <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(1,'string')">Host <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(2,'string')">Designation <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(3,'string')">Display <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(4,'string')">Status <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(5,'string')">Output <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(6,'date')">Last Scan <span class="sort-arrow"></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {{range .IcingaServices}}
-              <tr data-service="{{.Name}}">
-                <td class="checkbox-cell"><input type="checkbox" class="svc-check" value="{{.Name}}"></td>
+              <tr data-service="{{.Name}}" data-host="{{.HostName}}">
+                <td class="checkbox-cell"><input type="checkbox" class="svc-check" value="{{.Name}}" data-host="{{.HostName}}"></td>
+                <td class="mono">{{.HostName}}</td>
                 <td><strong>{{.Name}}</strong></td>
                 <td>{{.DisplayName}}</td>
                 <td>
@@ -1150,13 +1168,13 @@ const dashboardHTML = `<!DOCTYPE html>
                 </td>
                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{.Output}}">{{.Output}}</td>
                 <td class="mono">{{if .HasCheckResult}}{{.LastCheck.Format "2006-01-02 15:04:05"}}{{else}}-{{end}}</td>
-                <td><button class="btn btn-danger btn-sm" onclick="deleteService('{{.Name}}', this)">Purge</button></td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteService(this)">Purge</button></td>
               </tr>
               {{end}}
             </tbody>
           </table>
           {{else}}
-          <div class="empty-state">No services registered on host "{{.HostName}}"</div>
+          <div class="empty-state">No services registered for "{{.HostLabel}}"</div>
           {{end}}
         </div>
       </div>
@@ -1182,13 +1200,25 @@ const dashboardHTML = `<!DOCTYPE html>
 
 <script>
 // ── Navigation ──
-function showSection(name) {
-  document.querySelectorAll('.nav-section').forEach(s => s.classList.remove('active'));
-  const sec = document.getElementById('sec-' + name);
-  if (sec) sec.classList.add('active');
+function setActiveSidebar(name) {
+  document.querySelectorAll('.lcars-sidebar .sidebar-btn[data-section]').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector('.lcars-sidebar .sidebar-btn[data-section="' + name + '"]');
+  if (btn) btn.classList.add('active');
+}
 
-  document.querySelectorAll('.lcars-sidebar .sidebar-btn').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+function showSection(name, _btn, updateHash) {
+  document.querySelectorAll('.nav-section').forEach(s => s.classList.remove('active'));
+  let activeName = name;
+  let sec = document.getElementById('sec-' + activeName);
+  if (!sec) {
+    activeName = 'overview';
+    sec = document.getElementById('sec-overview');
+  }
+  if (sec) sec.classList.add('active');
+  setActiveSidebar(activeName);
+  if (updateHash && window.location.hash !== '#' + activeName) {
+    window.location.hash = activeName;
+  }
 }
 
 // ── Table sorting ──
@@ -1232,18 +1262,28 @@ function showToast(msg, type) {
   setTimeout(() => t.className = 'toast', 3000);
 }
 
-function deleteService(name, btn) {
-  if (!confirm('Confirm purge of service "' + name + '" from Icinga2?')) return;
+function findServiceRow(host, name) {
+  return Array.from(document.querySelectorAll('#servicesTable tbody tr')).find(row =>
+    row.dataset.host === host && row.dataset.service === name
+  );
+}
+
+function deleteService(btn) {
+  const row = btn.closest('tr');
+  const name = row?.dataset.service || '';
+  const host = row?.dataset.host || '';
+  if (!name || !host) return;
+  if (!confirm('Confirm purge of service "' + name + '" on host "' + host + '" from Icinga2?')) return;
   btn.disabled = true;
   btn.textContent = '...';
 
-  fetch('/admin/services/' + encodeURIComponent(name), {
+  fetch('/admin/services/' + encodeURIComponent(name) + '?host=' + encodeURIComponent(host), {
     method: 'DELETE',
   }).then(r => r.json()).then(data => {
     if (data.status === 'deleted') {
-      showToast('Purged: ' + name, 'success');
-      const row = btn.closest('tr');
-      if (row) row.remove();
+      showToast('Purged: ' + host + ' / ' + name, 'success');
+      const targetRow = findServiceRow(host, name);
+      if (targetRow) targetRow.remove();
     } else {
       showToast('Error: ' + (data.error || 'unknown'), 'error');
       btn.disabled = false;
@@ -1276,9 +1316,9 @@ document.addEventListener('change', function(e) {
 
 function deleteSelected() {
   const checked = Array.from(document.querySelectorAll('.svc-check:checked'));
-  const names = checked.map(cb => cb.value);
-  if (names.length === 0) return;
-  if (!confirm('Confirm purge of ' + names.length + ' service(s) from Icinga2?')) return;
+  const services = checked.map(cb => ({host: cb.dataset.host, service: cb.value}));
+  if (services.length === 0) return;
+  if (!confirm('Confirm purge of ' + services.length + ' service(s) from Icinga2?')) return;
 
   const btn = document.getElementById('btnDeleteSelected');
   btn.disabled = true;
@@ -1287,13 +1327,13 @@ function deleteSelected() {
   fetch('/admin/services/bulk-delete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({services: names}),
+    body: JSON.stringify({services}),
   }).then(r => r.json()).then(data => {
     let deleted = 0, errors = 0;
     (data.results || []).forEach(r => {
       if (r.status === 'deleted') {
         deleted++;
-        const row = document.querySelector('tr[data-service="' + r.service + '"]');
+        const row = findServiceRow(r.host, r.service);
         if (row) row.remove();
       } else {
         errors++;
@@ -1318,23 +1358,13 @@ function doLogout() {
 }
 
 // ── Preserve section on auto-refresh ──
-(function() {
-  const hash = window.location.hash.replace('#','');
-  if (hash) {
-    const sec = document.getElementById('sec-' + hash);
-    if (sec) {
-      document.querySelectorAll('.nav-section').forEach(s => s.classList.remove('active'));
-      sec.classList.add('active');
-    }
-  }
-  document.querySelectorAll('.lcars-sidebar .sidebar-btn[onclick]').forEach(btn => {
-    const orig = btn.getAttribute('onclick');
-    const m = orig.match(/showSection\('(\w+)'\)/);
-    if (m) {
-      btn.addEventListener('click', () => { window.location.hash = m[1]; });
-    }
-  });
-})();
+function applySectionFromHash() {
+  const hash = window.location.hash.replace('#', '') || 'overview';
+  showSection(hash, null, false);
+}
+
+window.addEventListener('hashchange', applySectionFromHash);
+applySectionFromHash();
 </script>
 
 </body>

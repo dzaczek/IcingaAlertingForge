@@ -10,6 +10,7 @@ import (
 
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 )
@@ -29,9 +30,15 @@ func testWebhookHandler(t *testing.T, icingaHandler http.HandlerFunc) *WebhookHa
 	}
 
 	return &WebhookHandler{
-		KeyStore: auth.NewKeyStore(map[string]string{
-			"valid-key":   "grafana-test",
-			"another-key": "grafana-dev",
+		KeyStore: auth.NewKeyStore(map[string]config.WebhookRoute{
+			"valid-key": {
+				Source:   "grafana-test",
+				TargetID: "team-a",
+			},
+			"another-key": {
+				Source:   "grafana-dev",
+				TargetID: "team-b",
+			},
 		}),
 		Cache: cache.NewServiceCache(60),
 		API: &icinga.APIClient{
@@ -40,8 +47,19 @@ func testWebhookHandler(t *testing.T, icingaHandler http.HandlerFunc) *WebhookHa
 			Pass:       "test",
 			HTTPClient: icingaServer.Client(),
 		},
-		History:  histLogger,
-		HostName: "test-host",
+		History: histLogger,
+		Targets: map[string]config.TargetConfig{
+			"team-a": {
+				ID:       "team-a",
+				Source:   "grafana-test",
+				HostName: "team-a-host",
+			},
+			"team-b": {
+				ID:       "team-b",
+				Source:   "grafana-dev",
+				HostName: "team-b-host",
+			},
+		},
 	}
 }
 
@@ -327,7 +345,11 @@ func TestWebhook_CachePreventsDuplicate(t *testing.T) {
 }
 
 func TestWebhook_MultipleKeys(t *testing.T) {
+	var createdPaths []string
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			createdPaths = append(createdPaths, r.URL.Path)
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"results":[{"code":200}]}`))
 	})
@@ -358,5 +380,106 @@ func TestWebhook_MultipleKeys(t *testing.T) {
 		if resp["source"] == "" {
 			t.Errorf("key %s: expected non-empty source", key)
 		}
+	}
+
+	if len(createdPaths) != 2 {
+		t.Fatalf("expected 2 create calls on different hosts, got %d", len(createdPaths))
+	}
+	if createdPaths[0] != "/v1/objects/services/team-a-host!Multi Key Test" {
+		t.Fatalf("expected first create on team-a-host, got %s", createdPaths[0])
+	}
+	if createdPaths[1] != "/v1/objects/services/team-b-host!Multi Key Test" {
+		t.Fatalf("expected second create on team-b-host, got %s", createdPaths[1])
+	}
+}
+
+func TestWebhook_ReturnsBadGatewayAndLogsForwardingError(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`{"error":"icinga unavailable"}`))
+	})
+
+	payload := `{
+		"status": "firing",
+		"alerts": [{
+			"status": "firing",
+			"labels": {"alertname": "Forward Fail", "severity": "critical"},
+			"annotations": {"summary": "Something is wrong"}
+		}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d", rr.Code)
+	}
+
+	var resp map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	results := resp["results"].([]any)
+	result := results[0].(map[string]any)
+	if result["icinga_ok"].(bool) {
+		t.Fatalf("expected icinga_ok=false, got true")
+	}
+	if result["error"] == "" {
+		t.Fatalf("expected forwarding error details in response")
+	}
+
+	entries, err := h.History.Query(history.QueryFilter{Limit: 10})
+	if err != nil {
+		t.Fatalf("failed to query history: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 history entry, got %d", len(entries))
+	}
+	if entries[0].Error == "" {
+		t.Fatalf("expected history error to be populated")
+	}
+	if entries[0].Error == entries[0].Message {
+		t.Fatalf("expected history error to contain API failure details, got message text only")
+	}
+}
+
+func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
+	createCallCount := 0
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut {
+			createCallCount++
+		}
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`{"error":"icinga unavailable"}`))
+	})
+
+	payload := `{
+		"status": "firing",
+		"alerts": [{
+			"status": "firing",
+			"labels": {"alertname": "Create Retry", "severity": "critical"},
+			"annotations": {"summary": "Retry auto create"}
+		}]
+	}`
+
+	for range 2 {
+		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-API-Key", "valid-key")
+		rr := httptest.NewRecorder()
+
+		h.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadGateway {
+			t.Fatalf("expected 502, got %d", rr.Code)
+		}
+	}
+
+	if createCallCount != 2 {
+		t.Fatalf("expected failed auto-create to be retried, got %d create attempt(s)", createCallCount)
 	}
 }

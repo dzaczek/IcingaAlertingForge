@@ -17,12 +17,12 @@ import (
 
 // Logger provides thread-safe JSONL history logging with rotation and filtering.
 type Logger struct {
-	mu           sync.Mutex
-	filePath     string
-	maxEntries   int
-	appendCount  atomic.Int64 // tracks appends since last rotation check
-	rotateEvery  int64        // check rotation every N appends
-	cancelMaint  context.CancelFunc
+	mu          sync.Mutex
+	filePath    string
+	maxEntries  int
+	appendCount atomic.Int64 // tracks appends since last rotation check
+	rotateEvery int64        // check rotation every N appends
+	cancelMaint context.CancelFunc
 }
 
 // NewLogger creates a new history Logger.
@@ -104,6 +104,7 @@ type QueryFilter struct {
 	Limit   int
 	Service string
 	Source  string
+	Host    string
 	Mode    string
 	From    time.Time
 	To      time.Time
@@ -126,6 +127,9 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 			continue
 		}
 		if filter.Source != "" && e.SourceKey != filter.Source {
+			continue
+		}
+		if filter.Host != "" && e.HostName != filter.Host {
 			continue
 		}
 		if filter.Mode != "" && e.Mode != filter.Mode {
@@ -237,14 +241,14 @@ func (l *Logger) Stats() (HistoryStats, error) {
 	}
 
 	stats := HistoryStats{
-		TotalEntries:    len(entries),
-		ByMode:          make(map[string]int),
-		ByAction:        make(map[string]int),
-		BySeverity:      make(map[string]int),
-		BySource:        make(map[string]int),
-		ErrorCount:      0,
-		RecentErrors:    []models.HistoryEntry{},
-		RecentEntries:   []models.HistoryEntry{},
+		TotalEntries:  len(entries),
+		ByMode:        make(map[string]int),
+		ByAction:      make(map[string]int),
+		BySeverity:    make(map[string]int),
+		BySource:      make(map[string]int),
+		ErrorCount:    0,
+		RecentErrors:  []models.HistoryEntry{},
+		RecentEntries: []models.HistoryEntry{},
 	}
 
 	for _, e := range entries {
@@ -287,14 +291,14 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 // HistoryStats holds aggregate statistics about the webhook history.
 type HistoryStats struct {
-	TotalEntries    int                  `json:"total_entries"`
-	ByMode          map[string]int       `json:"by_mode"`
-	ByAction        map[string]int       `json:"by_action"`
-	BySeverity      map[string]int       `json:"by_severity"`
-	BySource        map[string]int       `json:"by_source"`
-	ErrorCount      int                  `json:"error_count"`
-	TotalDurationMs int64                `json:"total_duration_ms"`
-	AvgDurationMs   int64                `json:"avg_duration_ms"`
+	TotalEntries    int                   `json:"total_entries"`
+	ByMode          map[string]int        `json:"by_mode"`
+	ByAction        map[string]int        `json:"by_action"`
+	BySeverity      map[string]int        `json:"by_severity"`
+	BySource        map[string]int        `json:"by_source"`
+	ErrorCount      int                   `json:"error_count"`
+	TotalDurationMs int64                 `json:"total_duration_ms"`
+	AvgDurationMs   int64                 `json:"avg_duration_ms"`
 	RecentErrors    []models.HistoryEntry `json:"recent_errors"`
 	RecentEntries   []models.HistoryEntry `json:"recent_entries"`
 }

@@ -1,5 +1,7 @@
 # IcingaAlertForge - Load Test Results
 
+> Note: these measurements were captured before the multi-target refactor, when the lab used one shared target host named `test-host`. The current `testenv` defaults to multiple dynamic hosts (`a-dummy-dev`, `b-dummy-device`), host-aware cache keys, and host-scoped routing. The load-test script now targets `b-dummy-device` unless overridden, so treat the numbers below as historical baseline rather than current multi-target benchmark.
+
 **Date:** 2026-03-20
 **Environment:** Docker Compose (testenv)
 **Concurrency:** 15 parallel requests
@@ -12,7 +14,7 @@
 |---|---|
 | Webhook Bridge | `http://localhost:9080/webhook` |
 | Icinga2 API | `https://localhost:5665` |
-| Target Host | `test-host` |
+| Target Host | Historical single-host setup: `test-host` |
 | Alert Types | Mixed `critical` / `warning` (alternating) |
 | Service Auto-Create | `true` |
 | TLS Skip Verify | `true` |

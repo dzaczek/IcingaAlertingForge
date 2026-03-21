@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/models"
 )
 
@@ -50,8 +52,56 @@ func exitStatusLabel(exitStatus int) string {
 	}
 }
 
+// ensureServiceExists creates the service in Icinga2 when it is missing from
+// the local cache. Cache state is updated only after a successful create or a
+// confirmed "already exists" response so transient API failures do not poison
+// the cache for the full TTL window.
+func (h *WebhookHandler) ensureServiceExists(requestID string, target config.TargetConfig, alert models.GrafanaAlert) {
+	serviceName := alert.AlertName()
+	state := h.Cache.GetState(target.HostName, serviceName)
+	if state != cache.StateNotFound {
+		return
+	}
+
+	if h.Limiter != nil {
+		mutCtx, mutCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := h.Limiter.AcquireMutate(mutCtx); err != nil {
+			mutCancel()
+			slog.Warn("Rate limit: mutate slot unavailable for auto-create",
+				"service", serviceName, "request_id", requestID, "error", err)
+			return
+		}
+		mutCancel()
+		defer h.Limiter.ReleaseMutate()
+	}
+
+	// Another request may have created the service while we were waiting.
+	if h.Cache.GetState(target.HostName, serviceName) != cache.StateNotFound {
+		return
+	}
+
+	h.Cache.SetPending(target.HostName, serviceName)
+	slog.Info("Service not in cache, auto-creating",
+		"host", target.HostName, "service", serviceName, "request_id", requestID)
+
+	err := h.API.CreateService(target.HostName, serviceName, alert.Labels, alert.Annotations)
+	switch {
+	case err == nil:
+		h.Cache.Register(target.HostName, serviceName)
+		slog.Info("Service auto-created", "host", target.HostName, "service", serviceName, "request_id", requestID)
+	case isAlreadyExistsError(err):
+		h.Cache.Register(target.HostName, serviceName)
+		slog.Info("Service already exists in Icinga2, cache repaired",
+			"host", target.HostName, "service", serviceName, "request_id", requestID)
+	default:
+		h.Cache.Remove(target.HostName, serviceName)
+		slog.Error("Failed to auto-create service",
+			"host", target.HostName, "service", serviceName, "error", err, "request_id", requestID)
+	}
+}
+
 // handleWorkMode processes production alerts (firing/resolved).
-func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.GrafanaAlert) map[string]any {
+func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert) map[string]any {
 	serviceName := alert.AlertName()
 	severity := alert.Severity()
 	summary := alert.Summary()
@@ -82,6 +132,7 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 		return map[string]any{
 			"error":   "unknown alert status: " + alert.Status,
 			"status":  "error",
+			"host":    target.HostName,
 			"service": serviceName,
 		}
 	}
@@ -97,58 +148,28 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 			return map[string]any{
 				"error":   "rate limit: status update queue full",
 				"status":  "error",
+				"host":    target.HostName,
 				"service": serviceName,
 			}
 		}
 		defer h.Limiter.ReleaseStatus()
 	}
 
-	// Auto-create service if it doesn't exist in cache.
-	// Use mutate semaphore to prevent thundering herd on Icinga2 API.
-	// Mark cache as pending before calling CreateService to prevent
-	// concurrent requests from racing into multiple create calls.
-	if !h.Cache.Exists(serviceName) {
-		h.Cache.SetPending(serviceName)
-
-		if h.Limiter != nil {
-			mutCtx, mutCancel := context.WithTimeout(context.Background(), 30*time.Second)
-			if err := h.Limiter.AcquireMutate(mutCtx); err != nil {
-				mutCancel()
-				slog.Warn("Rate limit: mutate slot unavailable for auto-create",
-					"service", serviceName, "request_id", requestID)
-				// Still proceed — service may already exist
-			} else {
-				mutCancel()
-				defer h.Limiter.ReleaseMutate()
-			}
-		}
-
-		slog.Info("Service not in cache, auto-creating",
-			"service", serviceName, "request_id", requestID)
-		if err := h.API.CreateService(h.HostName, serviceName, alert.Labels, alert.Annotations); err != nil {
-			if !isAlreadyExistsError(err) {
-				slog.Error("Failed to auto-create service",
-					"service", serviceName, "error", err, "request_id", requestID)
-			}
-		} else {
-			slog.Info("Service auto-created", "service", serviceName, "request_id", requestID)
-		}
-		h.Cache.Register(serviceName)
-	}
+	h.ensureServiceExists(requestID, target, alert)
 
 	// Send check result to Icinga2
 	start := time.Now()
-	err := h.API.SendCheckResult(h.HostName, serviceName, exitStatus, message)
+	err := h.API.SendCheckResult(target.HostName, serviceName, exitStatus, message)
 	durationMs := time.Since(start).Milliseconds()
 	icingaOK := err == nil
 
 	if err != nil {
 		slog.Error("Failed to send check result to Icinga2",
-			"service", serviceName, "exit_status", exitStatus,
+			"host", target.HostName, "service", serviceName, "exit_status", exitStatus,
 			"error", err, "request_id", requestID)
 	} else {
 		slog.Info("Check result sent to Icinga2",
-			"service", serviceName, "exit_status", exitStatus,
+			"host", target.HostName, "service", serviceName, "exit_status", exitStatus,
 			"label", exitStatusLabel(exitStatus), "request_id", requestID)
 	}
 
@@ -157,11 +178,12 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, alert models.G
 		errMsg = err.Error()
 	}
 
-	h.logHistory(requestID, source, "work", action, serviceName, severity,
-		exitStatus, message, icingaOK, durationMs)
+	h.logHistory(requestID, source, target.HostName, "work", action, serviceName, severity,
+		exitStatus, message, icingaOK, durationMs, errMsg)
 
 	result := map[string]any{
 		"status":      "processed",
+		"host":        target.HostName,
 		"service":     serviceName,
 		"exit_status": exitStatus,
 		"label":       exitStatusLabel(exitStatus),

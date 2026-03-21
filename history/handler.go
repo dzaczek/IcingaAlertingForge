@@ -40,6 +40,7 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 		Limit:   limit,
 		Service: q.Get("service"),
 		Source:  q.Get("source"),
+		Host:    q.Get("host"),
 		Mode:    q.Get("mode"),
 	}
 
@@ -77,6 +78,7 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 			"limit":   limit,
 			"service": filter.Service,
 			"source":  filter.Source,
+			"host":    filter.Host,
 			"mode":    filter.Mode,
 		},
 	})

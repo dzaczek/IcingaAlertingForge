@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -36,7 +37,7 @@ func main() {
 	)
 
 	// ── Initialize Components ───────────────────────────────────────
-	keyStore := auth.NewKeyStore(cfg.WebhookKeys)
+	keyStore := auth.NewKeyStore(cfg.WebhookRoutes)
 
 	apiClient := icinga.NewAPIClient(
 		cfg.Icinga2Host,
@@ -45,57 +46,16 @@ func main() {
 		cfg.Icinga2TLSSkipVerify,
 	)
 
-	// ── Validate / auto-create host in Icinga2 ──────────────────────
-	hostExists := false
-	hostInfo, err := apiClient.GetHostInfo(cfg.Icinga2HostName)
-	if err != nil {
-		slog.Warn("Could not verify host in Icinga2 (will retry on requests)",
-			"host", cfg.Icinga2HostName, "error", err)
-	} else if !hostInfo.Exists {
-		if cfg.Icinga2HostAutoCreate {
-			slog.Info("Host not found in Icinga2, creating dummy host...",
-				"host", cfg.Icinga2HostName)
-			if err := apiClient.CreateHost(
-				cfg.Icinga2HostName,
-				cfg.Icinga2HostDisplay,
-				cfg.Icinga2HostAddress,
-			); err != nil {
-				slog.Error("Failed to create host in Icinga2",
-					"host", cfg.Icinga2HostName, "error", err)
-				os.Exit(1)
-			}
-			hostExists = true
-			slog.Info("Dummy host created in Icinga2",
-				"host", cfg.Icinga2HostName,
-				"address", cfg.Icinga2HostAddress,
-				"managed_by", "webhook-bridge")
-		} else {
-			slog.Error("Host does not exist in Icinga2 — set ICINGA2_HOST_AUTO_CREATE=true to create it automatically, or create it manually",
-				"host", cfg.Icinga2HostName)
-			os.Exit(1)
-		}
-	} else {
-		// Host exists — check for conflicts
-		hostExists = true
-		if hostInfo.IsManagedByUs() {
-			slog.Info("Host validated in Icinga2 (managed by webhook-bridge)",
-				"host", cfg.Icinga2HostName,
-				"check_command", hostInfo.CheckCommand)
-		} else if hostInfo.IsDummy() {
-			slog.Info("Host validated in Icinga2 (dummy, not managed by us)",
-				"host", cfg.Icinga2HostName,
-				"display_name", hostInfo.DisplayName)
-		} else {
-			slog.Warn("CONFLICT: Host exists but is NOT a dummy host — it may be managed by Director or manual config. "+
-				"Services created by webhook-bridge may conflict with existing configuration!",
-				"host", cfg.Icinga2HostName,
-				"check_command", hostInfo.CheckCommand,
-				"display_name", hostInfo.DisplayName,
-				"managed_by", hostInfo.ManagedBy)
-		}
+	// ── Validate / auto-create hosts in Icinga2 ─────────────────────
+	if err := ensureConfiguredHosts(apiClient, cfg.Targets, cfg.Icinga2HostAutoCreate); err != nil {
+		slog.Error("Failed to prepare target hosts", "error", err)
+		os.Exit(1)
 	}
 
 	serviceCache := cache.NewServiceCache(cfg.CacheTTLMinutes)
+	for _, target := range sortedTargets(cfg.Targets) {
+		restoreManagedServicesFromIcinga(apiClient, serviceCache, target.HostName)
+	}
 
 	historyLogger, err := history.NewLogger(cfg.HistoryFile, cfg.HistoryMaxEntries)
 	if err != nil {
@@ -107,6 +67,7 @@ func main() {
 	mainCtx, mainCancel := context.WithCancel(context.Background())
 	defer mainCancel()
 	historyLogger.StartMaintenance(mainCtx)
+	serviceCache.StartMaintenance(mainCtx, time.Minute)
 
 	// ── Metrics Collector ────────────────────────────────────────────
 	metricsCollector := metrics.NewCollector()
@@ -125,20 +86,19 @@ func main() {
 
 	// ── Create Handlers ─────────────────────────────────────────────
 	webhookHandler := &handler.WebhookHandler{
-		KeyStore:   keyStore,
-		Cache:      serviceCache,
-		API:        apiClient,
-		History:    historyLogger,
-		HostName:   cfg.Icinga2HostName,
-		Limiter:    rateLimiter,
-		Metrics:    metricsCollector,
-		HostExists: hostExists,
+		KeyStore: keyStore,
+		Cache:    serviceCache,
+		API:      apiClient,
+		History:  historyLogger,
+		Targets:  cfg.Targets,
+		Limiter:  rateLimiter,
+		Metrics:  metricsCollector,
 	}
 
 	statusHandler := &handler.StatusHandler{
-		Cache:    serviceCache,
-		API:      apiClient,
-		HostName: cfg.Icinga2HostName,
+		Cache:   serviceCache,
+		API:     apiClient,
+		Targets: cfg.Targets,
 	}
 
 	historyHandler := history.NewHandler(historyLogger)
@@ -150,19 +110,19 @@ func main() {
 		History:   historyLogger,
 		API:       apiClient,
 		Metrics:   metricsCollector,
-		HostName:  cfg.Icinga2HostName,
+		Targets:   cfg.Targets,
 		AdminUser: cfg.AdminUser,
 		AdminPass: cfg.AdminPass,
 		StartedAt: startedAt,
 	}
 
 	adminHandler := &handler.AdminHandler{
-		Cache:    serviceCache,
-		API:      apiClient,
-		Limiter:  rateLimiter,
-		HostName: cfg.Icinga2HostName,
-		User:     cfg.AdminUser,
-		Pass:     cfg.AdminPass,
+		Cache:   serviceCache,
+		API:     apiClient,
+		Limiter: rateLimiter,
+		Targets: cfg.Targets,
+		User:    cfg.AdminUser,
+		Pass:    cfg.AdminPass,
 	}
 
 	// ── Register Routes ─────────────────────────────────────────────
@@ -260,6 +220,143 @@ func main() {
 			os.Exit(1)
 		}
 	}
+}
+
+func restoreManagedServicesFromIcinga(apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, host string) {
+	services, err := apiClient.ListServices(host)
+	if err != nil {
+		slog.Warn("Could not scan services in Icinga2 on startup",
+			"host", host, "error", err)
+		return
+	}
+
+	managedCount := 0
+	legacyCount := 0
+	legacySamples := make([]string, 0, 10)
+
+	for _, svc := range services {
+		if !svc.IsManagedByUs() {
+			continue
+		}
+		serviceCache.Register(host, svc.Name)
+		managedCount++
+
+		if svc.IsLegacyManagedByUs() {
+			legacyCount++
+			if len(legacySamples) < cap(legacySamples) {
+				legacySamples = append(legacySamples, svc.Name)
+			}
+		}
+	}
+
+	if managedCount > 0 {
+		slog.Info("Restored managed services into cache from Icinga2",
+			"host", host,
+			"count", managedCount,
+			"legacy_count", legacyCount)
+	}
+
+	if legacyCount > 0 {
+		slog.Warn("Legacy webhook-bridge service artifacts found on startup",
+			"host", host,
+			"count", legacyCount,
+			"sample", legacySamples,
+			"expected_managed_by", icinga.ManagedByIAF)
+	}
+}
+
+func ensureConfiguredHosts(apiClient *icinga.APIClient, targets map[string]config.TargetConfig, autoCreate bool) error {
+	for _, target := range sortedTargets(targets) {
+		hostInfo, err := apiClient.GetHostInfo(target.HostName)
+		if err != nil {
+			slog.Warn("Could not verify host in Icinga2 (will retry on requests)",
+				"host", target.HostName, "error", err)
+			continue
+		}
+
+		if !hostInfo.Exists {
+			if !autoCreate {
+				return fmt.Errorf("host %s does not exist in Icinga2 — set ICINGA2_HOST_AUTO_CREATE=true to create it automatically, or create it manually", target.HostName)
+			}
+
+			slog.Info("Host not found in Icinga2, creating dummy host...",
+				"target_id", target.ID,
+				"host", target.HostName)
+			if err := apiClient.CreateHost(toIcingaHostSpec(target)); err != nil {
+				return fmt.Errorf("create host %s: %w", target.HostName, err)
+			}
+			slog.Info("Dummy host created in Icinga2",
+				"target_id", target.ID,
+				"host", target.HostName,
+				"address", target.HostAddress,
+				"managed_by", icinga.ManagedByIAF)
+			continue
+		}
+
+		if hostInfo.IsManagedByUs() {
+			slog.Info("Host validated in Icinga2 (managed by us)",
+				"target_id", target.ID,
+				"host", target.HostName,
+				"check_command", hostInfo.CheckCommand,
+				"managed_by", hostInfo.ManagedBy)
+			if hostInfo.IsLegacyManagedByUs() {
+				slog.Warn("Host still uses legacy managed_by marker",
+					"target_id", target.ID,
+					"host", target.HostName,
+					"managed_by", hostInfo.ManagedBy,
+					"expected", icinga.ManagedByIAF)
+			}
+			continue
+		}
+
+		if hostInfo.IsDummy() {
+			slog.Info("Host validated in Icinga2 (dummy, not managed by us)",
+				"target_id", target.ID,
+				"host", target.HostName,
+				"display_name", hostInfo.DisplayName)
+			continue
+		}
+
+		slog.Warn("CONFLICT: Host exists but is NOT a dummy host — it may be managed by Director or manual config. "+
+			"Services created by IcingaAlertingForge may conflict with existing configuration!",
+			"target_id", target.ID,
+			"host", target.HostName,
+			"check_command", hostInfo.CheckCommand,
+			"display_name", hostInfo.DisplayName,
+			"managed_by", hostInfo.ManagedBy)
+	}
+
+	return nil
+}
+
+func toIcingaHostSpec(target config.TargetConfig) icinga.HostSpec {
+	return icinga.HostSpec{
+		Name:        target.HostName,
+		DisplayName: target.HostDisplay,
+		Address:     target.HostAddress,
+		Notification: icinga.HostNotificationConfig{
+			Users:         target.Notification.Users,
+			Groups:        target.Notification.Groups,
+			ServiceStates: target.Notification.ServiceStates,
+			HostStates:    target.Notification.HostStates,
+		},
+	}
+}
+
+func sortedTargets(targets map[string]config.TargetConfig) []config.TargetConfig {
+	list := make([]config.TargetConfig, 0, len(targets))
+	for _, target := range targets {
+		list = append(list, target)
+	}
+
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].HostName == list[j].HostName {
+			return list[i].ID < list[j].ID
+		}
+		return list[i].HostName < list[j].HostName
+	})
+
+	return list
 }
 
 // setupLogging configures the global slog logger based on config.

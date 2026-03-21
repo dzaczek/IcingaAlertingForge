@@ -1,0 +1,2308 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: synthetic-flapping-devices
+    folder: Test Alerts
+    interval: 10s
+    rules:
+      - uid: flap_dev_01
+        title: "Synthetic Device 01"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 0) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 01 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 0s phase offset"
+        labels:
+          alertname: "Lab Device 01 Flap"
+          severity: critical
+          device: "lab-device-01"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_02
+        title: "Synthetic Device 02"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 2) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 02 flips every 60s"
+          description: "WARNING/OK flapping test device with 2s phase offset"
+        labels:
+          alertname: "Lab Device 02 Flap"
+          severity: warning
+          device: "lab-device-02"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_03
+        title: "Synthetic Device 03"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 4) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 03 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 4s phase offset"
+        labels:
+          alertname: "Lab Device 03 Flap"
+          severity: critical
+          device: "lab-device-03"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_04
+        title: "Synthetic Device 04"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 6) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 04 flips every 60s"
+          description: "WARNING/OK flapping test device with 6s phase offset"
+        labels:
+          alertname: "Lab Device 04 Flap"
+          severity: warning
+          device: "lab-device-04"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_05
+        title: "Synthetic Device 05"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 8) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 05 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 8s phase offset"
+        labels:
+          alertname: "Lab Device 05 Flap"
+          severity: critical
+          device: "lab-device-05"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_06
+        title: "Synthetic Device 06"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 10) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 06 flips every 60s"
+          description: "WARNING/OK flapping test device with 10s phase offset"
+        labels:
+          alertname: "Lab Device 06 Flap"
+          severity: warning
+          device: "lab-device-06"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_07
+        title: "Synthetic Device 07"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 12) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 07 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 12s phase offset"
+        labels:
+          alertname: "Lab Device 07 Flap"
+          severity: critical
+          device: "lab-device-07"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_08
+        title: "Synthetic Device 08"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 14) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 08 flips every 60s"
+          description: "WARNING/OK flapping test device with 14s phase offset"
+        labels:
+          alertname: "Lab Device 08 Flap"
+          severity: warning
+          device: "lab-device-08"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_09
+        title: "Synthetic Device 09"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 16) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 09 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 16s phase offset"
+        labels:
+          alertname: "Lab Device 09 Flap"
+          severity: critical
+          device: "lab-device-09"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_10
+        title: "Synthetic Device 10"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 18) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 10 flips every 60s"
+          description: "WARNING/OK flapping test device with 18s phase offset"
+        labels:
+          alertname: "Lab Device 10 Flap"
+          severity: warning
+          device: "lab-device-10"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_11
+        title: "Synthetic Device 11"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 20) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 11 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 20s phase offset"
+        labels:
+          alertname: "Lab Device 11 Flap"
+          severity: critical
+          device: "lab-device-11"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_12
+        title: "Synthetic Device 12"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 22) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 12 flips every 60s"
+          description: "WARNING/OK flapping test device with 22s phase offset"
+        labels:
+          alertname: "Lab Device 12 Flap"
+          severity: warning
+          device: "lab-device-12"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_13
+        title: "Synthetic Device 13"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 24) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 13 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 24s phase offset"
+        labels:
+          alertname: "Lab Device 13 Flap"
+          severity: critical
+          device: "lab-device-13"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_14
+        title: "Synthetic Device 14"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 26) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 14 flips every 60s"
+          description: "WARNING/OK flapping test device with 26s phase offset"
+        labels:
+          alertname: "Lab Device 14 Flap"
+          severity: warning
+          device: "lab-device-14"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_15
+        title: "Synthetic Device 15"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 28) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 15 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 28s phase offset"
+        labels:
+          alertname: "Lab Device 15 Flap"
+          severity: critical
+          device: "lab-device-15"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_16
+        title: "Synthetic Device 16"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 30) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 16 flips every 60s"
+          description: "WARNING/OK flapping test device with 30s phase offset"
+        labels:
+          alertname: "Lab Device 16 Flap"
+          severity: warning
+          device: "lab-device-16"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_17
+        title: "Synthetic Device 17"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 32) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 17 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 32s phase offset"
+        labels:
+          alertname: "Lab Device 17 Flap"
+          severity: critical
+          device: "lab-device-17"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_18
+        title: "Synthetic Device 18"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 34) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 18 flips every 60s"
+          description: "WARNING/OK flapping test device with 34s phase offset"
+        labels:
+          alertname: "Lab Device 18 Flap"
+          severity: warning
+          device: "lab-device-18"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_19
+        title: "Synthetic Device 19"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 36) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 19 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 36s phase offset"
+        labels:
+          alertname: "Lab Device 19 Flap"
+          severity: critical
+          device: "lab-device-19"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_20
+        title: "Synthetic Device 20"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 38) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 20 flips every 60s"
+          description: "WARNING/OK flapping test device with 38s phase offset"
+        labels:
+          alertname: "Lab Device 20 Flap"
+          severity: warning
+          device: "lab-device-20"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_21
+        title: "Synthetic Device 21"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 40) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 21 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 40s phase offset"
+        labels:
+          alertname: "Lab Device 21 Flap"
+          severity: critical
+          device: "lab-device-21"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_22
+        title: "Synthetic Device 22"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 42) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 22 flips every 60s"
+          description: "WARNING/OK flapping test device with 42s phase offset"
+        labels:
+          alertname: "Lab Device 22 Flap"
+          severity: warning
+          device: "lab-device-22"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_23
+        title: "Synthetic Device 23"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 44) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 23 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 44s phase offset"
+        labels:
+          alertname: "Lab Device 23 Flap"
+          severity: critical
+          device: "lab-device-23"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_24
+        title: "Synthetic Device 24"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 46) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 24 flips every 60s"
+          description: "WARNING/OK flapping test device with 46s phase offset"
+        labels:
+          alertname: "Lab Device 24 Flap"
+          severity: warning
+          device: "lab-device-24"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_25
+        title: "Synthetic Device 25"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 48) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 25 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 48s phase offset"
+        labels:
+          alertname: "Lab Device 25 Flap"
+          severity: critical
+          device: "lab-device-25"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_26
+        title: "Synthetic Device 26"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 50) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 26 flips every 60s"
+          description: "WARNING/OK flapping test device with 50s phase offset"
+        labels:
+          alertname: "Lab Device 26 Flap"
+          severity: warning
+          device: "lab-device-26"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_27
+        title: "Synthetic Device 27"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 52) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 27 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 52s phase offset"
+        labels:
+          alertname: "Lab Device 27 Flap"
+          severity: critical
+          device: "lab-device-27"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_28
+        title: "Synthetic Device 28"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 54) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 28 flips every 60s"
+          description: "WARNING/OK flapping test device with 54s phase offset"
+        labels:
+          alertname: "Lab Device 28 Flap"
+          severity: warning
+          device: "lab-device-28"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_29
+        title: "Synthetic Device 29"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 56) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 29 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 56s phase offset"
+        labels:
+          alertname: "Lab Device 29 Flap"
+          severity: critical
+          device: "lab-device-29"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_30
+        title: "Synthetic Device 30"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 58) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 30 flips every 60s"
+          description: "WARNING/OK flapping test device with 58s phase offset"
+        labels:
+          alertname: "Lab Device 30 Flap"
+          severity: warning
+          device: "lab-device-30"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_31
+        title: "Synthetic Device 31"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 60) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 31 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 60s phase offset"
+        labels:
+          alertname: "Lab Device 31 Flap"
+          severity: critical
+          device: "lab-device-31"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_32
+        title: "Synthetic Device 32"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 62) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 32 flips every 60s"
+          description: "WARNING/OK flapping test device with 62s phase offset"
+        labels:
+          alertname: "Lab Device 32 Flap"
+          severity: warning
+          device: "lab-device-32"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_33
+        title: "Synthetic Device 33"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 64) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 33 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 64s phase offset"
+        labels:
+          alertname: "Lab Device 33 Flap"
+          severity: critical
+          device: "lab-device-33"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_34
+        title: "Synthetic Device 34"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 66) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 34 flips every 60s"
+          description: "WARNING/OK flapping test device with 66s phase offset"
+        labels:
+          alertname: "Lab Device 34 Flap"
+          severity: warning
+          device: "lab-device-34"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_35
+        title: "Synthetic Device 35"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 68) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 35 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 68s phase offset"
+        labels:
+          alertname: "Lab Device 35 Flap"
+          severity: critical
+          device: "lab-device-35"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_36
+        title: "Synthetic Device 36"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 70) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 36 flips every 60s"
+          description: "WARNING/OK flapping test device with 70s phase offset"
+        labels:
+          alertname: "Lab Device 36 Flap"
+          severity: warning
+          device: "lab-device-36"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_37
+        title: "Synthetic Device 37"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 72) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 37 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 72s phase offset"
+        labels:
+          alertname: "Lab Device 37 Flap"
+          severity: critical
+          device: "lab-device-37"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_38
+        title: "Synthetic Device 38"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 74) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 38 flips every 60s"
+          description: "WARNING/OK flapping test device with 74s phase offset"
+        labels:
+          alertname: "Lab Device 38 Flap"
+          severity: warning
+          device: "lab-device-38"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_39
+        title: "Synthetic Device 39"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 76) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 39 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 76s phase offset"
+        labels:
+          alertname: "Lab Device 39 Flap"
+          severity: critical
+          device: "lab-device-39"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_40
+        title: "Synthetic Device 40"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 78) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 40 flips every 60s"
+          description: "WARNING/OK flapping test device with 78s phase offset"
+        labels:
+          alertname: "Lab Device 40 Flap"
+          severity: warning
+          device: "lab-device-40"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_41
+        title: "Synthetic Device 41"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 80) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 41 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 80s phase offset"
+        labels:
+          alertname: "Lab Device 41 Flap"
+          severity: critical
+          device: "lab-device-41"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_42
+        title: "Synthetic Device 42"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 82) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 42 flips every 60s"
+          description: "WARNING/OK flapping test device with 82s phase offset"
+        labels:
+          alertname: "Lab Device 42 Flap"
+          severity: warning
+          device: "lab-device-42"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_43
+        title: "Synthetic Device 43"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 84) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 43 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 84s phase offset"
+        labels:
+          alertname: "Lab Device 43 Flap"
+          severity: critical
+          device: "lab-device-43"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_44
+        title: "Synthetic Device 44"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 86) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 44 flips every 60s"
+          description: "WARNING/OK flapping test device with 86s phase offset"
+        labels:
+          alertname: "Lab Device 44 Flap"
+          severity: warning
+          device: "lab-device-44"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_45
+        title: "Synthetic Device 45"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 88) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 45 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 88s phase offset"
+        labels:
+          alertname: "Lab Device 45 Flap"
+          severity: critical
+          device: "lab-device-45"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_46
+        title: "Synthetic Device 46"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 90) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 46 flips every 60s"
+          description: "WARNING/OK flapping test device with 90s phase offset"
+        labels:
+          alertname: "Lab Device 46 Flap"
+          severity: warning
+          device: "lab-device-46"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_47
+        title: "Synthetic Device 47"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 92) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 47 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 92s phase offset"
+        labels:
+          alertname: "Lab Device 47 Flap"
+          severity: critical
+          device: "lab-device-47"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_48
+        title: "Synthetic Device 48"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 94) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 48 flips every 60s"
+          description: "WARNING/OK flapping test device with 94s phase offset"
+        labels:
+          alertname: "Lab Device 48 Flap"
+          severity: warning
+          device: "lab-device-48"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_49
+        title: "Synthetic Device 49"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 96) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 49 flips every 60s"
+          description: "CRITICAL/OK flapping test device with 96s phase offset"
+        labels:
+          alertname: "Lab Device 49 Flap"
+          severity: critical
+          device: "lab-device-49"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false
+      - uid: flap_dev_50
+        title: "Synthetic Device 50"
+        condition: B
+        data:
+          - refId: A
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: prometheus-iaf-testenv
+            model:
+              editorMode: code
+              expr: "vector((((time() + 98) % 120) < bool 60) * 1)"
+              instant: true
+              intervalMs: 1000
+              legendFormat: ""
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            queryType: ""
+            relativeTimeRange:
+              from: 120
+              to: 0
+            datasourceUid: __expr__
+            model:
+              expression: "$A > 0"
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: B
+              type: math
+        dashboardUid: ""
+        panelId: 0
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "Lab Device 50 flips every 60s"
+          description: "WARNING/OK flapping test device with 98s phase offset"
+        labels:
+          alertname: "Lab Device 50 Flap"
+          severity: warning
+          device: "lab-device-50"
+          source: "synthetic-lab"
+          pattern: "minute-flap"
+        isPaused: false

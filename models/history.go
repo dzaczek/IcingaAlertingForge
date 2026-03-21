@@ -7,6 +7,7 @@ type HistoryEntry struct {
 	Timestamp   time.Time `json:"timestamp"`
 	RequestID   string    `json:"request_id"`
 	SourceKey   string    `json:"source_key"`
+	HostName    string    `json:"host_name,omitempty"`
 	Mode        string    `json:"mode"`
 	Action      string    `json:"action"`
 	ServiceName string    `json:"service_name"`

@@ -25,6 +25,7 @@ func sampleEntry(service, mode, action, source string) models.HistoryEntry {
 		Timestamp:   time.Now().UTC(),
 		RequestID:   "req-" + service,
 		SourceKey:   source,
+		HostName:    "test-host",
 		Mode:        mode,
 		Action:      action,
 		ServiceName: service,
@@ -83,6 +84,28 @@ func TestLogger_QueryFilterBySource(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry for grafana-dev, got %d", len(entries))
+	}
+}
+
+func TestLogger_QueryFilterByHost(t *testing.T) {
+	l := newTestLogger(t)
+
+	first := sampleEntry("svc", "work", "firing", "grafana-prod")
+	first.HostName = "team-a-host"
+	second := sampleEntry("svc", "work", "firing", "grafana-prod")
+	second.HostName = "team-b-host"
+	l.Append(first)
+	l.Append(second)
+
+	entries, err := l.Query(QueryFilter{Limit: 100, Host: "team-b-host"})
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry for team-b-host, got %d", len(entries))
+	}
+	if entries[0].HostName != "team-b-host" {
+		t.Fatalf("expected host team-b-host, got %s", entries[0].HostName)
 	}
 }
 

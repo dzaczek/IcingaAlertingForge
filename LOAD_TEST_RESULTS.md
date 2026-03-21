@@ -1,6 +1,6 @@
 # IcingaAlertForge - Load Test Results
 
-> Note: these measurements were captured before the multi-target refactor, when the lab used one shared target host named `test-host`. The current `testenv` defaults to multiple dynamic hosts (`a-dummy-dev`, `b-dummy-device`), host-aware cache keys, and host-scoped routing. The load-test script now targets `b-dummy-device` unless overridden, so treat the numbers below as historical baseline rather than current multi-target benchmark.
+> Note: these measurements were captured before the multi-host refactor, when the lab used one shared target host named `test-host`. The current `testenv` uses multiple dynamic hosts (`a-dummy-dev`, `b-dummy-device`), host-aware cache keys, and host-scoped routing. The load-test script now targets `b-dummy-device` unless overridden, so treat the numbers below as a historical baseline rather than a benchmark for the current setup.
 
 **Date:** 2026-03-20
 **Environment:** Docker Compose (testenv)

@@ -1,6 +1,6 @@
 # IcingaAlertForge
 
-> Go webhook bridge from Grafana Unified Alerting to Icinga2 passive checks, with multi-team routing, dynamic dummy hosts, per-target notification policy, admin APIs, JSONL history, and an LCARS-style beauty panel.
+> Go webhook bridge from Grafana Unified Alerting to Icinga2 passive checks, with multi-team routing, dynamic dummy hosts, host-specific notification settings, admin APIs, JSONL history, and an LCARS-style beauty panel.
 
 <img src="header.png">
 
@@ -51,9 +51,9 @@
 
 ## Overview
 
-IcingaAlertForge receives Grafana webhooks, authenticates them with API keys, resolves the target team/device, auto-creates the target host or service in Icinga2 when needed, and submits passive check results through the Icinga2 REST API.
+IcingaAlertForge receives Grafana webhooks, authenticates them with API keys, maps each request to the right team or dummy host, creates the missing Icinga objects when needed, and submits passive check results through the Icinga2 REST API.
 
-The current design is no longer limited to one dummy device. You can now define multiple managed dummy hosts in configuration, assign multiple webhook keys to each host, and attach a host-level notification policy per target. This is intended for setups where different teams have their own webhook keys, their own dummy devices in Icinga, and their own notification recipients or user groups.
+The bridge is no longer tied to one shared dummy device. You can define several managed dummy hosts, assign more than one webhook key to each host, and keep separate notification settings for each team. This works well when different teams have their own webhook keys, their own dummy devices in Icinga, and their own users or user groups for notifications.
 
 This is a hobby project. It is developed and maintained mainly on weekends, so releases, fixes, and larger changes usually arrive in batches rather than on a strict schedule.
 
@@ -65,7 +65,7 @@ Examples:
 - Team B can notify groups `sms-beta,sms-ceta`
 - Both teams can restrict notifications to `critical` only
 
-The bridge still supports the legacy single-host model, but the multi-target configuration is the preferred model going forward.
+The bridge still supports the older single-host setup, but the newer multi-host setup is easier to manage for new deployments.
 
 ---
 
@@ -133,7 +133,7 @@ Key properties of the current architecture:
 
 - one global Icinga2 API client
 - multiple configured targets
-- one or more API keys per target
+- one or more API keys for each configured host
 - service cache keyed by `host + service`
 - history entries include `source_key` and `host_name`
 - admin and beauty panel aggregate across all configured targets
@@ -142,15 +142,15 @@ Key properties of the current architecture:
 
 ## Features
 
-- Multi-target routing with many dummy hosts defined in configuration
-- Multiple API keys per target/device
-- Per-target notification policy for users, groups, service states, and host states
+- Routing for multiple teams and dummy hosts
+- Multiple API keys for the same host or team
+- Notification settings for each host, including users, groups, service states, and host states
 - Dynamic dummy host creation on startup
 - Dynamic service creation in work mode
 - Test mode for service create/delete through webhook
 - JSONL history with query filters
 - Per-host service cache with TTL and cleanup
-- Admin API for listing and deleting services across all targets
+- Admin API for listing and deleting services across all managed hosts
 - LCARS-style beauty panel with admin mode and service management
 - Structured logging and runtime metrics
 - Test environment with Icinga2, Icinga Web 2, Grafana, Prometheus, and synthetic flapping alerts
@@ -256,7 +256,7 @@ The target identifier is derived from the environment variable name:
 - `IAF_TARGET_TEAM_A_*` becomes target ID `team-a`
 - `IAF_TARGET_B_DUMMY_DEVICE_*` becomes target ID `b-dummy-device`
 
-The target ID and the human-visible `SOURCE` are not required to match.
+The target ID and the visible `SOURCE` value do not need to match.
 
 Example:
 
@@ -312,7 +312,7 @@ Practical rules:
 - `API_KEYS` belong to the target, not to the source string
 - `NOTIFICATION_USERS` and `NOTIFICATION_GROUPS` are independent of the webhook sender; they describe who Icinga should notify for that host
 
-Recommended convention:
+A good naming rule:
 
 - keep target ID, `SOURCE`, and host naming close to each other unless you need legacy compatibility
 - treat `SOURCE` as a human-facing audit label
@@ -395,7 +395,7 @@ Legacy rules:
 - all keys route to one shared host
 - `WEBHOOK_KEY_<NAME>` still becomes source name by lowercasing and replacing `_` with `-`
 
-If any `IAF_TARGET_*` variables are present, the new target model is used.
+If any `IAF_TARGET_*` variables are present, the new host routing model is used.
 
 ### Migration From Legacy To Targets
 
@@ -866,9 +866,9 @@ The bridge also stores webhook context on the service:
 
 ### Notification Routing Vars
 
-The bridge does not enforce one notification transport. It only writes routing vars.
+A simple way to think about this is that the bridge does not choose the notification channel. It only writes the routing variables that your Icinga rules can read.
 
-Recommended production pattern:
+Simple production example:
 
 ```icinga2
 apply Notification "sms-service" to Service {
@@ -1071,13 +1071,13 @@ Admin mode adds:
 
 - runtime and process metrics
 - request/auth/security metrics
-- current Icinga service table across all configured targets
+- current Icinga service table across all configured hosts
 - host column in the service table
 - single delete and bulk delete actions
 
 ### Multi-Host Behavior
 
-The panel is aware of multi-target routing:
+The panel reflects the multi-host setup:
 
 - services are aggregated across all managed hosts
 - the service table includes `host`
@@ -1308,7 +1308,7 @@ go vet ./...
 
 ### Focus Areas Covered By Tests
 
-- config parsing for multi-target and legacy mode
+- config parsing for the multi-host setup and the legacy mode
 - API key routing
 - per-host cache behavior
 - webhook routing to different hosts

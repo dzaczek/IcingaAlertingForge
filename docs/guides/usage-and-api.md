@@ -97,6 +97,14 @@ curl -X POST http://localhost:8080/webhook \
 
 In most setups every team sends to the same bridge URL and uses a different API key.
 
+That gives you one physical endpoint and many logical webhook destinations.
+
+In other words:
+
+- the URL stays the same
+- the API key selects the configured target
+- the selected target decides the host, source label, and notification settings
+
 Example:
 
 - Team A uses `authorization_credentials: key-a-1`

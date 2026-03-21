@@ -8,6 +8,33 @@ All configuration comes from environment variables or a local `.env` file. The f
 
 The current model is built around managed dummy hosts. Each configured host gets its own routing rules, its own API keys, and its own notification settings.
 
+## One URL, Many Logical Webhooks
+
+The bridge exposes one physical endpoint:
+
+```text
+POST /webhook
+```
+
+But you can define many logical webhook destinations with environment variables alone.
+
+Each block of variables like:
+
+```env
+IAF_TARGET_TEAM_A_HOST_NAME=a-dummy-dev
+IAF_TARGET_TEAM_A_API_KEYS=key-a-1,key-a-2
+```
+
+creates one logical destination behind the same `/webhook` URL.
+
+That means:
+
+- `/webhook` + `key-a-1` can route to `a-dummy-dev`
+- `/webhook` + `key-a-2` can route to `a-dummy-dev`
+- `/webhook` + another key can route to a different host
+
+So you do not create separate HTTP paths for each team. You keep one URL and let the API key choose the host, source label, and notification settings.
+
 ## Core Settings
 
 | Variable | Required | Default | Description |
@@ -75,6 +102,72 @@ Important details:
 - more than one key can point to the same host
 - one incoming key always resolves to exactly one host
 - `NOTIFICATION_GROUPS` is written into both `groups` and `user_groups`
+
+## How The Dynamic Variables Work
+
+The `IAF_TARGET_<ID>_...` variables are dynamic in the sense that the bridge discovers them at startup by scanning the environment.
+
+Examples:
+
+- `IAF_TARGET_HOME_CRITICAL_HOST_NAME`
+- `IAF_TARGET_HOME_CRITICAL_API_KEYS`
+- `IAF_TARGET_HOME_CRITICAL_NOTIFICATION_HOST_STATES`
+
+From that prefix, the bridge derives:
+
+- target ID: `home-critical`
+- routing block: everything that belongs to `IAF_TARGET_HOME_CRITICAL_*`
+
+This gives you a flexible way to add new logical webhook destinations without changing code:
+
+1. add a new `IAF_TARGET_<ID>_*` block
+2. restart the bridge
+3. use one of that block's API keys in Grafana
+
+No extra route needs to be added in the application.
+
+## How `IAF_TARGET_<ID>_NOTIFICATION_HOST_STATES` Works
+
+Example:
+
+```env
+IAF_TARGET_HOME_CRITICAL_NOTIFICATION_HOST_STATES=down
+```
+
+This is the host notification state filter for one target block.
+
+What the parts mean:
+
+- `IAF_TARGET_` means it belongs to the target based config model
+- `HOME_CRITICAL` is the variable prefix that becomes target ID `home-critical`
+- `NOTIFICATION_HOST_STATES` means host notification states, not service notification states
+- `down` is the value that will be parsed as a comma separated list
+
+You can also write:
+
+```env
+IAF_TARGET_HOME_CRITICAL_NOTIFICATION_HOST_STATES=up,down
+```
+
+What happens internally:
+
+1. the bridge reads the variable at startup
+2. it parses the value as CSV
+3. it stores the result in the target notification config
+4. when it creates the host in Icinga, it writes:
+   `vars.notification.host_states`
+5. it also writes the same values into:
+   `vars.notification.mail.host_states`
+   `vars.notification.sms.host_states`
+
+Important distinction:
+
+- `..._NOTIFICATION_HOST_STATES` controls host notifications
+- `..._NOTIFICATION_SERVICE_STATES` controls service notifications
+
+In practice, alerts coming from Grafana usually become service results in Icinga, so `..._NOTIFICATION_SERVICE_STATES` is the setting you will notice most often.
+
+`..._NOTIFICATION_HOST_STATES` matters when your Icinga host notification rules use `host.vars.notification.host_states`.
 
 ## Naming Rules
 

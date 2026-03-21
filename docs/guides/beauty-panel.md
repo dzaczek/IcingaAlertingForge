@@ -23,6 +23,20 @@ The public panel shows:
 - recent errors
 - cache entries across all managed hosts
 
+Example public views:
+
+Overview:
+
+![Beauty panel overview](../img/beauty-panel-overview.png)
+
+Recent alerts:
+
+![Beauty panel alerts](../img/beauty-panel-alerts.png)
+
+Errors:
+
+![Beauty panel errors](../img/beauty-panel-errors.png)
+
 ## Admin View
 
 Admin mode adds:
@@ -32,6 +46,16 @@ Admin mode adds:
 - the current Icinga service table across all configured hosts
 - a host column in the table
 - single delete and bulk delete actions
+
+Example admin views:
+
+Service management:
+
+![Beauty panel admin services](../img/beauty-panel-admin-services.png)
+
+System metrics:
+
+![Beauty panel admin system](../img/beauty-panel-admin-system.png)
 
 Admin mode uses the same HTTP Basic Auth credentials as the admin API.
 

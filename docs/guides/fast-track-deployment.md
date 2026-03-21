@@ -58,6 +58,7 @@ What this gives you:
 - one API key for Grafana
 - notifications routed through one Icinga group
 - auto creation of the dummy host if it does not exist yet
+- one logical webhook destination behind the shared `/webhook` URL
 
 If you want two separate destinations, add another block:
 
@@ -68,8 +69,15 @@ IAF_TARGET_HOME_WARNING_HOST_DISPLAY=Home Warning Alerts
 IAF_TARGET_HOME_WARNING_API_KEYS=replace-with-second-long-random-key
 IAF_TARGET_HOME_WARNING_NOTIFICATION_GROUPS=mail-admins
 IAF_TARGET_HOME_WARNING_NOTIFICATION_SERVICE_STATES=warning,critical
-IAF_TARGET_HOME_WARNING_HOST_STATES=down
+IAF_TARGET_HOME_WARNING_NOTIFICATION_HOST_STATES=down
 ```
+
+That gives you two logical webhook destinations on the same `/webhook` endpoint.
+
+Example:
+
+- `/webhook` + first key -> `home-critical`
+- `/webhook` + second key -> `home-warning`
 
 ## Run It With Docker
 

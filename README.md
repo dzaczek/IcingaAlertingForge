@@ -1,5 +1,7 @@
 # IcingaAlertForge
 
+![IcingaAlertForge header](docs/img/header.png)
+
 IcingaAlertForge is a small Go service that takes webhook alerts from Grafana and forwards them to Icinga2 as passive checks.
 
 This project started out of a fairly noble kind of laziness. I did not want to migrate everything into one monitoring system, and I did not want Icinga to carry every personal or experimental alert that lives in Grafana at home. Grafana stays flexible. Anyone in the house can create their own alerts there. Icinga stays focused on the handful of things that are truly critical. This bridge is the small piece in the middle that connects the two.

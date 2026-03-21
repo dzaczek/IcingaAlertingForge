@@ -1,5 +1,7 @@
 # Documentation Index
 
+![IcingaAlertForge header](img/header.png)
+
 This folder holds the full documentation for IcingaAlertForge. The top level [README](../README.md) only gives a short project introduction. Everything else lives here.
 
 ## Reading Order

@@ -8,6 +8,14 @@ IcingaAlertForge sits between Grafana and Icinga2.
 
 Grafana is still the place where alerts are easy to create and change. Icinga stays focused on the alerts that are important enough to deserve a place in a stricter monitoring system. The bridge receives webhooks from Grafana, decides which Icinga dummy host should receive them, makes sure the required host or service exists, and then sends passive check results to Icinga2.
 
+This direction matters:
+
+```text
+Grafana -> Icinga2
+```
+
+The bridge does not try to make Icinga the source of truth for those alerts. Grafana remains the source. Icinga is the destination used for presentation, state tracking, and notification handling.
+
 ## Architecture
 
 ```mermaid

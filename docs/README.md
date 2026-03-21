@@ -4,6 +4,14 @@
 
 This folder holds the full documentation for IcingaAlertForge. The top level [README](../README.md) only gives a short project introduction. Everything else lives here.
 
+At its core, IcingaAlertForge is a bridge that moves alerts in one direction:
+
+```text
+Grafana Unified Alerting -> Icinga2
+```
+
+Grafana remains the source of alerts. Icinga becomes the place where those alerts are shown, tracked, and notified.
+
 ## Reading Order
 
 If you are new to the project, this order usually works best:

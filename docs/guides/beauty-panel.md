@@ -14,15 +14,10 @@ The panel is an LCARS-style HTML dashboard. It is not meant to look like a gener
 
 The public panel shows:
 
-- total webhook count
-- error count
-- average duration
-- cached service count
-- mode and severity breakdowns
-- source counters
-- recent alerts
-- recent errors
-- cache entries across all managed hosts
+- **Overview** — total webhook count, error count, average duration, cached service count, mode and severity breakdowns
+- **System** — CPU cores, goroutines, memory usage, GC stats, uptime
+
+Signal Sources, Alerts, Errors, and Services are not visible in the public view.
 
 Example public views:
 
@@ -40,15 +35,17 @@ Errors:
 
 ## Admin View
 
-Admin mode adds:
+Admin mode adds everything from the public view, plus:
 
-- runtime and process metrics
-- request, auth, and security metrics
-- the current Icinga service table across all configured hosts
-- a host column in the table
-<!-- CHANGED: added Dev Panel and service history to admin features -->
-- single delete and bulk delete actions
-- the Dev Panel for live API traffic inspection
+- **Signal Sources** in Overview (source counters with IP details)
+- **Performance Telemetry** in System (total requests, errors, error rate, latency, requests/min)
+- **Alerts** — recent transmissions table
+- **Errors** — recent error details
+- **Services** — cached service tags with status, single and bulk delete
+- **Security** — failed auth counter, brute-force IP detection, recent auth failure log
+- **Icinga Mgmt** — live Icinga2 service table across all configured hosts
+- **Settings** — dashboard-based configuration management (when `CONFIG_IN_DASHBOARD=true`)
+- **Dev Panel** — live API traffic inspector
 - service history popup on service tags
 
 Example admin views:
@@ -63,7 +60,29 @@ System metrics:
 
 Admin mode uses the same HTTP Basic Auth credentials as the admin API.
 
-<!-- CHANGED: added Dev Panel, Service History Popup, SSE, and Info Popup documentation -->
+### Settings Panel
+
+When `CONFIG_IN_DASHBOARD=true`, the Settings section provides full configuration management:
+
+- **Icinga2 Connection** — host URL, user, password, TLS settings, test connection button
+- **Targets & Webhooks** — add/delete targets via LCARS-style popup, reveal/hide API keys, generate new keys, copy keys to clipboard
+- **Admin Credentials** — change admin user and password
+- **History & Cache** — file path, max entries, cache TTL
+- **Logging** — level and format
+- **Rate Limiting** — mutate, status, and queue limits
+- **Export/Import Backup** — full config backup as JSON (includes real secrets), restore from backup file
+
+On first start with `CONFIG_IN_DASHBOARD=true`, the bridge migrates environment variables into a JSON config file stored on the Docker volume. Subsequent starts load from the JSON file. Secrets are encrypted at rest with AES-256-GCM using an auto-generated key.
+
+### Security Panel
+
+The Security section shows:
+
+- **Failed Auth (Total)** — cumulative count of all failed authentication attempts
+- **Brute Force IPs** — IPs with 3+ failed attempts in the last hour, shown in an "Intruder Alert" table
+- **Recent Auth Failures** — last 20 failures with timestamp, IP address, and hashed key prefix
+
+Auth failures are tracked from: webhook API key validation, admin panel login, settings API login, and dashboard admin login.
 
 ### Dev Panel
 
@@ -114,12 +133,15 @@ The panel reflects the current multi-host setup:
 
 The panel uses URL hashes such as:
 
-<!-- CHANGED: added devpanel hash -->
 - `#overview`
-- `#alerts`
-- `#errors`
-- `#icinga`
-- `#devpanel`
+- `#system`
+- `#alerts` (admin)
+- `#errors` (admin)
+- `#services` (admin)
+- `#security` (admin)
+- `#icinga` (admin)
+- `#settings` (admin)
+- `#devpanel` (admin)
 
 The navigation code was simplified to stop the old problem where the panel jumped between sections during refreshes.
 

@@ -64,6 +64,14 @@ func NewAPIClient(baseURL, user, pass string, tlsSkipVerify bool) *APIClient {
 	}
 }
 
+// UpdateCredentials replaces the API client's connection details for hot-reload.
+func (c *APIClient) UpdateCredentials(baseURL, user, pass string, tlsSkipVerify bool) {
+	c.BaseURL = baseURL
+	c.User = user
+	c.Pass = pass
+	c.HTTPClient.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = tlsSkipVerify
+}
+
 // recordDebug stores an API interaction in the debug ring buffer if present.
 func (c *APIClient) recordDebug(method, url string, reqBody []byte, statusCode int, respBody []byte, dur time.Duration, reqErr error) {
 	if c.Debug == nil {

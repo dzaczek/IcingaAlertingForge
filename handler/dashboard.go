@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"crypto/subtle"
 	"bytes"
+	"crypto/subtle"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -27,8 +27,10 @@ type DashboardHandler struct {
 	Targets   map[string]config.TargetConfig
 	AdminUser string
 	AdminPass string
+	Version   string
 	StartedAt time.Time
-	DebugRing *icinga.DebugRing
+	DebugRing         *icinga.DebugRing
+	ConfigInDashboard bool
 }
 
 // ipEntry represents one IP address entry for template display.
@@ -42,6 +44,7 @@ type ipEntry struct {
 type dashboardData struct {
 	GeneratedAt    string
 	Uptime         string
+	Version        string
 	Stats          history.HistoryStats
 	SourceIPs      map[string]map[string]int
 	SourceTopIPs   map[string][]ipEntry // top 10 by count
@@ -49,7 +52,8 @@ type dashboardData struct {
 	CachedServices []cache.CacheEntry
 	RecentAlerts   []dashboardAlert
 	RecentErrors   []dashboardAlert
-	IsAdmin        bool
+	IsAdmin           bool
+	ConfigInDashboard bool
 	IcingaServices []icinga.ServiceInfo
 	HostLabel      string
 	SysStats       metrics.SystemStats
@@ -228,6 +232,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	data := dashboardData{
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
+		Version:        h.Version,
 		Stats:          stats,
 		SourceIPs:      stats.BySourceIP,
 		SourceTopIPs:   sourceTopIPs,
@@ -235,7 +240,8 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CachedServices: h.Cache.AllEntries(),
 		RecentAlerts:   recentAlerts,
 		RecentErrors:   recentErrors,
-		IsAdmin:        isAdmin,
+		IsAdmin:           isAdmin,
+		ConfigInDashboard: h.ConfigInDashboard,
 		IcingaServices: icingaServices,
 		HostLabel:      firstHostName(targetHostNames(h.Targets)),
 		SysStats:       sysStats,
@@ -248,6 +254,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Write(buf.Bytes())
 }
 
@@ -797,6 +804,123 @@ const dashboardHTML = `<!DOCTYPE html>
     font-size: 13px;
   }
 
+  /* ── Add Target Popup ── */
+  .target-popup-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: info-fade-in 0.2s ease;
+  }
+  .target-popup {
+    background: var(--lcars-bg);
+    border: 2px solid var(--lcars-gold);
+    border-radius: 20px;
+    width: 480px;
+    max-width: 92vw;
+    overflow: hidden;
+    animation: info-scale-in 0.2s ease;
+  }
+  .target-popup-header {
+    background: var(--lcars-gold);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-radius: 18px 18px 0 0;
+  }
+  .target-popup-header span {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .target-popup-close {
+    background: none;
+    border: none;
+    color: #000;
+    font-size: 18px;
+    cursor: pointer;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0 4px;
+  }
+  .target-popup-close:hover { opacity: 0.6; }
+  .target-popup-body {
+    padding: 20px 24px;
+  }
+  .target-popup-row {
+    margin-bottom: 14px;
+  }
+  .target-popup-label {
+    display: block;
+    color: var(--lcars-gold);
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .target-popup-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(255,204,153,0.06);
+    border: 1px solid rgba(204,153,0,0.3);
+    border-radius: 8px;
+    color: var(--lcars-text-light);
+    font-family: 'Antonio', sans-serif;
+    font-size: 15px;
+    letter-spacing: 0.5px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .target-popup-input:focus {
+    border-color: var(--lcars-gold);
+    box-shadow: 0 0 8px rgba(204,153,0,0.25);
+  }
+  .target-popup-input::placeholder {
+    color: rgba(255,204,153,0.3);
+  }
+  .target-popup-hint {
+    color: rgba(255,204,153,0.4);
+    font-size: 10px;
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+  }
+  .target-popup-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    padding: 0 24px 20px;
+  }
+  .target-popup-btn {
+    padding: 8px 24px;
+    border: none;
+    border-radius: 20px;
+    font-family: 'Antonio', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .target-popup-btn:hover { opacity: 0.8; }
+  .target-popup-btn.confirm { background: var(--lcars-gold); color: #000; }
+  .target-popup-btn.cancel { background: var(--lcars-critical); color: #000; }
+  .target-popup-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(204,153,0,0.3), transparent);
+    margin: 4px 0 14px;
+  }
+
   .mono { font-family: 'SF Mono', SFMono-Regular, Menlo, monospace; font-size: 12px; }
   .duration { color: var(--lcars-tan); font-size: 11px; }
   .icinga-ok { color: var(--lcars-ok); font-weight: 700; }
@@ -974,6 +1098,131 @@ const dashboardHTML = `<!DOCTYPE html>
     background: radial-gradient(circle at 40% 40%, #ccff99, var(--lcars-ok) 50%, rgba(153,204,102,0.2));
     box-shadow: 0 0 8px 3px rgba(153,204,102,0.5), 0 0 16px 6px rgba(153,204,102,0.2);
   }
+
+  /* -- Settings Panel -- */
+  .settings-section { margin-bottom: 20px; }
+  .settings-section h3 {
+    color: var(--lcars-gold);
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    border-bottom: 2px solid rgba(255,204,153,0.2);
+    padding-bottom: 6px;
+  }
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 8px 16px;
+    align-items: center;
+  }
+  .settings-label {
+    color: var(--lcars-tan);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: right;
+  }
+  .settings-input {
+    background: rgba(255,204,153,0.05);
+    border: 1px solid rgba(255,204,153,0.2);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--lcars-text-light);
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .settings-input:focus {
+    outline: none;
+    border-color: var(--lcars-gold);
+    background: rgba(255,204,153,0.1);
+  }
+  .settings-input[type="checkbox"] {
+    width: auto;
+    accent-color: var(--lcars-gold);
+  }
+  .settings-select {
+    background: rgba(255,204,153,0.05);
+    border: 1px solid rgba(255,204,153,0.2);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--lcars-text-light);
+    font-size: 13px;
+  }
+  .settings-btn {
+    background: var(--lcars-gold);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .settings-btn:hover { filter: brightness(1.2); }
+  .settings-btn.danger { background: var(--lcars-critical); }
+  .settings-btn.blue { background: var(--lcars-blue); }
+  .settings-btn.ok { background: var(--lcars-ok); }
+  .settings-btn.purple { background: var(--lcars-lavender); }
+  .settings-btn-sm {
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+  .settings-target-card {
+    background: rgba(153,153,255,0.05);
+    border: 1px solid rgba(153,153,255,0.15);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .settings-target-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .settings-target-title {
+    color: var(--lcars-blue);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .settings-key-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .settings-key-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .settings-key-value {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    color: var(--lcars-tan);
+    background: rgba(0,0,0,0.3);
+    padding: 3px 8px;
+    border-radius: 4px;
+    flex: 1;
+  }
+  .settings-status {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 12px;
+    display: none;
+  }
+  .settings-status.ok { display: block; background: rgba(153,204,102,0.15); color: var(--lcars-ok); border: 1px solid var(--lcars-ok); }
+  .settings-status.err { display: block; background: rgba(204,102,102,0.15); color: var(--lcars-critical); border: 1px solid var(--lcars-critical); }
 
   /* ── Dev Panel ── */
   .dev-entry {
@@ -1242,7 +1491,7 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="bar-segment bar-seg-4">
         {{if not .IsAdmin}}<a href="?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>
-      <div class="bar-segment bar-seg-5">V1.0</div>
+      <div class="bar-segment bar-seg-5">{{.Version}}</div>
     </div>
   </div>
 
@@ -1252,14 +1501,16 @@ const dashboardHTML = `<!DOCTYPE html>
   <!-- ══════ LEFT SIDEBAR ══════ -->
   <div class="lcars-sidebar">
     <button class="sidebar-btn active" data-section="overview" onclick="showSection('overview', this, true)">Overview <span class="info-trigger" data-info="overview">?</span></button>
+    <button class="sidebar-btn gold" data-section="system" onclick="showSection('system', this, true)">System <span class="info-trigger" data-info="diagnostics">?</span></button>
+    {{if .IsAdmin}}
+    <div class="sidebar-decoration"></div>
     <button class="sidebar-btn tan" data-section="alerts" onclick="showSection('alerts', this, true)">Alerts <span class="info-trigger" data-info="alerts">?</span></button>
     <button class="sidebar-btn purple" data-section="errors" onclick="showSection('errors', this, true)">Errors <span class="info-trigger" data-info="errors">?</span></button>
     <button class="sidebar-btn blue" data-section="services" onclick="showSection('services', this, true)">Services <span class="info-trigger" data-info="services">?</span></button>
-    {{if .IsAdmin}}
     <div class="sidebar-decoration"></div>
-    <button class="sidebar-btn gold" data-section="system" onclick="showSection('system', this, true)">System <span class="info-trigger" data-info="diagnostics">?</span></button>
     <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security <span class="info-trigger" data-info="diagnostics">?</span></button>
     <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt <span class="info-trigger" data-info="management">?</span></button>
+    {{if .ConfigInDashboard}}<button class="sidebar-btn gold" data-section="settings" onclick="showSection('settings', this, true)">Settings <span class="info-trigger" data-info="settings_panel">?</span></button>{{end}}
     <button class="sidebar-btn purple" data-section="devpanel" onclick="showSection('devpanel', this, true)">Dev Panel <span class="info-trigger" data-info="dev_panel">?</span></button>
     {{end}}
     <div class="sidebar-decoration purple"></div>
@@ -1363,7 +1614,8 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
       </div>
 
-      <!-- Sources -->
+      {{if .IsAdmin}}
+      <!-- Sources (admin only — exposes IPs) -->
       <div class="lcars-panel blue">
         <div class="lcars-panel-header">
           <div class="lcars-panel-elbow blue"></div>
@@ -1405,10 +1657,12 @@ const dashboardHTML = `<!DOCTYPE html>
           {{end}}
         </div>
       </div>
+      {{end}}
 
     </div><!-- /overview -->
 
-    <!-- ── ALERTS SECTION ── -->
+    {{if .IsAdmin}}
+    <!-- ── ALERTS SECTION (admin only) ── -->
     <div class="nav-section" id="sec-alerts">
       <div class="lcars-panel tan">
         <div class="lcars-panel-header">
@@ -1528,9 +1782,9 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
       </div>
     </div><!-- /services -->
+    {{end}}
 
-    {{if .IsAdmin}}
-    <!-- ── SYSTEM SECTION ── -->
+    <!-- ── SYSTEM SECTION (public) ── -->
     <div class="nav-section" id="sec-system">
       <div class="lcars-panel gold">
         <div class="lcars-panel-header">
@@ -1574,11 +1828,16 @@ const dashboardHTML = `<!DOCTYPE html>
               <div class="stat-label">GC Pause Total</div>
               <div class="stat-value">{{printf "%.1f" .SysStats.GCPauseTotalMs}} ms</div>
             </div>
+            <div class="stat-cell">
+              <div class="stat-label">Uptime</div>
+              <div class="stat-value" style="font-size:16px;">{{.SysStats.Uptime}}</div>
+            </div>
           </div>
           <div class="scanner-line"></div>
         </div>
       </div>
 
+      {{if .IsAdmin}}
       <div class="lcars-panel">
         <div class="lcars-panel-header">
           <div class="lcars-panel-elbow"></div>
@@ -1609,16 +1868,125 @@ const dashboardHTML = `<!DOCTYPE html>
               <div class="stat-label">Requests/min</div>
               <div class="stat-value blue">{{printf "%.1f" .SysStats.RequestsPerMin}}</div>
             </div>
-            <div class="stat-cell">
-              <div class="stat-label">Uptime</div>
-              <div class="stat-value" style="font-size:16px;">{{.SysStats.Uptime}}</div>
-            </div>
           </div>
         </div>
       </div>
+      {{end}}
     </div><!-- /system -->
 
-    <!-- ── SECURITY SECTION ── -->
+    <!-- -- SETTINGS SECTION -- -->
+    {{if and .IsAdmin .ConfigInDashboard}}
+    <div class="nav-section" id="sec-settings">
+      <div class="lcars-panel gold">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow" style="background:var(--lcars-gold);"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill" style="background:var(--lcars-gold);"></div>
+            <span class="title-text" style="color:var(--lcars-gold);">Configuration Management</span>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div id="settingsStatus" class="settings-status"></div>
+
+          <!-- Icinga2 Connection -->
+          <div class="settings-section">
+            <h3>Icinga2 Connection</h3>
+            <div class="settings-grid">
+              <span class="settings-label">API Host</span>
+              <input type="text" class="settings-input" id="cfg-icinga2-host" placeholder="https://icinga2:5665">
+              <span class="settings-label">API User</span>
+              <input type="text" class="settings-input" id="cfg-icinga2-user" placeholder="apiuser">
+              <span class="settings-label">API Password</span>
+              <input type="password" class="settings-input" id="cfg-icinga2-pass" placeholder="***">
+              <span class="settings-label">TLS Skip Verify</span>
+              <input type="checkbox" class="settings-input" id="cfg-icinga2-tls-skip">
+              <span class="settings-label">Auto-Create Hosts</span>
+              <input type="checkbox" class="settings-input" id="cfg-icinga2-auto-create">
+            </div>
+            <div style="margin-top:10px;">
+              <button class="settings-btn blue settings-btn-sm" onclick="testIcingaConnection()">Test Connection</button>
+              <span id="icingaTestResult" style="margin-left:10px;font-size:12px;"></span>
+            </div>
+          </div>
+
+          <!-- Targets / Webhooks -->
+          <div class="settings-section">
+            <h3>Targets &amp; Webhooks</h3>
+            <div id="settingsTargets"></div>
+            <button class="settings-btn purple settings-btn-sm" onclick="addNewTarget()" style="margin-top:10px;">+ Add Target</button>
+          </div>
+
+          <!-- Admin Credentials -->
+          <div class="settings-section">
+            <h3>Admin Credentials</h3>
+            <div class="settings-grid">
+              <span class="settings-label">Username</span>
+              <input type="text" class="settings-input" id="cfg-admin-user" placeholder="admin">
+              <span class="settings-label">Password</span>
+              <input type="password" class="settings-input" id="cfg-admin-pass" placeholder="***">
+            </div>
+          </div>
+
+          <!-- History & Cache -->
+          <div class="settings-section">
+            <h3>History &amp; Cache</h3>
+            <div class="settings-grid">
+              <span class="settings-label">History File</span>
+              <input type="text" class="settings-input" id="cfg-history-file" placeholder="/var/log/webhook-bridge/history.jsonl">
+              <span class="settings-label">Max Entries</span>
+              <input type="number" class="settings-input" id="cfg-history-max" placeholder="10000">
+              <span class="settings-label">Cache TTL (min)</span>
+              <input type="number" class="settings-input" id="cfg-cache-ttl" placeholder="60">
+            </div>
+          </div>
+
+          <!-- Logging -->
+          <div class="settings-section">
+            <h3>Logging</h3>
+            <div class="settings-grid">
+              <span class="settings-label">Log Level</span>
+              <select class="settings-select settings-input" id="cfg-log-level">
+                <option value="debug">debug</option>
+                <option value="info">info</option>
+                <option value="warn">warn</option>
+                <option value="error">error</option>
+              </select>
+              <span class="settings-label">Log Format</span>
+              <select class="settings-select settings-input" id="cfg-log-format">
+                <option value="json">json</option>
+                <option value="text">text</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Rate Limiting -->
+          <div class="settings-section">
+            <h3>Rate Limiting</h3>
+            <div class="settings-grid">
+              <span class="settings-label">Mutate Max</span>
+              <input type="number" class="settings-input" id="cfg-rl-mutate" placeholder="5">
+              <span class="settings-label">Status Max</span>
+              <input type="number" class="settings-input" id="cfg-rl-status" placeholder="20">
+              <span class="settings-label">Queue Max</span>
+              <input type="number" class="settings-input" id="cfg-rl-queue" placeholder="100">
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <button class="settings-btn ok" onclick="saveSettings()">Save Configuration</button>
+            <button class="settings-btn blue" onclick="exportSettings()">Export Backup</button>
+            <button class="settings-btn purple" onclick="document.getElementById('importFileInput').click()">Import Backup</button>
+            <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="importSettings(this)">
+            <button class="settings-btn" onclick="loadSettings()">Reload</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {{end}}
+
+    {{if .IsAdmin}}
+    <!-- ── SECURITY SECTION (admin only) ── -->
     <div class="nav-section" id="sec-security">
       <div class="lcars-panel red">
         <div class="lcars-panel-header">
@@ -1816,6 +2184,10 @@ function showSection(name, _btn, updateHash) {
   setActiveSidebar(activeName);
   if (updateHash && window.location.hash !== '#' + activeName) {
     window.location.hash = activeName;
+  }
+  if (activeName === 'settings' && !window._settingsLoaded) {
+    window._settingsLoaded = true;
+    loadSettings();
   }
 }
 
@@ -2148,6 +2520,399 @@ function showServiceHistory(service, host) {
   });
 }
 
+// ── Settings Panel ──
+function getAuthHeaders() {
+  var creds = btoa(localStorage.getItem('admin_user') || '' + ':' + (localStorage.getItem('admin_pass') || ''));
+  return { 'Content-Type': 'application/json' };
+}
+
+function settingsShowStatus(msg, isError) {
+  var el = document.getElementById('settingsStatus');
+  if (!el) return;
+  el.className = 'settings-status ' + (isError ? 'err' : 'ok');
+  el.textContent = msg;
+  setTimeout(function() { el.className = 'settings-status'; el.textContent = ''; }, 6000);
+}
+
+function loadSettings() {
+  fetch('/admin/settings', { method: 'GET', credentials: 'include' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(cfg) {
+      document.getElementById('cfg-icinga2-host').value = cfg.icinga2_host || '';
+      document.getElementById('cfg-icinga2-user').value = cfg.icinga2_user || '';
+      document.getElementById('cfg-icinga2-pass').value = '';
+      document.getElementById('cfg-icinga2-pass').placeholder = (cfg.icinga2_pass === '***') ? '(set)' : '(not set)';
+      document.getElementById('cfg-icinga2-tls-skip').checked = !!cfg.icinga2_tls_skip_verify;
+      document.getElementById('cfg-icinga2-auto-create').checked = !!cfg.icinga2_host_auto_create;
+
+      document.getElementById('cfg-admin-user').value = cfg.admin_user || '';
+      document.getElementById('cfg-admin-pass').value = '';
+      document.getElementById('cfg-admin-pass').placeholder = (cfg.admin_pass === '***') ? '(set)' : '(not set)';
+
+      document.getElementById('cfg-history-file').value = cfg.history_file || '';
+      document.getElementById('cfg-history-max').value = cfg.history_max_entries || '';
+      document.getElementById('cfg-cache-ttl').value = cfg.cache_ttl_minutes || '';
+
+      document.getElementById('cfg-log-level').value = cfg.log_level || 'info';
+      document.getElementById('cfg-log-format').value = cfg.log_format || 'json';
+
+      document.getElementById('cfg-rl-mutate').value = cfg.ratelimit_mutate_max || '';
+      document.getElementById('cfg-rl-status').value = cfg.ratelimit_status_max || '';
+      document.getElementById('cfg-rl-queue').value = cfg.ratelimit_max_queue || '';
+
+      if (cfg.targets) {
+        renderTargetCards(cfg.targets);
+      }
+      settingsShowStatus('Configuration loaded', false);
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to load configuration: ' + err.message, true);
+    });
+}
+
+function saveSettings() {
+  var passVal = document.getElementById('cfg-icinga2-pass').value;
+  var adminPassVal = document.getElementById('cfg-admin-pass').value;
+  var payload = {
+    icinga2_host: document.getElementById('cfg-icinga2-host').value,
+    icinga2_user: document.getElementById('cfg-icinga2-user').value,
+    icinga2_tls_skip_verify: document.getElementById('cfg-icinga2-tls-skip').checked,
+    icinga2_host_auto_create: document.getElementById('cfg-icinga2-auto-create').checked,
+    admin_user: document.getElementById('cfg-admin-user').value,
+    history_file: document.getElementById('cfg-history-file').value,
+    history_max_entries: parseInt(document.getElementById('cfg-history-max').value) || 0,
+    cache_ttl_minutes: parseInt(document.getElementById('cfg-cache-ttl').value) || 0,
+    log_level: document.getElementById('cfg-log-level').value,
+    log_format: document.getElementById('cfg-log-format').value,
+    ratelimit_mutate_max: parseInt(document.getElementById('cfg-rl-mutate').value) || 0,
+    ratelimit_status_max: parseInt(document.getElementById('cfg-rl-status').value) || 0,
+    ratelimit_max_queue: parseInt(document.getElementById('cfg-rl-queue').value) || 0
+  };
+  if (passVal) { payload.icinga2_pass = passVal; }
+  if (adminPassVal) { payload.admin_pass = adminPassVal; }
+  fetch('/admin/settings', {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      settingsShowStatus('Configuration saved successfully', false);
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to save configuration: ' + err.message, true);
+    });
+}
+
+function renderTargetCards(targets) {
+  var container = document.getElementById('settingsTargets');
+  if (!container) return;
+  if (!targets || targets.length === 0) {
+    container.innerHTML = '<div style="color:var(--lcars-tan);font-size:12px;opacity:0.6;">No targets configured</div>';
+    return;
+  }
+  var html = '';
+  targets.forEach(function(t) {
+    var safeId = escHtml(t.id || 'unknown');
+    var safeHost = escHtml(t.host_name || '-');
+    html += '<div class="settings-target-card">';
+    html += '<div class="settings-target-header">';
+    html += '<span class="settings-target-title">' + safeId + '</span>';
+    html += '<div><button class="settings-btn blue settings-btn-sm" onclick="generateKey(\'' + encodeURIComponent(t.id) + '\')">Generate Key</button> ';
+    html += '<button class="settings-btn danger settings-btn-sm" onclick="deleteTarget(\'' + encodeURIComponent(t.id) + '\')">Delete</button></div>';
+    html += '</div>';
+    html += '<div class="settings-grid" style="margin-bottom:8px;">';
+    html += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
+    html += '</div>';
+    html += '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+    if (t.api_keys && t.api_keys.length > 0) {
+      t.api_keys.forEach(function(k, idx) {
+        html += '<div class="settings-key-item">';
+        html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
+        html += '<button class="settings-key-copy" title="Copy key" onclick="copyRevealedKey(\'' + encodeURIComponent(t.id) + '\',' + idx + ')">&#x1F4CB;</button>';
+        html += '</div>';
+      });
+      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" onclick="toggleKeys(\'' + encodeURIComponent(t.id) + '\')">Reveal Keys</button>';
+    } else {
+      html += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+function addNewTarget() {
+  var overlay = document.createElement('div');
+  overlay.className = 'target-popup-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+
+  var popup = document.createElement('div');
+  popup.className = 'target-popup';
+  popup.innerHTML = '<div class="target-popup-header"><span>New Target Registration</span><button class="target-popup-close" onclick="this.closest(\'.target-popup-overlay\').remove()">&times;</button></div>'
+    + '<div class="target-popup-body">'
+    + '<div class="target-popup-row"><label class="target-popup-label">Target ID</label><input class="target-popup-input" id="new-target-id" placeholder="e.g. grafana-prod" autocomplete="off" /><div class="target-popup-hint">Unique identifier for this target</div></div>'
+    + '<div class="target-popup-row"><label class="target-popup-label">Source</label><input class="target-popup-input" id="new-target-source" placeholder="Auto-filled from Target ID" autocomplete="off" /><div class="target-popup-hint">Webhook source name (optional, defaults to Target ID)</div></div>'
+    + '<div class="target-popup-divider"></div>'
+    + '<div class="target-popup-row"><label class="target-popup-label">Host Name</label><input class="target-popup-input" id="new-target-host" placeholder="e.g. my-server-01" autocomplete="off" /><div class="target-popup-hint">Host object name registered in Icinga2</div></div>'
+    + '<div class="target-popup-row"><label class="target-popup-label">Display Name</label><input class="target-popup-input" id="new-target-display" placeholder="e.g. My Server 01" autocomplete="off" /><div class="target-popup-hint">Friendly display name (optional)</div></div>'
+    + '</div>'
+    + '<div class="target-popup-actions"><button class="target-popup-btn cancel" onclick="this.closest(\'.target-popup-overlay\').remove()">Cancel</button><button class="target-popup-btn confirm" onclick="submitNewTarget()">Engage</button></div>';
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+  setTimeout(function() { document.getElementById('new-target-id').focus(); }, 100);
+}
+
+function submitNewTarget() {
+  var id = document.getElementById('new-target-id').value.trim();
+  var source = document.getElementById('new-target-source').value.trim();
+  var host = document.getElementById('new-target-host').value.trim();
+  var display = document.getElementById('new-target-display').value.trim();
+
+  if (!id) { document.getElementById('new-target-id').style.borderColor = 'var(--lcars-critical)'; return; }
+  if (!host) { document.getElementById('new-target-host').style.borderColor = 'var(--lcars-critical)'; return; }
+
+  var overlay = document.querySelector('.target-popup-overlay');
+  fetch('/admin/settings/targets', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: id, source: source || id, host_name: host, host_display: display || host, host_address: '127.0.0.1' })
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      if (overlay) overlay.remove();
+      if (res.api_key) {
+        showNewTargetKey(id, res.api_key);
+      } else {
+        settingsShowStatus('Target "' + id + '" registered', false);
+      }
+      loadSettings();
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to add target: ' + err.message, true);
+    });
+}
+
+function showNewTargetKey(targetId, key) {
+  var overlay = document.createElement('div');
+  overlay.className = 'target-popup-overlay';
+
+  var popup = document.createElement('div');
+  popup.className = 'target-popup';
+  popup.innerHTML = '<div class="target-popup-header" style="background:var(--lcars-ok);"><span>Target Registered</span></div>'
+    + '<div class="target-popup-body">'
+    + '<div style="color:var(--lcars-ok);font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Target "' + targetId + '" is online</div>'
+    + '<div class="target-popup-row"><label class="target-popup-label" style="color:var(--lcars-critical);">API Key — Copy Now, Shown Only Once</label>'
+    + '<input class="target-popup-input" id="new-target-key-display" value="' + key + '" readonly style="font-family:monospace;font-size:13px;border-color:var(--lcars-ok);" onclick="this.select();" />'
+    + '</div>'
+    + '</div>'
+    + '<div class="target-popup-actions"><button class="target-popup-btn" style="background:var(--lcars-blue);color:#000;" onclick="copyNewTargetKey()">Copy Key</button><button class="target-popup-btn confirm" onclick="this.closest(\'.target-popup-overlay\').remove()">Dismiss</button></div>';
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
+  setTimeout(function() { document.getElementById('new-target-key-display').select(); }, 100);
+}
+
+function copyNewTargetKey() {
+  var el = document.getElementById('new-target-key-display');
+  if (!el) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(el.value).then(function() {
+      settingsShowStatus('API key copied to clipboard', false);
+    });
+  } else {
+    el.select();
+    document.execCommand('copy');
+    settingsShowStatus('API key copied', false);
+  }
+}
+
+function deleteTarget(id) {
+  if (!confirm('Delete target "' + id + '"? This cannot be undone.')) return;
+  fetch('/admin/settings/targets/' + encodeURIComponent(id), {
+    method: 'DELETE',
+    credentials: 'include'
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      settingsShowStatus('Target "' + id + '" deleted', false);
+      loadSettings();
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to delete target: ' + err.message, true);
+    });
+}
+
+function generateKey(targetId) {
+  fetch('/admin/settings/targets/' + encodeURIComponent(targetId) + '/generate-key', {
+    method: 'POST',
+    credentials: 'include'
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      if (res.api_key) {
+        prompt('New API key (copy it now, shown only once):', res.api_key);
+      }
+      settingsShowStatus('New key generated for "' + targetId + '"', false);
+      loadSettings();
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to generate key: ' + err.message, true);
+    });
+}
+
+var _revealedKeys = {};
+var _keysVisible = {};
+
+function toggleKeys(targetId) {
+  var btn = document.getElementById('reveal-btn-' + targetId);
+  if (_keysVisible[targetId]) {
+    // Hide keys
+    var keys = _revealedKeys[targetId] || [];
+    keys.forEach(function(k, idx) {
+      var el = document.getElementById('key-val-' + targetId + '-' + idx);
+      if (el) { el.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; el.style.fontFamily = ''; el.style.fontSize = ''; el.style.wordBreak = ''; }
+    });
+    _keysVisible[targetId] = false;
+    if (btn) btn.textContent = 'Reveal Keys';
+    return;
+  }
+  // Reveal keys
+  if (_revealedKeys[targetId]) {
+    showKeys(targetId);
+    return;
+  }
+  fetch('/admin/settings/targets/' + encodeURIComponent(targetId) + '/reveal-keys', {
+    method: 'GET',
+    credentials: 'include'
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      _revealedKeys[targetId] = res.api_keys || [];
+      showKeys(targetId);
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to reveal keys: ' + err.message, true);
+    });
+}
+
+function showKeys(targetId) {
+  var btn = document.getElementById('reveal-btn-' + targetId);
+  var keys = _revealedKeys[targetId] || [];
+  keys.forEach(function(key, idx) {
+    var el = document.getElementById('key-val-' + targetId + '-' + idx);
+    if (el) {
+      el.textContent = key;
+      el.style.fontFamily = 'monospace';
+      el.style.fontSize = '11px';
+      el.style.wordBreak = 'break-all';
+    }
+  });
+  _keysVisible[targetId] = true;
+  if (btn) btn.textContent = 'Hide Keys';
+}
+
+function copyRevealedKey(targetId, idx) {
+  var keys = _revealedKeys[targetId];
+  if (!keys || !keys[idx]) {
+    settingsShowStatus('Reveal keys first before copying', true);
+    return;
+  }
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(keys[idx]).then(function() {
+      settingsShowStatus('Key copied to clipboard', false);
+    });
+  } else {
+    prompt('Copy this key:', keys[idx]);
+  }
+}
+
+function testIcingaConnection() {
+  var resultEl = document.getElementById('icingaTestResult');
+  if (resultEl) { resultEl.textContent = 'Testing...'; resultEl.style.color = 'var(--lcars-tan)'; }
+  fetch('/admin/settings/test-icinga', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      host: document.getElementById('cfg-icinga2-host').value,
+      user: document.getElementById('cfg-icinga2-user').value,
+      password: document.getElementById('cfg-icinga2-pass').value
+    })
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      if (resultEl) {
+        var ok = res.status === 'ok';
+        resultEl.textContent = ok ? 'Connection OK — Icinga2 ' + (res.icinga2_version || '') : ('Failed: ' + (res.error || 'unknown'));
+        resultEl.style.color = ok ? 'var(--lcars-ok)' : 'var(--lcars-critical)';
+      }
+    })
+    .catch(function(err) {
+      if (resultEl) {
+        resultEl.textContent = 'Error: ' + err.message;
+        resultEl.style.color = 'var(--lcars-critical)';
+      }
+    });
+}
+
+function importSettings(input) {
+  if (!input.files || !input.files[0]) return;
+  var file = input.files[0];
+  if (!confirm('Import configuration from "' + file.name + '"? This will overwrite the current configuration. Masked secrets (***) will be preserved from the current config.')) {
+    input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var data;
+    try { data = JSON.parse(e.target.result); } catch(err) {
+      settingsShowStatus('Invalid JSON file: ' + err.message, true);
+      input.value = '';
+      return;
+    }
+    fetch('/admin/settings/import', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(res) {
+        if (!res.ok) {
+          settingsShowStatus('Import failed: ' + (res.data.error || 'unknown error'), true);
+        } else {
+          settingsShowStatus('Configuration imported (' + res.data.targets + ' targets)', false);
+          loadSettings();
+        }
+      })
+      .catch(function(err) { settingsShowStatus('Import error: ' + err.message, true); });
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function exportSettings() {
+  fetch('/admin/settings/export', { method: 'GET', credentials: 'include' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+    .then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'icinga-alertforge-config-' + new Date().toISOString().slice(0,10) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      settingsShowStatus('Configuration exported', false);
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to export: ' + err.message, true);
+    });
+}
+
 function doLogout() {
   window.location.href = '/status/beauty/logout';
 }
@@ -2272,6 +3037,7 @@ var lcarsInfo = {
   services: "Service Registry Viewer \u2014 read-only manifest of all Icinga tactical grid endpoints tracked by the bridge relay system. Displays cached service configurations and operational status within the defense grid.",
   diagnostics: "Computer Core Diagnostics \u2014 Level 3 diagnostic readout of bridge relay system internals. Displays computational resource allocation, memory utilization curves, and processing efficiency metrics.",
   management: "Command Operations Console \u2014 Starfleet Command authorization required. Full administrative control over tactical grid service registrations. Access restricted to authorized personnel only.",
+  settings_panel: "Starship Configuration Interface \u2014 modify all bridge subsystems including Icinga tactical grid credentials, subspace relay authentication tokens, and sensor array parameters. Changes are applied in real-time without requiring a full system restart. Use the Export function to create a backup of the current configuration matrix before making modifications.",
   dev_panel: "Subspace Relay Diagnostic Console \u2014 Level 1 engineering interface for monitoring all communications between the bridge relay system and the Icinga tactical defense grid. Displays raw transmission payloads, response telemetry, and chronometric data for each API interaction. Authorized engineering personnel only."
 };
 

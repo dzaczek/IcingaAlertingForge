@@ -3,6 +3,7 @@ package metrics
 import (
 	"crypto/sha256"
 	"fmt"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -84,8 +85,14 @@ func (c *Collector) RecordError() {
 }
 
 // RecordAuthFailure records a failed authentication attempt.
-func (c *Collector) RecordAuthFailure(ip, keyUsed string) {
+func (c *Collector) RecordAuthFailure(remoteAddr, keyUsed string) {
 	c.failedAuthTotal.Add(1)
+
+	// Strip port from remote address (e.g. "172.20.0.1:54321" → "172.20.0.1")
+	ip := remoteAddr
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+		ip = host
+	}
 
 	keyHash := "(empty)"
 	if keyUsed != "" {

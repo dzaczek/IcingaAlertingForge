@@ -75,6 +75,11 @@ type Config struct {
 	RateLimitMutate   int // max concurrent create/delete operations
 	RateLimitStatus   int // max concurrent status update operations
 	RateLimitMaxQueue int // max queued status operations
+
+	// Dashboard config mode
+	ConfigInDashboard   bool   // if true, config is managed via admin panel
+	ConfigEncryptionKey string // AES key for encrypting secrets (auto-generated if empty)
+	ConfigFilePath      string // path to JSON config file
 }
 
 // Load reads the .env file and populates the Config struct.
@@ -120,6 +125,10 @@ func Load() *Config {
 		RateLimitMutate:   getEnvInt("RATELIMIT_MUTATE_MAX", 5),
 		RateLimitStatus:   getEnvInt("RATELIMIT_STATUS_MAX", 20),
 		RateLimitMaxQueue: getEnvInt("RATELIMIT_MAX_QUEUE", 100),
+
+		ConfigInDashboard:   getEnvBool("CONFIG_IN_DASHBOARD", false),
+		ConfigEncryptionKey: getEnvOrDefault("CONFIG_ENCRYPTION_KEY", ""),
+		ConfigFilePath:      getEnvOrDefault("CONFIG_FILE_PATH", "/var/log/webhook-bridge/config.json"),
 	}
 
 	if len(cfg.WebhookRoutes) == 0 {

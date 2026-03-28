@@ -315,6 +315,62 @@ Response:
 {"enabled": true}
 ```
 
+### Settings Endpoints (Dashboard Config Mode)
+
+These endpoints are only available when `CONFIG_IN_DASHBOARD=true`. All require HTTP Basic Auth.
+
+#### `GET /admin/settings`
+
+Returns the full configuration with secrets masked as `***`.
+
+#### `PATCH /admin/settings`
+
+Partially updates the configuration. Only non-empty fields are applied. Password fields with value `***` are ignored (preserving the current value).
+
+```bash
+curl -u admin:secret -X PATCH http://localhost:8080/admin/settings \
+  -H "Content-Type: application/json" \
+  -d '{"log_level": "debug", "cache_ttl_minutes": 15}'
+```
+
+#### `POST /admin/settings/targets`
+
+Adds a new target. Auto-generates a UUID if `id` is empty and an API key if none is provided. Returns the new API key in cleartext (shown only once). Input fields are validated against HTML/script injection.
+
+```bash
+curl -u admin:secret -X POST http://localhost:8080/admin/settings/targets \
+  -H "Content-Type: application/json" \
+  -d '{"id": "team-c", "source": "team-c", "host_name": "c-dummy-dev"}'
+```
+
+#### `DELETE /admin/settings/targets/{id}`
+
+Removes a target and all its API keys.
+
+#### `POST /admin/settings/targets/{id}/generate-key`
+
+Generates a new API key for the target. Returns the key in cleartext (shown only once).
+
+#### `GET /admin/settings/targets/{id}/reveal-keys`
+
+Returns the unmasked API keys for a specific target. Admin-only.
+
+#### `POST /admin/settings/test-icinga`
+
+Tests the Icinga2 connection using stored credentials. Returns connection status and Icinga2 version.
+
+```json
+{"status": "ok", "icinga2_version": "v2.15.2"}
+```
+
+#### `GET /admin/settings/export`
+
+Downloads the full configuration as a JSON backup file. Secrets are included in cleartext for restore purposes.
+
+#### `POST /admin/settings/import`
+
+Restores configuration from a previously exported backup. Validates schema and target structure. If secrets are masked as `***`, current values are preserved.
+
 ### Status Endpoints
 
 #### `GET /status/beauty`

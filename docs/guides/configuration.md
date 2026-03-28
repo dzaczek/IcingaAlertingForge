@@ -4,9 +4,26 @@ Back to the [Documentation Index](../README.md)
 
 ## Overview
 
-All configuration comes from environment variables or a local `.env` file. The full example lives in [`.env.example`](../../.env.example).
+Configuration can come from two sources:
+
+1. **Environment variables** (default) — all settings come from env vars or a `.env` file
+2. **Dashboard mode** — set `CONFIG_IN_DASHBOARD=true` to manage configuration through the Beauty Panel's Settings section
 
 The current model is built around managed dummy hosts. Each configured host gets its own routing rules, its own API keys, and its own notification settings.
+
+## Dashboard Configuration Mode
+
+When `CONFIG_IN_DASHBOARD=true`, the bridge stores configuration in a JSON file on a persistent volume.
+
+| Variable | Default | Description |
+|---|---|---|
+| `CONFIG_IN_DASHBOARD` | `false` | Enable dashboard-based configuration |
+| `CONFIG_ENCRYPTION_KEY` | auto-generated | Encryption key for secrets at rest |
+| `CONFIG_FILE_PATH` | `/var/log/webhook-bridge/config.json` | Path to the JSON config file |
+
+On first start, the bridge performs a one-time migration from environment variables to the JSON file. Subsequent starts load from JSON. Secrets (Icinga2 password, admin password, API keys) are encrypted at rest using AES-256-GCM. An encryption key is auto-generated at `/var/log/webhook-bridge/.config.key` if not provided.
+
+Changes made through the Settings panel are hot-reloaded without restart.
 
 ## One URL, Many Logical Webhooks
 

@@ -101,8 +101,12 @@ flowchart TD
 <!-- CHANGED: added SSE broker, debug ring buffer, and metrics features -->
 - SSE broker for real-time event streaming to the dashboard
 - debug ring buffer for API traffic inspection
-- metrics collector with brute force detection
-<!-- LANG: hyphenation -->
+- metrics collector with brute-force detection
+- security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy)
+- XSS input validation on target creation
+- dashboard-based configuration with AES-256-GCM encrypted secrets at rest
+- config export/import backup with full secret restore
+- hot-reload on configuration changes without restart
 - a ready-to-use lab in `testenv`
 
 ## Requirements

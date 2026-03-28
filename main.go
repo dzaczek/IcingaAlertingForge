@@ -17,6 +17,7 @@ import (
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
+	"icinga-webhook-bridge/configstore"
 	"icinga-webhook-bridge/handler"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
@@ -38,6 +39,35 @@ func main() {
 		"version", version,
 		"listen", cfg.ListenAddr(),
 	)
+
+	// ── Config Store (dashboard-based config) ──────────────────────
+	var cfgStore *configstore.Store
+	if cfg.ConfigInDashboard {
+		var err error
+		cfgStore, err = configstore.New(cfg.ConfigFilePath, cfg.ConfigEncryptionKey)
+		if err != nil {
+			slog.Error("Failed to initialize config store", "error", err)
+			os.Exit(1)
+		}
+		if cfgStore.Exists() {
+			if err := cfgStore.Load(); err != nil {
+				slog.Error("Failed to load stored config", "error", err)
+				os.Exit(1)
+			}
+			// Override runtime config from store (keep server port/host from env)
+			storedCfg := cfgStore.ToConfig(cfg.ServerPort, cfg.ServerHost)
+			storedCfg.ConfigInDashboard = true
+			storedCfg.ConfigEncryptionKey = cfg.ConfigEncryptionKey
+			storedCfg.ConfigFilePath = cfg.ConfigFilePath
+			cfg = storedCfg
+			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
+		} else {
+			if err := cfgStore.MigrateFromEnv(cfg); err != nil {
+				slog.Error("Failed to migrate config to store", "error", err)
+				os.Exit(1)
+			}
+		}
+	}
 
 	// ── Initialize Components ───────────────────────────────────────
 	keyStore := auth.NewKeyStore(cfg.WebhookRoutes)
@@ -125,15 +155,17 @@ func main() {
 	startedAt := time.Now()
 
 	dashboardHandler := &handler.DashboardHandler{
-		Cache:     serviceCache,
-		History:   historyLogger,
-		API:       apiClient,
-		Metrics:   metricsCollector,
-		Targets:   cfg.Targets,
-		AdminUser: cfg.AdminUser,
-		AdminPass: cfg.AdminPass,
-		StartedAt: startedAt,
-		DebugRing: debugRing,
+		Cache:             serviceCache,
+		History:           historyLogger,
+		API:               apiClient,
+		Metrics:           metricsCollector,
+		Targets:           cfg.Targets,
+		AdminUser:         cfg.AdminUser,
+		AdminPass:         cfg.AdminPass,
+		Version:           version,
+		StartedAt:         startedAt,
+		DebugRing:         debugRing,
+		ConfigInDashboard: cfg.ConfigInDashboard,
 	}
 
 	adminHandler := &handler.AdminHandler{
@@ -181,6 +213,65 @@ func main() {
 	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)
 	mux.HandleFunc("/admin/debug/toggle", adminHandler.HandleDebugToggle)
 
+	// Settings endpoints (only when CONFIG_IN_DASHBOARD=true)
+	if cfg.ConfigInDashboard && cfgStore != nil {
+		settingsHandler := &handler.SettingsHandler{
+			Store:   cfgStore,
+			User:    cfg.AdminUser,
+			Pass:    cfg.AdminPass,
+			Metrics: metricsCollector,
+		}
+		settingsHandler.OnReload = func(newCfg *config.Config) {
+			slog.Info("Hot-reloading configuration from dashboard store")
+
+			newKeyStore := auth.NewKeyStore(newCfg.WebhookRoutes)
+			webhookHandler.KeyStore = newKeyStore
+			webhookHandler.Targets = newCfg.Targets
+
+			apiClient.UpdateCredentials(newCfg.Icinga2Host, newCfg.Icinga2User, newCfg.Icinga2Pass, newCfg.Icinga2TLSSkipVerify)
+
+			statusHandler.Targets = newCfg.Targets
+			adminHandler.Targets = newCfg.Targets
+			dashboardHandler.Targets = newCfg.Targets
+			dashboardHandler.AdminUser = newCfg.AdminUser
+			dashboardHandler.AdminPass = newCfg.AdminPass
+			adminHandler.User = newCfg.AdminUser
+			adminHandler.Pass = newCfg.AdminPass
+			settingsHandler.User = newCfg.AdminUser
+			settingsHandler.Pass = newCfg.AdminPass
+
+			slog.Info("Configuration hot-reload complete",
+				"targets", len(newCfg.Targets),
+				"routes", len(newCfg.WebhookRoutes))
+		}
+		mux.HandleFunc("/admin/settings/export", settingsHandler.HandleExportConfig)
+		mux.HandleFunc("/admin/settings/import", settingsHandler.HandleImportConfig)
+		mux.HandleFunc("/admin/settings/test-icinga", settingsHandler.HandleTestIcinga)
+		mux.HandleFunc("/admin/settings/targets/", func(w http.ResponseWriter, r *http.Request) {
+			// Route /admin/settings/targets/{id}/generate-key vs DELETE /admin/settings/targets/{id}
+			if strings.HasSuffix(r.URL.Path, "/generate-key") {
+				settingsHandler.HandleGenerateKey(w, r)
+			} else if strings.HasSuffix(r.URL.Path, "/reveal-keys") {
+				settingsHandler.HandleRevealKeys(w, r)
+			} else if r.Method == http.MethodDelete {
+				settingsHandler.HandleDeleteTarget(w, r)
+			} else {
+				http.NotFound(w, r)
+			}
+		})
+		mux.HandleFunc("/admin/settings/targets", settingsHandler.HandleAddTarget)
+		mux.HandleFunc("/admin/settings", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				settingsHandler.HandleGetSettings(w, r)
+			case http.MethodPatch:
+				settingsHandler.HandlePatchSettings(w, r)
+			default:
+				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			}
+		})
+	}
+
 	// ── Start Server ────────────────────────────────────────────────
 	slog.Info("Routes registered",
 		"endpoints", []string{
@@ -205,9 +296,19 @@ func main() {
 		slog.Warn("ADMIN_PASS not set — admin endpoints and dashboard management will be disabled")
 	}
 
+	// Security headers middleware
+	secureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		mux.ServeHTTP(w, r)
+	})
+
 	server := &http.Server{
 		Addr:              cfg.ListenAddr(),
-		Handler:           mux,
+		Handler:           secureHandler,
 		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 		WriteTimeout:      30 * time.Second,

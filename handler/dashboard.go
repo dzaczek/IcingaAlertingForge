@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"crypto/subtle"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -196,6 +197,16 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	// Force re-authentication: ?reauth=1 always returns 401 to poison browser's
+	// cached Basic Auth with dummy credentials, enabling a fresh login prompt.
+	if r.URL.Query().Get("reauth") == "1" {
+		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusUnauthorized)
+		fmt.Fprint(w, `<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Credentials cleared</h2><p>Redirecting to login...</p></body></html>`)
 		return
 	}
 
@@ -1899,7 +1910,7 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="bar-segment bar-seg-2">{{.Uptime}}</div>
       <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
-        {{if not .IsAdmin}}<a href="?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
+        {{if not .IsAdmin}}<a href="#" onclick="doReauth();return false;" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>
       <div class="bar-segment bar-seg-5">{{.Version}}</div>
     </div>
@@ -3682,15 +3693,24 @@ function rbacDeleteUser(username) {
     .catch(function(err) { settingsShowStatus('Failed to delete user: ' + err.message, true); });
 }
 
-function doLogout() {
-  // Send request with invalid credentials to force browser to clear Basic Auth cache
+function doReauth() {
+  // Poison the browser's Basic Auth cache by sending dummy credentials to an
+  // endpoint that always returns 401. This overwrites the cached credentials.
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/status/beauty/logout', true);
-  xhr.setRequestHeader('Authorization', 'Basic ' + btoa('_logout_:_logout_'));
-  xhr.onreadystatechange = function() {
-    if (xhr.readyState === 4) {
-      window.location.href = '/status/beauty';
-    }
+  xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
+  xhr.onloadend = function() {
+    // Now navigate to admin login — browser has dummy creds, gets 401, shows fresh prompt
+    window.location.href = '/status/beauty?admin=1';
+  };
+  xhr.send();
+}
+
+function doLogout() {
+  // Poison credentials then redirect to viewer mode
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
+  xhr.onloadend = function() {
+    window.location.href = '/status/beauty';
   };
   xhr.send();
 }
@@ -3936,13 +3956,11 @@ function filterTable(tableId, query, countId) {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
     var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/status/beauty/logout', true);
-    xhr.setRequestHeader('Authorization', 'Basic ' + btoa('_logout_:_logout_'));
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState === 4) window.location.href = '/status/beauty';
+    xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
+    xhr.onloadend = function() {
+      window.location.href = '/status/beauty';
     };
     xhr.send();
-    return;
   }
 
   function showWarning() {

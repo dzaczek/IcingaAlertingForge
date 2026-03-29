@@ -71,10 +71,6 @@ type StoredConfig struct {
 	LogLevel  string `json:"log_level"`
 	LogFormat string `json:"log_format"`
 
-	// Admin
-	AdminUser string `json:"admin_user"`
-	AdminPass string `json:"admin_pass"` // encrypted at rest
-
 	// Rate limiting
 	RateLimitMutate   int `json:"ratelimit_mutate_max"`
 	RateLimitStatus   int `json:"ratelimit_status_max"`
@@ -147,12 +143,6 @@ func (s *Store) Load() error {
 			return fmt.Errorf("configstore: decrypt icinga2_pass: %w", err)
 		}
 	}
-	if sc.AdminPass != "" {
-		sc.AdminPass, err = s.decrypt(sc.AdminPass)
-		if err != nil {
-			return fmt.Errorf("configstore: decrypt admin_pass: %w", err)
-		}
-	}
 	for i := range sc.Targets {
 		for j := range sc.Targets[i].APIKeys {
 			sc.Targets[i].APIKeys[j], err = s.decrypt(sc.Targets[i].APIKeys[j])
@@ -198,12 +188,6 @@ func (s *Store) Save() error {
 		sc.Icinga2Pass, err = s.encrypt(sc.Icinga2Pass)
 		if err != nil {
 			return fmt.Errorf("configstore: encrypt icinga2_pass: %w", err)
-		}
-	}
-	if sc.AdminPass != "" {
-		sc.AdminPass, err = s.encrypt(sc.AdminPass)
-		if err != nil {
-			return fmt.Errorf("configstore: encrypt admin_pass: %w", err)
 		}
 	}
 	for i := range sc.Targets {
@@ -322,9 +306,6 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 		LogLevel:  cfg.LogLevel,
 		LogFormat: cfg.LogFormat,
 
-		AdminUser: cfg.AdminUser,
-		AdminPass: cfg.AdminPass,
-
 		RateLimitMutate:   cfg.RateLimitMutate,
 		RateLimitStatus:   cfg.RateLimitStatus,
 		RateLimitMaxQueue: cfg.RateLimitMaxQueue,
@@ -431,8 +412,6 @@ func (s *Store) ToConfig(serverPort, serverHost string) *config.Config {
 		CacheTTLMinutes:       sc.CacheTTLMinutes,
 		LogLevel:              sc.LogLevel,
 		LogFormat:             sc.LogFormat,
-		AdminUser:             sc.AdminUser,
-		AdminPass:             sc.AdminPass,
 		RateLimitMutate:       sc.RateLimitMutate,
 		RateLimitStatus:       sc.RateLimitStatus,
 		RateLimitMaxQueue:     sc.RateLimitMaxQueue,

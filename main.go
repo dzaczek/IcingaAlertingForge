@@ -59,25 +59,26 @@ func main() {
 				slog.Error("Failed to load stored config", "error", err)
 				os.Exit(1)
 			}
-			// Override runtime config from store (keep server port/host from env)
+			// JSON is the source of truth — only infrastructure fields come from env
 			storedCfg := cfgStore.ToConfig(cfg.ServerPort, cfg.ServerHost)
 			storedCfg.ConfigInDashboard = true
 			storedCfg.ConfigEncryptionKey = cfg.ConfigEncryptionKey
 			storedCfg.ConfigFilePath = cfg.ConfigFilePath
-			// Preserve retry queue settings (not stored in dashboard config)
+			// Admin credentials always from env (never stored in JSON)
+			storedCfg.AdminUser = cfg.AdminUser
+			storedCfg.AdminPass = cfg.AdminPass
+			// Enterprise features: use env as defaults, JSON overrides if stored
 			storedCfg.RetryQueueEnabled = cfg.RetryQueueEnabled
 			storedCfg.RetryQueueMaxSize = cfg.RetryQueueMaxSize
 			storedCfg.RetryQueueFilePath = cfg.RetryQueueFilePath
 			storedCfg.RetryQueueRetryBaseSec = cfg.RetryQueueRetryBaseSec
 			storedCfg.RetryQueueRetryMaxSec = cfg.RetryQueueRetryMaxSec
 			storedCfg.RetryQueueCheckInterval = cfg.RetryQueueCheckInterval
-			// Preserve health check settings
 			storedCfg.HealthCheckEnabled = cfg.HealthCheckEnabled
 			storedCfg.HealthCheckIntervalSec = cfg.HealthCheckIntervalSec
 			storedCfg.HealthCheckServiceName = cfg.HealthCheckServiceName
 			storedCfg.HealthCheckTargetHost = cfg.HealthCheckTargetHost
 			storedCfg.HealthCheckRegister = cfg.HealthCheckRegister
-			// Preserve audit log settings
 			storedCfg.AuditLogEnabled = cfg.AuditLogEnabled
 			storedCfg.AuditLogFile = cfg.AuditLogFile
 			storedCfg.AuditLogFormat = cfg.AuditLogFormat

@@ -77,9 +77,6 @@ func maskConfig(sc configstore.StoredConfig) configstore.StoredConfig {
 	if sc.Icinga2Pass != "" {
 		sc.Icinga2Pass = "***"
 	}
-	if sc.AdminPass != "" {
-		sc.AdminPass = "***"
-	}
 	for i := range sc.Targets {
 		for j := range sc.Targets[i].APIKeys {
 			sc.Targets[i].APIKeys[j] = "***"
@@ -152,12 +149,6 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 	}
 	if patch.LogFormat != "" {
 		current.LogFormat = patch.LogFormat
-	}
-	if patch.AdminUser != "" {
-		current.AdminUser = patch.AdminUser
-	}
-	if patch.AdminPass != "" && patch.AdminPass != "***" {
-		current.AdminPass = patch.AdminPass
 	}
 	if patch.RateLimitMutate > 0 {
 		current.RateLimitMutate = patch.RateLimitMutate
@@ -553,9 +544,6 @@ func (h *SettingsHandler) HandleImportConfig(w http.ResponseWriter, r *http.Requ
 	current := h.Store.Get()
 	if importData.Config.Icinga2Pass == "***" || importData.Config.Icinga2Pass == "" {
 		importData.Config.Icinga2Pass = current.Icinga2Pass
-	}
-	if importData.Config.AdminPass == "***" || importData.Config.AdminPass == "" {
-		importData.Config.AdminPass = current.AdminPass
 	}
 	for i := range importData.Config.Targets {
 		for j := range importData.Config.Targets[i].APIKeys {

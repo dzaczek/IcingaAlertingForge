@@ -2482,6 +2482,18 @@ ICINGA2_PASS=your-secure-password</pre>
             <p><span class="about-step-num">4</span> Use this key as the <code>X-API-Key</code> header in your Grafana webhook contact point</p>
             <p>Alternatively, set keys via environment: <code>IAF_TARGET_myid_API_KEYS=key1,key2</code></p>
 
+            <h3>Dashboard Configuration Mode</h3>
+            <p>IcingaAlertForge supports full configuration through the Beauty Panel — no need to edit config files or restart the service.</p>
+            <p>Set the environment variable <code>CONFIG_IN_DASHBOARD=true</code> to enable it. Once active, the <strong>Settings</strong> panel appears in the admin sidebar where you can:</p>
+            <ul>
+              <li>Configure <strong>Icinga2 connection</strong> (host, user, password, TLS settings) — with a <strong>Test Connection</strong> button</li>
+              <li>Manage <strong>webhook targets</strong> — add, remove, generate API keys</li>
+              <li>Change <strong>admin credentials</strong> on the fly</li>
+              <li>Set <strong>logging, history, and cache</strong> parameters</li>
+              <li><strong>Export / Import</strong> full encrypted configuration backup</li>
+            </ul>
+            <p>All changes are applied immediately via hot-reload — no service restart required. Configuration is stored encrypted (AES-256-GCM) on disk.</p>
+
             <h3>Author &amp; Source</h3>
             <p>Created by <span class="about-author">dzaczek</span> — <a class="about-link" href="https://github.com/dzaczek/IcingaAlertingForge" target="_blank" rel="noopener">github.com/dzaczek/IcingaAlertingForge</a></p>
             <p>Licensed under the MIT License.</p>

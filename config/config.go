@@ -76,6 +76,14 @@ type Config struct {
 	RateLimitStatus   int // max concurrent status update operations
 	RateLimitMaxQueue int // max queued status operations
 
+	// Retry queue
+	RetryQueueEnabled       bool
+	RetryQueueMaxSize       int
+	RetryQueueFilePath      string
+	RetryQueueRetryBaseSec  int
+	RetryQueueRetryMaxSec   int
+	RetryQueueCheckInterval int
+
 	// Dashboard config mode
 	ConfigInDashboard   bool   // if true, config is managed via admin panel
 	ConfigEncryptionKey string // AES key for encrypting secrets (auto-generated if empty)
@@ -125,6 +133,13 @@ func Load() *Config {
 		RateLimitMutate:   getEnvInt("RATELIMIT_MUTATE_MAX", 5),
 		RateLimitStatus:   getEnvInt("RATELIMIT_STATUS_MAX", 20),
 		RateLimitMaxQueue: getEnvInt("RATELIMIT_MAX_QUEUE", 100),
+
+		RetryQueueEnabled:       getEnvBool("RETRY_QUEUE_ENABLED", true),
+		RetryQueueMaxSize:       getEnvInt("RETRY_QUEUE_MAX_SIZE", 1000),
+		RetryQueueFilePath:      getEnvOrDefault("RETRY_QUEUE_FILE", "/var/log/webhook-bridge/retry-queue.json"),
+		RetryQueueRetryBaseSec:  getEnvInt("RETRY_QUEUE_RETRY_BASE_SEC", 5),
+		RetryQueueRetryMaxSec:   getEnvInt("RETRY_QUEUE_RETRY_MAX_SEC", 300),
+		RetryQueueCheckInterval: getEnvInt("RETRY_QUEUE_CHECK_INTERVAL_SEC", 10),
 
 		ConfigInDashboard:   getEnvBool("CONFIG_IN_DASHBOARD", false),
 		ConfigEncryptionKey: getEnvOrDefault("CONFIG_ENCRYPTION_KEY", ""),

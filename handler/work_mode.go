@@ -10,6 +10,7 @@ import (
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/models"
+	"icinga-webhook-bridge/queue"
 )
 
 // isAlreadyExistsError checks if an Icinga2 API error indicates the object
@@ -163,10 +164,24 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	durationMs := time.Since(start).Milliseconds()
 	icingaOK := err == nil
 
+	queued := false
 	if err != nil {
 		slog.Error("Failed to send check result to Icinga2",
 			"host", target.HostName, "service", serviceName, "exit_status", exitStatus,
 			"error", err, "request_id", requestID)
+
+		if h.RetryQueue != nil {
+			_ = h.RetryQueue.Enqueue(queue.Item{
+				ID:        fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
+				Host:      target.HostName,
+				Service:   serviceName,
+				ExitStatus: exitStatus,
+				Message:   message,
+				Source:    source,
+				RequestID: requestID,
+			})
+			queued = true
+		}
 	} else {
 		slog.Info("Check result sent to Icinga2",
 			"host", target.HostName, "service", serviceName, "exit_status", exitStatus,
@@ -199,6 +214,9 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 		"exit_status": exitStatus,
 		"label":       exitStatusLabel(exitStatus),
 		"icinga_ok":   icingaOK,
+	}
+	if queued {
+		result["queued"] = true
 	}
 	if errMsg != "" {
 		result["error"] = errMsg

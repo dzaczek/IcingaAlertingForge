@@ -15,6 +15,7 @@ import (
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
+	"icinga-webhook-bridge/queue"
 )
 
 // DashboardHandler serves the GET /status/beauty HTML dashboard
@@ -31,6 +32,7 @@ type DashboardHandler struct {
 	StartedAt time.Time
 	DebugRing         *icinga.DebugRing
 	ConfigInDashboard bool
+	RetryQueue        *queue.Queue
 }
 
 // ipEntry represents one IP address entry for template display.
@@ -57,6 +59,7 @@ type dashboardData struct {
 	IcingaServices []icinga.ServiceInfo
 	HostLabel      string
 	SysStats       metrics.SystemStats
+	QueueStats     *queue.Stats
 }
 
 type dashboardAlert struct {
@@ -249,6 +252,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		IcingaServices: icingaServices,
 		HostLabel:      firstHostName(targetHostNames(h.Targets)),
 		SysStats:       sysStats,
+	}
+
+	if h.RetryQueue != nil {
+		qs := h.RetryQueue.Stats()
+		data.QueueStats = &qs
 	}
 
 	var buf bytes.Buffer
@@ -2217,6 +2225,16 @@ const dashboardHTML = `<!DOCTYPE html>
               <div class="stat-label">Uptime</div>
               <div class="stat-value" style="font-size:16px;">{{.SysStats.Uptime}}</div>
             </div>
+            {{if .QueueStats}}
+            <div class="stat-cell {{if gt .QueueStats.Depth 0}}warning{{end}}">
+              <div class="stat-label">Retry Queue</div>
+              <div class="stat-value {{if gt .QueueStats.Depth 0}}warning{{else}}ok{{end}}">{{.QueueStats.Depth}} / {{.QueueStats.MaxSize}}</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-label">Retried / Dropped</div>
+              <div class="stat-value">{{.QueueStats.TotalRetried}} / {{.QueueStats.TotalDropped}}</div>
+            </div>
+            {{end}}
           </div>
           <div class="scanner-line"></div>
         </div>

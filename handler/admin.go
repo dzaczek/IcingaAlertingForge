@@ -16,6 +16,7 @@ import (
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
+	"icinga-webhook-bridge/queue"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -26,9 +27,10 @@ type AdminHandler struct {
 	History   *history.Logger
 	Metrics   *metrics.Collector
 	DebugRing *icinga.DebugRing
-	Targets   map[string]config.TargetConfig
-	User      string
-	Pass      string
+	Targets    map[string]config.TargetConfig
+	User       string
+	Pass       string
+	RetryQueue *queue.Queue
 }
 
 // checkAuth validates HTTP Basic Auth credentials for admin endpoints.
@@ -454,5 +456,45 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 		"host":        host,
 		"service":     serviceName,
 		"exit_status": body.ExitStatus,
+	})
+}
+
+// HandleQueueStats returns current retry queue statistics.
+// GET /admin/queue
+func (h *AdminHandler) HandleQueueStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.RetryQueue == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.RetryQueue.Stats())
+}
+
+// HandleQueueFlush forces immediate retry of all queued items.
+// POST /admin/queue/flush
+func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.RetryQueue == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		return
+	}
+	processed := h.RetryQueue.Flush()
+	slog.Info("Admin: queue flush", "processed", processed)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "flushed",
+		"processed": processed,
+		"remaining": h.RetryQueue.Depth(),
 	})
 }

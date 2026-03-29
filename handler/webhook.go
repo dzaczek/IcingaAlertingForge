@@ -17,6 +17,7 @@ import (
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
+	"icinga-webhook-bridge/queue"
 )
 
 // WebhookHandler is the main HTTP handler for incoming Grafana webhooks.
@@ -30,8 +31,9 @@ type WebhookHandler struct {
 	Targets   map[string]config.TargetConfig
 	Limiter   *icinga.RateLimiter
 	Metrics   *metrics.Collector
-	SSE       *SSEBroker
-	DebugRing *icinga.DebugRing
+	SSE        *SSEBroker
+	DebugRing  *icinga.DebugRing
+	RetryQueue *queue.Queue
 }
 
 // ServeHTTP handles POST /webhook requests from Grafana.

@@ -23,6 +23,7 @@ import (
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
+	"icinga-webhook-bridge/queue"
 )
 
 // version is set at build time via -ldflags "-X main.version=..."
@@ -60,6 +61,13 @@ func main() {
 			storedCfg.ConfigInDashboard = true
 			storedCfg.ConfigEncryptionKey = cfg.ConfigEncryptionKey
 			storedCfg.ConfigFilePath = cfg.ConfigFilePath
+			// Preserve retry queue settings (not stored in dashboard config)
+			storedCfg.RetryQueueEnabled = cfg.RetryQueueEnabled
+			storedCfg.RetryQueueMaxSize = cfg.RetryQueueMaxSize
+			storedCfg.RetryQueueFilePath = cfg.RetryQueueFilePath
+			storedCfg.RetryQueueRetryBaseSec = cfg.RetryQueueRetryBaseSec
+			storedCfg.RetryQueueRetryMaxSec = cfg.RetryQueueRetryMaxSec
+			storedCfg.RetryQueueCheckInterval = cfg.RetryQueueCheckInterval
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {
@@ -120,6 +128,25 @@ func main() {
 		"queue_max", cfg.RateLimitMaxQueue,
 	)
 
+	// ── Retry Queue ────────────────────────────────────────────────
+	var retryQueue *queue.Queue
+	if cfg.RetryQueueEnabled {
+		retryQueue = queue.New(queue.Config{
+			Enabled:       true,
+			MaxSize:       cfg.RetryQueueMaxSize,
+			FilePath:      cfg.RetryQueueFilePath,
+			RetryBase:     time.Duration(cfg.RetryQueueRetryBaseSec) * time.Second,
+			RetryMax:      time.Duration(cfg.RetryQueueRetryMaxSec) * time.Second,
+			CheckInterval: time.Duration(cfg.RetryQueueCheckInterval) * time.Second,
+		}, apiClient)
+		retryQueue.Start(mainCtx)
+		slog.Info("Retry queue enabled",
+			"max_size", cfg.RetryQueueMaxSize,
+			"retry_base", cfg.RetryQueueRetryBaseSec,
+			"retry_max", cfg.RetryQueueRetryMaxSec,
+		)
+	}
+
 	// ── SSE Broker ─────────────────────────────────────────────────
 	sseBroker := handler.NewSSEBroker()
 
@@ -141,8 +168,9 @@ func main() {
 		Targets:   cfg.Targets,
 		Limiter:   rateLimiter,
 		Metrics:   metricsCollector,
-		SSE:       sseBroker,
-		DebugRing: debugRing,
+		SSE:        sseBroker,
+		DebugRing:  debugRing,
+		RetryQueue: retryQueue,
 	}
 
 	statusHandler := &handler.StatusHandler{
@@ -167,6 +195,7 @@ func main() {
 		StartedAt:         startedAt,
 		DebugRing:         debugRing,
 		ConfigInDashboard: cfg.ConfigInDashboard,
+		RetryQueue:        retryQueue,
 	}
 
 	adminHandler := &handler.AdminHandler{
@@ -176,9 +205,10 @@ func main() {
 		History:   historyLogger,
 		Metrics:   metricsCollector,
 		DebugRing: debugRing,
-		Targets:   cfg.Targets,
-		User:      cfg.AdminUser,
-		Pass:      cfg.AdminPass,
+		Targets:    cfg.Targets,
+		User:       cfg.AdminUser,
+		Pass:       cfg.AdminPass,
+		RetryQueue: retryQueue,
 	}
 
 	// ── Auth Middleware ─────────────────────────────────────────────
@@ -241,6 +271,8 @@ func main() {
 	})
 	mux.HandleFunc("/admin/services", adminHandler.HandleListServices)
 	mux.HandleFunc("/admin/ratelimit", adminHandler.HandleRateLimitStats)
+	mux.HandleFunc("/admin/queue", adminHandler.HandleQueueStats)
+	mux.HandleFunc("/admin/queue/flush", adminHandler.HandleQueueFlush)
 	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)
 	mux.HandleFunc("/admin/debug/toggle", adminHandler.HandleDebugToggle)
 
@@ -367,6 +399,11 @@ func main() {
 		// Stop accepting new connections, drain in-flight requests
 		if err := server.Shutdown(ctx); err != nil {
 			slog.Error("Server shutdown error", "error", err)
+		}
+
+		// Drain retry queue before shutdown
+		if retryQueue != nil {
+			retryQueue.Drain()
 		}
 
 		// Stop history maintenance

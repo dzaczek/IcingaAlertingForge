@@ -67,6 +67,7 @@ type dashboardData struct {
 	CanDeleteService  bool
 	CanChangeStatus   bool
 	CanManageUsers    bool
+	PrimaryAdmin      string
 	ConfigInDashboard bool
 	IcingaServices []icinga.ServiceInfo
 	HostLabel      string
@@ -319,6 +320,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CanDeleteService:  canDeleteService,
 		CanChangeStatus:   canChangeStatus,
 		CanManageUsers:    canManageUsers,
+		PrimaryAdmin:      h.AdminUser,
 		ConfigInDashboard: h.ConfigInDashboard,
 		IcingaServices: icingaServices,
 		HostLabel:      firstHostName(targetHostNames(h.Targets)),
@@ -2461,17 +2463,6 @@ const dashboardHTML = `<!DOCTYPE html>
             <button class="settings-btn purple settings-btn-sm" onclick="addNewTarget()" style="margin-top:10px;">+ Add Target</button>
           </div>
 
-          <!-- Admin Credentials -->
-          <div class="settings-section">
-            <h3>Admin Credentials</h3>
-            <div class="settings-grid">
-              <span class="settings-label">Username</span>
-              <input type="text" class="settings-input" id="cfg-admin-user" placeholder="admin">
-              <span class="settings-label">Password</span>
-              <input type="password" class="settings-input" id="cfg-admin-pass" placeholder="***">
-            </div>
-          </div>
-
           <!-- User Management (RBAC) -->
           <div class="settings-section">
             <h3>User Management (RBAC)</h3>
@@ -2891,6 +2882,7 @@ var _canChangeStatus = {{.CanChangeStatus}};
 var _canDeleteService = {{.CanDeleteService}};
 var _canManageConfig = {{.CanManageConfig}};
 var _canManageUsers = {{.CanManageUsers}};
+var _primaryAdmin = '{{.PrimaryAdmin}}';
 
 function showToast(msg, type) {
   const t = document.getElementById('toast');
@@ -3275,11 +3267,6 @@ function setServiceStatus(host, service, exitStatus, btn) {
 }
 
 // ── Settings Panel ──
-function getAuthHeaders() {
-  var creds = btoa(localStorage.getItem('admin_user') || '' + ':' + (localStorage.getItem('admin_pass') || ''));
-  return { 'Content-Type': 'application/json' };
-}
-
 function settingsShowStatus(msg, isError) {
   var el = document.getElementById('settingsStatus');
   if (!el) return;
@@ -3298,10 +3285,6 @@ function loadSettings() {
       document.getElementById('cfg-icinga2-pass').placeholder = (cfg.icinga2_pass === '***') ? '(set)' : '(not set)';
       document.getElementById('cfg-icinga2-tls-skip').checked = !!cfg.icinga2_tls_skip_verify;
       document.getElementById('cfg-icinga2-auto-create').checked = !!cfg.icinga2_host_auto_create;
-
-      document.getElementById('cfg-admin-user').value = cfg.admin_user || '';
-      document.getElementById('cfg-admin-pass').value = '';
-      document.getElementById('cfg-admin-pass').placeholder = (cfg.admin_pass === '***') ? '(set)' : '(not set)';
 
       document.getElementById('cfg-history-file').value = cfg.history_file || '';
       document.getElementById('cfg-history-max').value = cfg.history_max_entries || '';
@@ -3326,13 +3309,11 @@ function loadSettings() {
 
 function saveSettings() {
   var passVal = document.getElementById('cfg-icinga2-pass').value;
-  var adminPassVal = document.getElementById('cfg-admin-pass').value;
   var payload = {
     icinga2_host: document.getElementById('cfg-icinga2-host').value,
     icinga2_user: document.getElementById('cfg-icinga2-user').value,
     icinga2_tls_skip_verify: document.getElementById('cfg-icinga2-tls-skip').checked,
     icinga2_host_auto_create: document.getElementById('cfg-icinga2-auto-create').checked,
-    admin_user: document.getElementById('cfg-admin-user').value,
     history_file: document.getElementById('cfg-history-file').value,
     history_max_entries: parseInt(document.getElementById('cfg-history-max').value) || 0,
     cache_ttl_minutes: parseInt(document.getElementById('cfg-cache-ttl').value) || 0,
@@ -3343,7 +3324,6 @@ function saveSettings() {
     ratelimit_max_queue: parseInt(document.getElementById('cfg-rl-queue').value) || 0
   };
   if (passVal) { payload.icinga2_pass = passVal; }
-  if (adminPassVal) { payload.admin_pass = adminPassVal; }
   fetch('/admin/settings', {
     method: 'PATCH',
     credentials: 'include',
@@ -3681,9 +3661,11 @@ function rbacLoadUsers() {
       var roleColors = { admin: 'var(--lcars-critical)', operator: 'var(--lcars-warning)', viewer: 'var(--lcars-blue)' };
       tbody.innerHTML = users.map(function(u) {
         var color = roleColors[u.role] || 'var(--lcars-tan)';
-        var delBtn = '<button class="settings-btn settings-btn-sm" style="background:var(--lcars-critical);color:#000;padding:2px 8px;font-size:11px;" onclick="rbacDeleteUser(\'' + u.username + '\')">Delete</button>';
+        var delBtn = (u.username === _primaryAdmin)
+          ? '<span style="font-size:11px;color:var(--lcars-tan);opacity:0.5;">(env)</span>'
+          : '<button class="settings-btn settings-btn-sm" style="background:var(--lcars-critical);color:#000;padding:2px 8px;font-size:11px;" onclick="rbacDeleteUser(\'' + u.username + '\')">Delete</button>';
         return '<tr style="border-bottom:1px solid rgba(204,153,204,0.15);">' +
-          '<td style="padding:6px;color:var(--lcars-peach);font-size:13px;">' + u.username + '</td>' +
+          '<td style="padding:6px;color:var(--lcars-peach);font-size:13px;">' + u.username + (u.username === _primaryAdmin ? ' <span style="font-size:10px;color:var(--lcars-tan);">★ primary</span>' : '') + '</td>' +
           '<td style="padding:6px;"><span style="padding:2px 8px;border-radius:4px;background:' + color + ';color:#000;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + u.role + '</span></td>' +
           '<td style="padding:6px;">' + delBtn + '</td></tr>';
       }).join('');

@@ -189,16 +189,22 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if admin login was requested
-	isAdmin := h.isAdmin(r)
-	if r.URL.Query().Get("admin") == "1" && !isAdmin {
-		user, _, _ := r.BasicAuth()
-		if h.Metrics != nil && user != "" {
-			h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+	// Admin mode requires both ?admin=1 query param AND valid credentials.
+	// Without ?admin=1, the dashboard renders in viewer mode regardless of credentials.
+	wantAdmin := r.URL.Query().Get("admin") == "1"
+	isAdmin := false
+	if wantAdmin {
+		if h.isAdmin(r) {
+			isAdmin = true
+		} else {
+			user, _, _ := r.BasicAuth()
+			if h.Metrics != nil && user != "" {
+				h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+			}
+			w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
-		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
 	}
 
 	stats, err := h.History.Stats()
@@ -1997,10 +2003,16 @@ const dashboardHTML = `<!DOCTYPE html>
             </div>
           </div>
           <div class="scanner-line"></div>
-          <div style="display:flex;gap:20px;font-size:13px;color:var(--lcars-tan);letter-spacing:1px;text-transform:uppercase;">
+          <div style="display:flex;gap:20px;font-size:13px;color:var(--lcars-tan);letter-spacing:1px;text-transform:uppercase;flex-wrap:wrap;">
             <span><span class="status-dot green"></span> Systems Nominal</span>
             <span><span class="status-dot {{if gt .Stats.ErrorCount 0}}red{{else}}green{{end}}"></span> Error Detection</span>
             <span><span class="status-dot orange blink"></span> Monitoring Active</span>
+          </div>
+          <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;font-size:12px;letter-spacing:1px;text-transform:uppercase;">
+            {{if .HealthStatus}}<span style="padding:3px 10px;border-radius:4px;background:{{if .HealthStatus.Healthy}}var(--lcars-ok){{else}}var(--lcars-critical){{end}};color:#000;font-weight:700;">ICINGA2 {{if .HealthStatus.Healthy}}LINK UP{{else}}LINK DOWN{{end}}</span>{{end}}
+            {{if .QueueStats}}<span style="padding:3px 10px;border-radius:4px;background:{{if gt .QueueStats.Depth 0}}var(--lcars-warning){{else}}var(--lcars-blue){{end}};color:#000;font-weight:700;">QUEUE {{.QueueStats.Depth}}/{{.QueueStats.MaxSize}}</span>{{end}}
+            <span style="padding:3px 10px;border-radius:4px;background:{{if .AuditEnabled}}var(--lcars-ok){{else}}rgba(255,204,153,0.3){{end}};color:#000;font-weight:700;">AUDIT {{if .AuditEnabled}}ON{{else}}OFF{{end}}</span>
+            {{if .UserRole}}<span style="padding:3px 10px;border-radius:4px;background:var(--lcars-purple);color:#000;font-weight:700;">RBAC: {{.UserRole}}</span>{{end}}
           </div>
         </div>
       </div>
@@ -3529,7 +3541,16 @@ function exportSettings() {
 }
 
 function doLogout() {
-  window.location.href = '/status/beauty/logout';
+  // Send request with invalid credentials to force browser to clear Basic Auth cache
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/status/beauty/logout', true);
+  xhr.setRequestHeader('Authorization', 'Basic ' + btoa('_logout_:_logout_'));
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      window.location.href = '/status/beauty';
+    }
+  };
+  xhr.send();
 }
 
 // ── Preserve section on auto-refresh ──
@@ -3772,7 +3793,14 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    window.location.href = '/status/beauty/logout';
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/status/beauty/logout', true);
+    xhr.setRequestHeader('Authorization', 'Basic ' + btoa('_logout_:_logout_'));
+    xhr.onreadystatechange = function() {
+      if (xhr.readyState === 4) window.location.href = '/status/beauty';
+    };
+    xhr.send();
+    return;
   }
 
   function showWarning() {

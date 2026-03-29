@@ -62,6 +62,11 @@ type dashboardData struct {
 	RecentAlerts   []dashboardAlert
 	RecentErrors   []dashboardAlert
 	IsAdmin           bool
+	IsOperator        bool
+	CanManageConfig   bool
+	CanDeleteService  bool
+	CanChangeStatus   bool
+	CanManageUsers    bool
 	ConfigInDashboard bool
 	IcingaServices []icinga.ServiceInfo
 	HostLabel      string
@@ -278,6 +283,25 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	sourceTopIPs, sourceLastIPs := buildSourceIPLists(stats)
 
+	// Determine user role and permissions
+	var userRole rbac.Role
+	if isAdmin {
+		authUser, _, _ := r.BasicAuth()
+		isPrimaryAdmin := subtle.ConstantTimeCompare([]byte(authUser), []byte(h.AdminUser)) == 1
+		if isPrimaryAdmin {
+			userRole = rbac.RoleAdmin
+		} else if h.RBAC != nil {
+			if u, ok := h.RBAC.GetUser(authUser); ok {
+				userRole = u.Role
+			}
+		}
+	}
+
+	canManageConfig := userRole == rbac.RoleAdmin
+	canDeleteService := userRole == rbac.RoleAdmin
+	canChangeStatus := userRole == rbac.RoleAdmin || userRole == rbac.RoleOperator
+	canManageUsers := userRole == rbac.RoleAdmin
+
 	data := dashboardData{
 		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:         uptime.String(),
@@ -290,10 +314,16 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		RecentAlerts:   recentAlerts,
 		RecentErrors:   recentErrors,
 		IsAdmin:           isAdmin,
+		IsOperator:        canChangeStatus,
+		CanManageConfig:   canManageConfig,
+		CanDeleteService:  canDeleteService,
+		CanChangeStatus:   canChangeStatus,
+		CanManageUsers:    canManageUsers,
 		ConfigInDashboard: h.ConfigInDashboard,
 		IcingaServices: icingaServices,
 		HostLabel:      firstHostName(targetHostNames(h.Targets)),
 		SysStats:       sysStats,
+		UserRole:       string(userRole),
 	}
 
 	if h.RetryQueue != nil {
@@ -308,16 +338,6 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if h.Audit != nil {
 		data.AuditEnabled = h.Audit.Enabled()
-	}
-
-	if isAdmin && h.RBAC != nil {
-		authUser, _, _ := r.BasicAuth()
-		if u, ok := h.RBAC.GetUser(authUser); ok {
-			data.UserRole = string(u.Role)
-		} else {
-			// Primary admin not in RBAC store — show admin role
-			data.UserRole = "admin"
-		}
 	}
 
 	var buf bytes.Buffer
@@ -1937,7 +1957,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="sidebar-decoration"></div>
     <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security <span class="info-trigger" data-info="diagnostics">?</span></button>
     <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt <span class="info-trigger" data-info="management">?</span></button>
-    {{if .ConfigInDashboard}}<button class="sidebar-btn gold" data-section="settings" onclick="showSection('settings', this, true)">Settings <span class="info-trigger" data-info="settings_panel">?</span></button>{{end}}
+    {{if and .CanManageConfig .ConfigInDashboard}}<button class="sidebar-btn gold" data-section="settings" onclick="showSection('settings', this, true)">Settings <span class="info-trigger" data-info="settings_panel">?</span></button>{{end}}
     <button class="sidebar-btn purple" data-section="devpanel" onclick="showSection('devpanel', this, true)">Dev Panel <span class="info-trigger" data-info="dev_panel">?</span></button>
     {{end}}
     <div class="sidebar-decoration purple"></div>
@@ -1974,7 +1994,7 @@ const dashboardHTML = `<!DOCTYPE html>
               <span class="info-trigger" data-info="history_entries">?</span>
               <div class="stat-label">History Entries</div>
               <div class="stat-value">{{.Stats.TotalEntries}}</div>
-              {{if .IsAdmin}}<button class="btn btn-danger btn-sm" style="margin-top:6px" onclick="clearHistory()">Clear</button> <span class="info-trigger" data-info="clear_history_button" style="position:relative;top:auto;right:auto;display:inline-flex;vertical-align:middle;">?</span>{{end}}
+              {{if .IsOperator}}<button class="btn btn-danger btn-sm" style="margin-top:6px" onclick="clearHistory()">Clear</button> <span class="info-trigger" data-info="clear_history_button" style="position:relative;top:auto;right:auto;display:inline-flex;vertical-align:middle;">?</span>{{end}}
             </div>
             <div class="stat-cell {{if gt .Stats.ErrorCount 0}}critical{{end}}">
               <span class="info-trigger" data-info="errors">?</span>
@@ -2400,7 +2420,7 @@ const dashboardHTML = `<!DOCTYPE html>
     </div><!-- /system -->
 
     <!-- -- SETTINGS SECTION -- -->
-    {{if and .IsAdmin .ConfigInDashboard}}
+    {{if and .CanManageConfig .ConfigInDashboard}}
     <div class="nav-section" id="sec-settings">
       <div class="lcars-panel gold">
         <div class="lcars-panel-header">
@@ -2628,11 +2648,11 @@ const dashboardHTML = `<!DOCTYPE html>
             <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="filterTable('servicesTable', this.value, 'filterIcingaCount')">
             <span class="table-filter-count" id="filterIcingaCount">{{len .IcingaServices}} registered</span>
           </div>
-          <div class="toolbar">
+          {{if .CanDeleteService}}<div class="toolbar">
             <input type="checkbox" id="selectAll" onclick="toggleAll(this)">
             <label for="selectAll">Select All</label>
             <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btnDeleteSelected" disabled>Delete Selected</button>
-          </div>
+          </div>{{end}}
           <table id="servicesTable">
             <thead>
               <tr>
@@ -2649,7 +2669,7 @@ const dashboardHTML = `<!DOCTYPE html>
             <tbody>
               {{range .IcingaServices}}
               <tr data-service="{{.Name}}" data-host="{{.HostName}}">
-                <td class="checkbox-cell"><input type="checkbox" class="svc-check" value="{{.Name}}" data-host="{{.HostName}}"></td>
+                <td class="checkbox-cell">{{if $.CanDeleteService}}<input type="checkbox" class="svc-check" value="{{.Name}}" data-host="{{.HostName}}">{{end}}</td>
                 <td class="mono">{{.HostName}}</td>
                 <td><strong style="cursor:pointer;color:var(--lcars-blue);" onclick="event.stopPropagation();showServiceHistory('{{.Name}}', '{{.HostName}}')">{{.Name}}</strong></td>
                 <td>{{.DisplayName}}</td>
@@ -2665,7 +2685,7 @@ const dashboardHTML = `<!DOCTYPE html>
                 </td>
                 <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{.Output}}">{{.Output}}</td>
                 <td class="mono">{{if .HasCheckResult}}{{.LastCheck.Format "2006-01-02 15:04:05"}}{{else}}-{{end}}</td>
-                <td><button class="btn btn-danger btn-sm" onclick="deleteService(this)">Purge</button></td>
+                <td>{{if $.CanDeleteService}}<button class="btn btn-danger btn-sm" onclick="deleteService(this)">Purge</button>{{end}}</td>
               </tr>
               {{end}}
             </tbody>
@@ -2867,6 +2887,11 @@ function sortTable(colIdx, type, tableEl) {
 }
 
 {{if .IsAdmin}}
+var _canChangeStatus = {{.CanChangeStatus}};
+var _canDeleteService = {{.CanDeleteService}};
+var _canManageConfig = {{.CanManageConfig}};
+var _canManageUsers = {{.CanManageUsers}};
+
 function showToast(msg, type) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -3201,11 +3226,14 @@ function showServiceHistory(service, host) {
   panel.dataset.service = service;
   panel.dataset.host = host || '';
   var title = host ? host + ' / ' + service : service;
-  var statusBtns = '<div class="svc-status-buttons">' +
-    '<button class="svc-status-btn svc-status-btn-ok" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',0,this)">OK</button>' +
-    '<button class="svc-status-btn svc-status-btn-warning" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',1,this)">Warning</button>' +
-    '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
-    '</div><div class="svc-status-result" id="svc-status-result"></div>';
+  var statusBtns = '';
+  if (_canChangeStatus) {
+    statusBtns = '<div class="svc-status-buttons">' +
+      '<button class="svc-status-btn svc-status-btn-ok" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',0,this)">OK</button>' +
+      '<button class="svc-status-btn svc-status-btn-warning" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',1,this)">Warning</button>' +
+      '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
+      '</div><div class="svc-status-result" id="svc-status-result"></div>';
+  }
   panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
     '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +
     statusBtns +

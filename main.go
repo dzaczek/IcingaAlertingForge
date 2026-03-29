@@ -15,15 +15,18 @@ import (
 	"syscall"
 	"time"
 
+	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/configstore"
 	"icinga-webhook-bridge/handler"
+	"icinga-webhook-bridge/health"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/queue"
+	"icinga-webhook-bridge/rbac"
 )
 
 // version is set at build time via -ldflags "-X main.version=..."
@@ -68,6 +71,16 @@ func main() {
 			storedCfg.RetryQueueRetryBaseSec = cfg.RetryQueueRetryBaseSec
 			storedCfg.RetryQueueRetryMaxSec = cfg.RetryQueueRetryMaxSec
 			storedCfg.RetryQueueCheckInterval = cfg.RetryQueueCheckInterval
+			// Preserve health check settings
+			storedCfg.HealthCheckEnabled = cfg.HealthCheckEnabled
+			storedCfg.HealthCheckIntervalSec = cfg.HealthCheckIntervalSec
+			storedCfg.HealthCheckServiceName = cfg.HealthCheckServiceName
+			storedCfg.HealthCheckTargetHost = cfg.HealthCheckTargetHost
+			storedCfg.HealthCheckRegister = cfg.HealthCheckRegister
+			// Preserve audit log settings
+			storedCfg.AuditLogEnabled = cfg.AuditLogEnabled
+			storedCfg.AuditLogFile = cfg.AuditLogFile
+			storedCfg.AuditLogFormat = cfg.AuditLogFormat
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {
@@ -147,6 +160,45 @@ func main() {
 		)
 	}
 
+	// ── Audit Logger ───────────────────────────────────────────────
+	auditLogger, err := audit.New(audit.Config{
+		Enabled: cfg.AuditLogEnabled,
+		File:    cfg.AuditLogFile,
+		Format:  cfg.AuditLogFormat,
+	})
+	if err != nil {
+		slog.Error("Failed to initialize audit logger", "error", err)
+		os.Exit(1)
+	}
+	defer auditLogger.Close()
+
+	// ── Health Checker ─────────────────────────────────────────────
+	var healthChecker *health.Checker
+	if cfg.HealthCheckEnabled {
+		targetHost := cfg.HealthCheckTargetHost
+		if targetHost == "" {
+			// Default to first target host
+			for _, t := range sortedTargets(cfg.Targets) {
+				targetHost = t.HostName
+				break
+			}
+		}
+		healthChecker = health.New(health.Config{
+			Enabled:     true,
+			IntervalSec: cfg.HealthCheckIntervalSec,
+			ServiceName: cfg.HealthCheckServiceName,
+			TargetHost:  targetHost,
+			Register:    cfg.HealthCheckRegister,
+		}, &icingaHealthAdapter{api: apiClient})
+		go healthChecker.Start(mainCtx)
+	}
+
+	// ── RBAC Manager ───────────────────────────────────────────────
+	rbacUsers := []rbac.User{
+		{Username: cfg.AdminUser, Password: cfg.AdminPass, Role: rbac.RoleAdmin},
+	}
+	rbacManager := rbac.New(rbacUsers)
+
 	// ── SSE Broker ─────────────────────────────────────────────────
 	sseBroker := handler.NewSSEBroker()
 
@@ -171,6 +223,7 @@ func main() {
 		SSE:        sseBroker,
 		DebugRing:  debugRing,
 		RetryQueue: retryQueue,
+		Audit:      auditLogger,
 	}
 
 	statusHandler := &handler.StatusHandler{
@@ -196,6 +249,7 @@ func main() {
 		DebugRing:         debugRing,
 		ConfigInDashboard: cfg.ConfigInDashboard,
 		RetryQueue:        retryQueue,
+		HealthChecker:     healthChecker,
 	}
 
 	adminHandler := &handler.AdminHandler{
@@ -209,6 +263,7 @@ func main() {
 		User:       cfg.AdminUser,
 		Pass:       cfg.AdminPass,
 		RetryQueue: retryQueue,
+		RBAC:       rbacManager,
 	}
 
 	// ── Auth Middleware ─────────────────────────────────────────────
@@ -236,10 +291,27 @@ func main() {
 	// ── Register Routes ─────────────────────────────────────────────
 	mux := http.NewServeMux()
 
-	// Health check
+	// Health check (enhanced with Icinga2 connectivity status)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status":"ok","version":"%s"}`, version)
+		resp := map[string]any{
+			"status":  "ok",
+			"version": version,
+		}
+		if healthChecker != nil {
+			hs := healthChecker.GetStatus()
+			resp["icinga_up"] = hs.IcingaUp
+			resp["healthy"] = hs.Healthy
+			resp["last_check"] = hs.LastCheck
+			resp["consecutive_fails"] = hs.ConsecutiveFails
+			if !hs.Healthy {
+				resp["status"] = "degraded"
+			}
+		}
+		if retryQueue != nil {
+			resp["queue_depth"] = retryQueue.Depth()
+		}
+		json.NewEncoder(w).Encode(resp)
 	})
 
 	// Core endpoints
@@ -556,6 +628,27 @@ func sortedTargets(targets map[string]config.TargetConfig) []config.TargetConfig
 	})
 
 	return list
+}
+
+// icingaHealthAdapter adapts icinga.APIClient to the health.IcingaProber interface.
+type icingaHealthAdapter struct {
+	api *icinga.APIClient
+}
+
+func (a *icingaHealthAdapter) GetHostInfo(host string) (health.HostResult, error) {
+	info, err := a.api.GetHostInfo(host)
+	if err != nil {
+		return health.HostResult{}, err
+	}
+	return health.HostResult{Exists: info.Exists}, nil
+}
+
+func (a *icingaHealthAdapter) SendCheckResult(host, service string, exitStatus int, message string) error {
+	return a.api.SendCheckResult(host, service, exitStatus, message)
+}
+
+func (a *icingaHealthAdapter) CreateService(host, name string, labels, annotations map[string]string) error {
+	return a.api.CreateService(host, name, labels, annotations)
 }
 
 // setupLogging configures the global slog logger based on config.

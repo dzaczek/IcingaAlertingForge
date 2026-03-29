@@ -84,6 +84,18 @@ type Config struct {
 	RetryQueueRetryMaxSec   int
 	RetryQueueCheckInterval int
 
+	// Health checker (reverse health monitoring)
+	HealthCheckEnabled     bool
+	HealthCheckIntervalSec int
+	HealthCheckServiceName string
+	HealthCheckTargetHost  string // host to register under (default: first target)
+	HealthCheckRegister    bool   // auto-create service in Icinga2
+
+	// Audit log / SIEM
+	AuditLogEnabled bool
+	AuditLogFile    string
+	AuditLogFormat  string // "json" or "cef"
+
 	// Dashboard config mode
 	ConfigInDashboard   bool   // if true, config is managed via admin panel
 	ConfigEncryptionKey string // AES key for encrypting secrets (auto-generated if empty)
@@ -140,6 +152,16 @@ func Load() *Config {
 		RetryQueueRetryBaseSec:  getEnvInt("RETRY_QUEUE_RETRY_BASE_SEC", 5),
 		RetryQueueRetryMaxSec:   getEnvInt("RETRY_QUEUE_RETRY_MAX_SEC", 300),
 		RetryQueueCheckInterval: getEnvInt("RETRY_QUEUE_CHECK_INTERVAL_SEC", 10),
+
+		HealthCheckEnabled:     getEnvBool("HEALTH_CHECK_ENABLED", true),
+		HealthCheckIntervalSec: getEnvInt("HEALTH_CHECK_INTERVAL_SEC", 60),
+		HealthCheckServiceName: getEnvOrDefault("HEALTH_CHECK_SERVICE_NAME", "IcingaAlertForge-Health"),
+		HealthCheckTargetHost:  getEnvOrDefault("HEALTH_CHECK_TARGET_HOST", ""),
+		HealthCheckRegister:    getEnvBool("HEALTH_CHECK_REGISTER", true),
+
+		AuditLogEnabled: getEnvBool("AUDIT_LOG_ENABLED", false),
+		AuditLogFile:    getEnvOrDefault("AUDIT_LOG_FILE", "/var/log/webhook-bridge/audit.log"),
+		AuditLogFormat:  getEnvOrDefault("AUDIT_LOG_FORMAT", "json"),
 
 		ConfigInDashboard:   getEnvBool("CONFIG_IN_DASHBOARD", false),
 		ConfigEncryptionKey: getEnvOrDefault("CONFIG_ENCRYPTION_KEY", ""),

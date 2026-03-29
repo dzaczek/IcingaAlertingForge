@@ -11,6 +11,7 @@ import (
 
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
+	"icinga-webhook-bridge/health"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
@@ -33,6 +34,7 @@ type DashboardHandler struct {
 	DebugRing         *icinga.DebugRing
 	ConfigInDashboard bool
 	RetryQueue        *queue.Queue
+	HealthChecker     *health.Checker
 }
 
 // ipEntry represents one IP address entry for template display.
@@ -60,6 +62,7 @@ type dashboardData struct {
 	HostLabel      string
 	SysStats       metrics.SystemStats
 	QueueStats     *queue.Stats
+	HealthStatus   *health.Status
 }
 
 type dashboardAlert struct {
@@ -257,6 +260,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.RetryQueue != nil {
 		qs := h.RetryQueue.Stats()
 		data.QueueStats = &qs
+	}
+
+	if h.HealthChecker != nil {
+		hs := h.HealthChecker.GetStatus()
+		data.HealthStatus = &hs
 	}
 
 	var buf bytes.Buffer
@@ -2233,6 +2241,12 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="stat-cell">
               <div class="stat-label">Retried / Dropped</div>
               <div class="stat-value">{{.QueueStats.TotalRetried}} / {{.QueueStats.TotalDropped}}</div>
+            </div>
+            {{end}}
+            {{if .HealthStatus}}
+            <div class="stat-cell {{if not .HealthStatus.Healthy}}critical{{end}}">
+              <div class="stat-label">Icinga2 Link</div>
+              <div class="stat-value {{if .HealthStatus.Healthy}}ok{{else}}critical{{end}}">{{if .HealthStatus.Healthy}}UP{{else}}DOWN ({{.HealthStatus.ConsecutiveFails}}){{end}}</div>
             </div>
             {{end}}
           </div>

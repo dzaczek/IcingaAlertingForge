@@ -7,6 +7,7 @@ package rbac
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"log/slog"
 	"sync"
 )
@@ -79,8 +80,10 @@ type User struct {
 
 // Manager handles user authentication and authorization.
 type Manager struct {
-	mu    sync.RWMutex
-	users map[string]User
+	mu      sync.RWMutex
+	users   map[string]User
+	primary string       // env-based primary admin username (cannot be deleted)
+	onSave  func() error // optional persistence callback
 }
 
 // New creates a new RBAC manager with the given users.
@@ -92,6 +95,33 @@ func New(users []User) *Manager {
 		m.users[u.Username] = u
 	}
 	return m
+}
+
+// SetPrimary marks a username as the env-based primary admin (cannot be deleted).
+func (m *Manager) SetPrimary(username string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.primary = username
+}
+
+// SetOnSave sets the persistence callback called after user mutations.
+func (m *Manager) SetOnSave(fn func() error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onSave = fn
+}
+
+// PersistableUsers returns all non-primary users for storage.
+func (m *Manager) PersistableUsers() []User {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []User
+	for _, u := range m.users {
+		if u.Username != m.primary {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // Authenticate validates username/password and returns the user if valid.
@@ -160,24 +190,41 @@ func (m *Manager) ListUsers() []User {
 	return users
 }
 
-// AddUser adds or updates a user.
-func (m *Manager) AddUser(user User) {
+// AddUser adds or updates a user and persists the change.
+func (m *Manager) AddUser(user User) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.users[user.Username] = user
+	onSave := m.onSave
+	m.mu.Unlock()
 	slog.Info("RBAC: user added/updated", "username", user.Username, "role", user.Role)
+	if onSave != nil {
+		return onSave()
+	}
+	return nil
 }
 
-// RemoveUser removes a user by username.
-func (m *Manager) RemoveUser(username string) bool {
+// RemoveUser removes a user by username. Returns false if user not found.
+// The primary admin (from env) cannot be deleted.
+func (m *Manager) RemoveUser(username string) (bool, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	if username == m.primary {
+		m.mu.Unlock()
+		return false, fmt.Errorf("cannot delete primary admin user")
+	}
 	if _, ok := m.users[username]; !ok {
-		return false
+		m.mu.Unlock()
+		return false, nil
 	}
 	delete(m.users, username)
+	onSave := m.onSave
+	m.mu.Unlock()
 	slog.Info("RBAC: user removed", "username", username)
-	return true
+	if onSave != nil {
+		if err := onSave(); err != nil {
+			return true, err
+		}
+	}
+	return true, nil
 }
 
 // ParseRole converts a string to a Role, defaulting to viewer.

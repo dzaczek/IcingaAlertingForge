@@ -197,7 +197,34 @@ func main() {
 	rbacUsers := []rbac.User{
 		{Username: cfg.AdminUser, Password: cfg.AdminPass, Role: rbac.RoleAdmin},
 	}
+	// Restore persisted RBAC users from configstore
+	if cfgStore != nil {
+		for _, su := range cfgStore.GetUsers() {
+			rbacUsers = append(rbacUsers, rbac.User{
+				Username: su.Username,
+				Password: su.Password,
+				Role:     rbac.ParseRole(su.Role),
+			})
+		}
+		slog.Info("RBAC: loaded persisted users", "count", len(cfgStore.GetUsers()))
+	}
 	rbacManager := rbac.New(rbacUsers)
+	rbacManager.SetPrimary(cfg.AdminUser)
+	// Wire persistence: save non-primary users to configstore on every mutation
+	if cfgStore != nil {
+		rbacManager.SetOnSave(func() error {
+			users := rbacManager.PersistableUsers()
+			stored := make([]configstore.StoredUser, len(users))
+			for i, u := range users {
+				stored[i] = configstore.StoredUser{
+					Username: u.Username,
+					Password: u.Password,
+					Role:     string(u.Role),
+				}
+			}
+			return cfgStore.SetUsers(stored)
+		})
+	}
 
 	// ── SSE Broker ─────────────────────────────────────────────────
 	sseBroker := handler.NewSSEBroker()

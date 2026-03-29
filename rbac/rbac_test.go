@@ -98,7 +98,9 @@ func TestHasPermission(t *testing.T) {
 func TestAddRemoveUser(t *testing.T) {
 	m := New(nil)
 
-	m.AddUser(User{Username: "new-user", Password: "pass", Role: RoleViewer})
+	if err := m.AddUser(User{Username: "new-user", Password: "pass", Role: RoleViewer}); err != nil {
+		t.Fatalf("AddUser failed: %v", err)
+	}
 
 	user, ok := m.GetUser("new-user")
 	if !ok {
@@ -112,18 +114,62 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 
 	// Update role
-	m.AddUser(User{Username: "new-user", Password: "pass2", Role: RoleAdmin})
+	if err := m.AddUser(User{Username: "new-user", Password: "pass2", Role: RoleAdmin}); err != nil {
+		t.Fatalf("AddUser update failed: %v", err)
+	}
 	user, _ = m.GetUser("new-user")
 	if user.Role != RoleAdmin {
 		t.Errorf("expected admin role after update, got %s", user.Role)
 	}
 
 	// Remove
-	if !m.RemoveUser("new-user") {
+	removed, err := m.RemoveUser("new-user")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !removed {
 		t.Error("expected successful removal")
 	}
-	if m.RemoveUser("new-user") {
+	removed, _ = m.RemoveUser("new-user")
+	if removed {
 		t.Error("expected false for non-existent user")
+	}
+}
+
+func TestPrimaryCannotBeDeleted(t *testing.T) {
+	m := New([]User{
+		{Username: "admin", Password: "pass", Role: RoleAdmin},
+		{Username: "op", Password: "pass", Role: RoleOperator},
+	})
+	m.SetPrimary("admin")
+
+	_, err := m.RemoveUser("admin")
+	if err == nil {
+		t.Error("expected error when deleting primary admin")
+	}
+
+	removed, err := m.RemoveUser("op")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !removed {
+		t.Error("expected successful removal of non-primary user")
+	}
+}
+
+func TestPersistableUsers(t *testing.T) {
+	m := New([]User{
+		{Username: "admin", Password: "pass", Role: RoleAdmin},
+		{Username: "viewer1", Password: "pass", Role: RoleViewer},
+	})
+	m.SetPrimary("admin")
+
+	users := m.PersistableUsers()
+	if len(users) != 1 {
+		t.Fatalf("expected 1 persistable user, got %d", len(users))
+	}
+	if users[0].Username != "viewer1" {
+		t.Errorf("expected viewer1, got %s", users[0].Username)
 	}
 }
 

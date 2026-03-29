@@ -613,11 +613,15 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	role := rbac.ParseRole(body.Role)
-	h.RBAC.AddUser(rbac.User{
+	if err := h.RBAC.AddUser(rbac.User{
 		Username: body.Username,
 		Password: body.Password,
 		Role:     role,
-	})
+	}); err != nil {
+		slog.Error("RBAC: failed to persist user", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save user"})
+		return
+	}
 
 	actor, _, _ := r.BasicAuth()
 	slog.Info("RBAC: user created/updated via admin API", "actor", actor, "target_user", body.Username, "role", role)
@@ -661,7 +665,12 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if !h.RBAC.RemoveUser(username) {
+	removed, err := h.RBAC.RemoveUser(username)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if !removed {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 		return
 	}

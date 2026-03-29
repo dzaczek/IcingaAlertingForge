@@ -37,6 +37,13 @@ type TargetStore struct {
 	NotificationHstStates []string `json:"notification_host_states,omitempty"`
 }
 
+// StoredUser represents a persisted RBAC user with encrypted password.
+type StoredUser struct {
+	Username string `json:"username"`
+	Password string `json:"password"` // encrypted at rest
+	Role     string `json:"role"`
+}
+
 // StoredConfig is the JSON-serializable configuration document.
 type StoredConfig struct {
 	Version   int       `json:"version"`
@@ -72,6 +79,9 @@ type StoredConfig struct {
 	RateLimitMutate   int `json:"ratelimit_mutate_max"`
 	RateLimitStatus   int `json:"ratelimit_status_max"`
 	RateLimitMaxQueue int `json:"ratelimit_max_queue"`
+
+	// RBAC users (passwords encrypted at rest)
+	Users []StoredUser `json:"users,omitempty"`
 }
 
 // Store provides thread-safe persistent configuration storage.
@@ -152,6 +162,15 @@ func (s *Store) Load() error {
 		}
 	}
 
+	for i := range sc.Users {
+		if sc.Users[i].Password != "" {
+			sc.Users[i].Password, err = s.decrypt(sc.Users[i].Password)
+			if err != nil {
+				return fmt.Errorf("configstore: decrypt user %s password: %w", sc.Users[i].Username, err)
+			}
+		}
+	}
+
 	s.current = &sc
 	return nil
 }
@@ -167,6 +186,8 @@ func (s *Store) Save() error {
 		sc.Targets[i].APIKeys = make([]string, len(t.APIKeys))
 		copy(sc.Targets[i].APIKeys, t.APIKeys)
 	}
+	sc.Users = make([]StoredUser, len(s.current.Users))
+	copy(sc.Users, s.current.Users)
 	s.mu.RUnlock()
 
 	sc.UpdatedAt = time.Now().UTC()
@@ -190,6 +211,14 @@ func (s *Store) Save() error {
 			sc.Targets[i].APIKeys[j], err = s.encrypt(sc.Targets[i].APIKeys[j])
 			if err != nil {
 				return fmt.Errorf("configstore: encrypt api_key: %w", err)
+			}
+		}
+	}
+	for i := range sc.Users {
+		if sc.Users[i].Password != "" {
+			sc.Users[i].Password, err = s.encrypt(sc.Users[i].Password)
+			if err != nil {
+				return fmt.Errorf("configstore: encrypt user %s password: %w", sc.Users[i].Username, err)
 			}
 		}
 	}
@@ -230,7 +259,32 @@ func (s *Store) Get() StoredConfig {
 		cp.Targets[i].NotificationSvcStates = append([]string(nil), t.NotificationSvcStates...)
 		cp.Targets[i].NotificationHstStates = append([]string(nil), t.NotificationHstStates...)
 	}
+	cp.Users = make([]StoredUser, len(s.current.Users))
+	copy(cp.Users, s.current.Users)
 	return cp
+}
+
+// SetUsers replaces the stored RBAC users list and saves to disk.
+func (s *Store) SetUsers(users []StoredUser) error {
+	s.mu.Lock()
+	if s.current == nil {
+		s.current = &StoredConfig{Version: 1, CreatedAt: time.Now().UTC()}
+	}
+	s.current.Users = users
+	s.mu.Unlock()
+	return s.Save()
+}
+
+// GetUsers returns a copy of the stored RBAC users.
+func (s *Store) GetUsers() []StoredUser {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.current == nil {
+		return nil
+	}
+	users := make([]StoredUser, len(s.current.Users))
+	copy(users, s.current.Users)
+	return users
 }
 
 // Update replaces the stored config and saves to disk.

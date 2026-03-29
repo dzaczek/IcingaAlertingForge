@@ -131,7 +131,7 @@ func toDashboardAlert(e models.HistoryEntry) dashboardAlert {
 	}
 }
 
-// isAdmin checks if the request has valid admin credentials.
+// isAdmin checks if the request has valid credentials (primary admin or RBAC user).
 func (h *DashboardHandler) isAdmin(r *http.Request) bool {
 	if h.AdminPass == "" {
 		return false
@@ -140,9 +140,19 @@ func (h *DashboardHandler) isAdmin(r *http.Request) bool {
 	if !ok {
 		return false
 	}
+	// Check primary admin credentials
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.AdminUser)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.AdminPass)) == 1
-	return userOK && passOK
+	if userOK && passOK {
+		return true
+	}
+	// Check RBAC users
+	if h.RBAC != nil {
+		if _, authenticated := h.RBAC.Authenticate(user, pass); authenticated {
+			return true
+		}
+	}
+	return false
 }
 
 // buildSourceIPLists creates Top 10 (by count) and Last 10 (by time) IP lists per source.
@@ -284,8 +294,12 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isAdmin && h.RBAC != nil {
-		if user, ok := h.RBAC.GetUser(h.AdminUser); ok {
-			data.UserRole = string(user.Role)
+		authUser, _, _ := r.BasicAuth()
+		if u, ok := h.RBAC.GetUser(authUser); ok {
+			data.UserRole = string(u.Role)
+		} else {
+			// Primary admin not in RBAC store — show admin role
+			data.UserRole = "admin"
 		}
 	}
 
@@ -2421,6 +2435,34 @@ const dashboardHTML = `<!DOCTYPE html>
             </div>
           </div>
 
+          <!-- User Management (RBAC) -->
+          <div class="settings-section">
+            <h3>User Management (RBAC)</h3>
+            <p style="font-size:12px;color:var(--lcars-tan);margin-bottom:10px;">Manage dashboard users with role-based access: <strong>viewer</strong> (read-only), <strong>operator</strong> (status changes, queue flush), <strong>admin</strong> (full access).</p>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:10px;" id="rbacUsersTable">
+              <thead>
+                <tr style="border-bottom:1px solid var(--lcars-purple);text-align:left;">
+                  <th style="padding:6px;color:var(--lcars-purple);font-size:12px;letter-spacing:1px;">USERNAME</th>
+                  <th style="padding:6px;color:var(--lcars-purple);font-size:12px;letter-spacing:1px;">ROLE</th>
+                  <th style="padding:6px;color:var(--lcars-purple);font-size:12px;letter-spacing:1px;">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody id="rbacUsersBody">
+                <tr><td colspan="3" style="padding:10px;color:var(--lcars-tan);font-size:12px;">Loading...</td></tr>
+              </tbody>
+            </table>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;">
+              <input type="text" class="settings-input" id="rbac-new-user" placeholder="Username" style="width:140px;">
+              <input type="password" class="settings-input" id="rbac-new-pass" placeholder="Password" style="width:140px;">
+              <select class="settings-select settings-input" id="rbac-new-role" style="width:120px;">
+                <option value="viewer">viewer</option>
+                <option value="operator">operator</option>
+                <option value="admin">admin</option>
+              </select>
+              <button class="settings-btn purple settings-btn-sm" onclick="rbacAddUser()">+ Add User</button>
+            </div>
+          </div>
+
           <!-- History & Cache -->
           <div class="settings-section">
             <h3>History &amp; Cache</h3>
@@ -2770,6 +2812,7 @@ function showSection(name, _btn, updateHash) {
   if (activeName === 'settings' && !window._settingsLoaded) {
     window._settingsLoaded = true;
     loadSettings();
+    rbacLoadUsers();
   }
 }
 
@@ -3577,6 +3620,66 @@ function exportSettings() {
     .catch(function(err) {
       settingsShowStatus('Failed to export: ' + err.message, true);
     });
+}
+
+// ── RBAC User Management ──
+function rbacLoadUsers() {
+  fetch('/admin/users', { method: 'GET', credentials: 'include' })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(users) {
+      var tbody = document.getElementById('rbacUsersBody');
+      if (!tbody) return;
+      if (!Array.isArray(users) || users.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding:10px;color:var(--lcars-tan);font-size:12px;">No users configured</td></tr>';
+        return;
+      }
+      var roleColors = { admin: 'var(--lcars-critical)', operator: 'var(--lcars-warning)', viewer: 'var(--lcars-blue)' };
+      tbody.innerHTML = users.map(function(u) {
+        var color = roleColors[u.role] || 'var(--lcars-tan)';
+        var delBtn = '<button class="settings-btn settings-btn-sm" style="background:var(--lcars-critical);color:#000;padding:2px 8px;font-size:11px;" onclick="rbacDeleteUser(\'' + u.username + '\')">Delete</button>';
+        return '<tr style="border-bottom:1px solid rgba(204,153,204,0.15);">' +
+          '<td style="padding:6px;color:var(--lcars-peach);font-size:13px;">' + u.username + '</td>' +
+          '<td style="padding:6px;"><span style="padding:2px 8px;border-radius:4px;background:' + color + ';color:#000;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + u.role + '</span></td>' +
+          '<td style="padding:6px;">' + delBtn + '</td></tr>';
+      }).join('');
+    })
+    .catch(function(err) {
+      var tbody = document.getElementById('rbacUsersBody');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="padding:10px;color:var(--lcars-critical);font-size:12px;">Failed to load users: ' + err.message + '</td></tr>';
+    });
+}
+
+function rbacAddUser() {
+  var username = document.getElementById('rbac-new-user').value.trim();
+  var password = document.getElementById('rbac-new-pass').value;
+  var role = document.getElementById('rbac-new-role').value;
+  if (!username || !password) { alert('Username and password required'); return; }
+  fetch('/admin/users', {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: username, password: password, role: role })
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function() {
+      document.getElementById('rbac-new-user').value = '';
+      document.getElementById('rbac-new-pass').value = '';
+      settingsShowStatus('User "' + username + '" added with role: ' + role, false);
+      rbacLoadUsers();
+    })
+    .catch(function(err) { settingsShowStatus('Failed to add user: ' + err.message, true); });
+}
+
+function rbacDeleteUser(username) {
+  if (!confirm('Delete user "' + username + '"?')) return;
+  fetch('/admin/users/' + encodeURIComponent(username), {
+    method: 'DELETE', credentials: 'include'
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function() {
+      settingsShowStatus('User "' + username + '" deleted', false);
+      rbacLoadUsers();
+    })
+    .catch(function(err) { settingsShowStatus('Failed to delete user: ' + err.message, true); });
 }
 
 function doLogout() {

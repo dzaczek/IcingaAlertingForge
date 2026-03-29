@@ -36,24 +36,40 @@ type AdminHandler struct {
 }
 
 // checkAuth validates HTTP Basic Auth credentials for admin endpoints.
+// Checks against both the primary admin credentials and RBAC users.
 func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if h.Pass == "" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
 		return false
 	}
 	user, pass, ok := r.BasicAuth()
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
-	if !ok || !userOK || !passOK {
-		if h.Metrics != nil {
-			h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
-		}
-		slog.Warn("Admin auth failed", "remote_addr", r.RemoteAddr, "user", user)
+	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false
 	}
-	return true
+
+	// Check primary admin credentials
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
+	if userOK && passOK {
+		return true
+	}
+
+	// Check RBAC users
+	if h.RBAC != nil {
+		if _, authenticated := h.RBAC.Authenticate(user, pass); authenticated {
+			return true
+		}
+	}
+
+	if h.Metrics != nil {
+		h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+	}
+	slog.Warn("Admin auth failed", "remote_addr", r.RemoteAddr, "user", user)
+	w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	return false
 }
 
 type adminServiceRef struct {
@@ -498,5 +514,123 @@ func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) 
 		"status":    "flushed",
 		"processed": processed,
 		"remaining": h.RetryQueue.Depth(),
+	})
+}
+
+// HandleListUsers returns all RBAC users (without passwords).
+// GET /admin/users
+func (h *AdminHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		return
+	}
+	// Only admin role can list users
+	user, _, _ := r.BasicAuth()
+	if !h.RBAC.HasPermission(user, rbac.PermManageUsers) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+		return
+	}
+	writeJSON(w, http.StatusOK, h.RBAC.ListUsers())
+}
+
+// HandleCreateUser adds or updates an RBAC user.
+// POST /admin/users
+func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		return
+	}
+	user, _, _ := r.BasicAuth()
+	if !h.RBAC.HasPermission(user, rbac.PermManageUsers) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+		return
+	}
+
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	if body.Username == "" || body.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
+		return
+	}
+
+	role := rbac.ParseRole(body.Role)
+	h.RBAC.AddUser(rbac.User{
+		Username: body.Username,
+		Password: body.Password,
+		Role:     role,
+	})
+
+	slog.Info("RBAC: user created/updated via admin API", "actor", user, "target_user", body.Username, "role", role)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":   "ok",
+		"username": body.Username,
+		"role":     role,
+	})
+}
+
+// HandleDeleteUser removes an RBAC user.
+// DELETE /admin/users/{username}
+func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		return
+	}
+	actor, _, _ := r.BasicAuth()
+	if !h.RBAC.HasPermission(actor, rbac.PermManageUsers) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+		return
+	}
+
+	// Extract username from path: /admin/users/{username}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/admin/users/"), "/")
+	username := parts[0]
+	if username == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
+		return
+	}
+
+	// Prevent self-deletion
+	if username == actor {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete your own account"})
+		return
+	}
+
+	if !h.RBAC.RemoveUser(username) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		return
+	}
+
+	slog.Info("RBAC: user deleted via admin API", "actor", actor, "target_user", username)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":   "deleted",
+		"username": username,
 	})
 }

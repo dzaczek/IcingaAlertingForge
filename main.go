@@ -276,9 +276,20 @@ func main() {
 				return
 			}
 			user, pass, ok := r.BasicAuth()
-			if !ok ||
-				subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) != 1 ||
-				subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) != 1 {
+			if !ok {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			// Check primary admin
+			primaryOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) == 1 &&
+				subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) == 1
+			// Check RBAC users
+			rbacOK := false
+			if !primaryOK && rbacManager != nil {
+				_, rbacOK = rbacManager.Authenticate(user, pass)
+			}
+			if !primaryOK && !rbacOK {
 				if metricsCollector != nil && user != "" {
 					metricsCollector.RecordAuthFailure(r.RemoteAddr, user)
 				}
@@ -347,6 +358,17 @@ func main() {
 	mux.HandleFunc("/admin/ratelimit", adminHandler.HandleRateLimitStats)
 	mux.HandleFunc("/admin/queue", adminHandler.HandleQueueStats)
 	mux.HandleFunc("/admin/queue/flush", adminHandler.HandleQueueFlush)
+	mux.HandleFunc("/admin/users/", adminHandler.HandleDeleteUser)
+	mux.HandleFunc("/admin/users", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			adminHandler.HandleListUsers(w, r)
+		case http.MethodPost:
+			adminHandler.HandleCreateUser(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
 	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)
 	mux.HandleFunc("/admin/debug/toggle", adminHandler.HandleDebugToggle)
 

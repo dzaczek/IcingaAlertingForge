@@ -1,6 +1,6 @@
 # IcingaAlertForge
 
-![IcingaAlertForge header](docs/img/header.png)
+![IcingaAlertForge header](docs/header.png)
 
 IcingaAlertForge is a small Go service that takes webhook alerts from Grafana and forwards them to Icinga2 as passive checks.
 

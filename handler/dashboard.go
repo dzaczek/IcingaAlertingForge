@@ -972,6 +972,88 @@ const dashboardHTML = `<!DOCTYPE html>
     min-height: 18px;
   }
 
+  /* ── About Section ── */
+  .about-section { padding: 10px 0; }
+  .about-section h3 {
+    color: var(--lcars-gold);
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin: 20px 0 10px 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,168,0,0.25);
+  }
+  .about-section h3:first-child { margin-top: 0; }
+  .about-section p, .about-section li {
+    color: var(--lcars-text);
+    font-size: 13px;
+    line-height: 1.7;
+    letter-spacing: 0.5px;
+  }
+  .about-section ul { padding-left: 20px; margin: 6px 0; }
+  .about-section li { margin: 4px 0; }
+  .about-section code {
+    background: rgba(153,204,255,0.08);
+    border: 1px solid rgba(153,204,255,0.15);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    color: var(--lcars-blue);
+    font-family: 'Okuda','Antonio',monospace;
+  }
+  .about-section pre {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(153,204,255,0.15);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-size: 12px;
+    color: var(--lcars-blue);
+    overflow-x: auto;
+    line-height: 1.6;
+    margin: 8px 0;
+  }
+  .about-logo {
+    color: var(--lcars-gold);
+    font-size: 28px;
+    letter-spacing: 4px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .about-version {
+    color: var(--lcars-tan);
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-top: 2px;
+  }
+  .about-author {
+    color: var(--lcars-purple);
+    font-weight: 700;
+  }
+  .about-link {
+    color: var(--lcars-blue);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(153,204,255,0.3);
+  }
+  .about-link:hover { color: var(--lcars-orange); border-color: var(--lcars-orange); }
+  .about-step-num {
+    display: inline-block;
+    background: var(--lcars-gold);
+    color: #000;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 20px;
+    margin-right: 6px;
+  }
+  .foot-2 a {
+    color: var(--lcars-blue);
+    text-decoration: none;
+  }
+  .foot-2 a:hover { color: var(--lcars-orange); }
+
   /* ── Add Target Popup ── */
   .target-popup-overlay {
     position: fixed;
@@ -1684,6 +1766,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="sidebar-decoration purple"></div>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-decoration blue"></div>
+    <button class="sidebar-btn" data-section="about" onclick="showSection('about', this, true)">About</button>
     <button class="sidebar-btn tan" style="font-size:11px;padding:8px 10px;">Auto-Refresh 30s</button>
   </div>
 
@@ -2334,6 +2417,79 @@ const dashboardHTML = `<!DOCTYPE html>
     </div><!-- /devpanel -->
     {{end}}
 
+    <!-- ── ABOUT SECTION ── -->
+    <div class="nav-section" id="sec-about">
+      <div class="lcars-panel gold">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow gold"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill" style="background:var(--lcars-gold);"></div>
+            <span class="title-text" style="color:var(--lcars-gold);">About IcingaAlertForge</span>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div class="about-section">
+            <div class="about-logo">IcingaAlertForge</div>
+            <div class="about-version">Version {{.Version}} // Grafana &gt; Webhook Bridge &gt; Icinga2</div>
+
+            <p>IcingaAlertForge is a lightweight webhook bridge that receives alert notifications from <strong>Grafana</strong> (or any compatible source) and translates them into passive check results for <strong>Icinga2</strong>. It enables seamless integration between modern alerting pipelines and enterprise monitoring infrastructure.</p>
+
+            <h3>Key Features</h3>
+            <ul>
+              <li>Multi-target webhook routing with API key authentication</li>
+              <li>Automatic Icinga2 host and service creation</li>
+              <li>Real-time LCARS dashboard with SSE streaming</li>
+              <li>Manual service status control (OK / WARNING / CRITICAL)</li>
+              <li>Encrypted configuration store with dashboard management</li>
+              <li>Rate limiting, brute-force detection, security headers</li>
+              <li>Full audit history with JSONL logging and export</li>
+            </ul>
+
+            <h3>Grafana Setup - Step by Step</h3>
+            <p><span class="about-step-num">1</span> In Grafana, go to <strong>Alerting &gt; Contact Points</strong></p>
+            <p><span class="about-step-num">2</span> Click <strong>New Contact Point</strong>, select type <strong>Webhook</strong></p>
+            <p><span class="about-step-num">3</span> Set the URL to your IcingaAlertForge instance:</p>
+            <pre>http://your-host:8080/webhook</pre>
+            <p><span class="about-step-num">4</span> In <strong>Optional Webhook Settings</strong>, add HTTP header:</p>
+            <pre>X-API-Key: your-api-key-here</pre>
+            <p><span class="about-step-num">5</span> Click <strong>Test</strong> to send a test notification, then <strong>Save</strong></p>
+            <p><span class="about-step-num">6</span> Go to <strong>Alerting &gt; Notification Policies</strong> and route desired alerts to your new contact point</p>
+
+            <h3>Icinga2 Setup - API User</h3>
+            <p><span class="about-step-num">1</span> Create an API user in <code>/etc/icinga2/conf.d/api-users.conf</code>:</p>
+            <pre>object ApiUser "icinga-alertforge" {
+  password = "your-secure-password"
+  permissions = [
+    "actions/process-check-result",
+    "objects/query/Host",
+    "objects/query/Service",
+    "objects/create/Host",
+    "objects/create/Service",
+    "objects/delete/Service",
+    "status/query"
+  ]
+}</pre>
+            <p><span class="about-step-num">2</span> Restart Icinga2: <code>systemctl restart icinga2</code></p>
+            <p><span class="about-step-num">3</span> Configure the connection in IcingaAlertForge Settings panel or via environment variables:</p>
+            <pre>ICINGA2_HOST=https://your-icinga:5665
+ICINGA2_USER=icinga-alertforge
+ICINGA2_PASS=your-secure-password</pre>
+
+            <h3>Adding an API Key</h3>
+            <p><span class="about-step-num">1</span> Open the <strong>Settings</strong> panel in the dashboard (requires admin access)</p>
+            <p><span class="about-step-num">2</span> In the <strong>Targets</strong> section, add a new target or select an existing one</p>
+            <p><span class="about-step-num">3</span> Click <strong>Generate Key</strong> — copy the key immediately (it will be masked after)</p>
+            <p><span class="about-step-num">4</span> Use this key as the <code>X-API-Key</code> header in your Grafana webhook contact point</p>
+            <p>Alternatively, set keys via environment: <code>IAF_TARGET_myid_API_KEYS=key1,key2</code></p>
+
+            <h3>Author &amp; Source</h3>
+            <p>Created by <span class="about-author">dzaczek</span> — <a class="about-link" href="https://github.com/dzaczek/IcingaAlertingForge" target="_blank" rel="noopener">github.com/dzaczek/IcingaAlertingForge</a></p>
+            <p>Licensed under the MIT License.</p>
+          </div>
+        </div>
+      </div>
+    </div><!-- /about -->
+
   </div><!-- /lcars-content -->
 
   <!-- ══════ FOOTER BAR ══════ -->
@@ -2341,7 +2497,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="lcars-footer-cap"></div>
     <div class="lcars-footer-bar">
       <div class="foot-1">IcingaAlertForge // Grafana > Webhook Bridge > Icinga2</div>
-      <div class="foot-2"></div>
+      <div class="foot-2">dzaczek &copy; 2026 // <a href="https://github.com/dzaczek/IcingaAlertingForge" target="_blank" rel="noopener">GitHub</a></div>
       <div class="foot-3"></div>
       <div class="foot-4"></div>
     </div>
@@ -2436,6 +2592,7 @@ function deleteService(btn) {
 
   fetch('/admin/services/' + encodeURIComponent(name) + '?host=' + encodeURIComponent(host), {
     method: 'DELETE',
+    credentials: 'include',
   }).then(r => r.json()).then(data => {
     if (data.status === 'deleted') {
       showToast('Purged: ' + host + ' / ' + name, 'success');
@@ -2483,6 +2640,7 @@ function deleteSelected() {
 
   fetch('/admin/services/bulk-delete', {
     method: 'POST',
+    credentials: 'include',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({services}),
   }).then(r => r.json()).then(data => {
@@ -2522,6 +2680,7 @@ function devToggle() {
   var newState = !devEnabled;
   fetch('/admin/debug/toggle', {
     method: 'POST',
+    credentials: 'include',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({enabled: newState})
   }).then(function(r) { return r.json(); }).then(function(data) {
@@ -2646,7 +2805,7 @@ function escHtml(s) {
 }
 
 // Check initial debug state from server
-fetch('/admin/debug/toggle').then(function(r) { return r.json(); }).then(function(data) {
+fetch('/admin/debug/toggle', { credentials: 'include' }).then(function(r) { return r.json(); }).then(function(data) {
   devEnabled = data.enabled;
   devUpdateButtons();
 }).catch(function() {});

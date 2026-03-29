@@ -92,6 +92,10 @@ func toDashboardAlert(e models.HistoryEntry) dashboardAlert {
 		statusLabel = "TEST"
 		statusClass = "test"
 	}
+	if e.Mode == "manual" {
+		statusLabel = statusLabel + " [MANUAL]"
+		statusClass = statusClass + " manual"
+	}
 	if !e.IcingaOK || e.Error != "" {
 		statusClass = "error"
 	}
@@ -692,6 +696,62 @@ const dashboardHTML = `<!DOCTYPE html>
   .service-tag.pending { background: rgba(255,153,0,0.1); border-color: var(--lcars-warning); color: var(--lcars-warning); }
   .service-tag.pending_delete { background: rgba(204,102,102,0.1); border-color: var(--lcars-critical); color: var(--lcars-critical); }
 
+  /* ── Service Registry Table ── */
+  .svc-registry-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .svc-registry-table thead th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--lcars-blue);
+    border-bottom: 2px solid var(--lcars-blue);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .svc-registry-table thead th:hover { color: var(--lcars-orange); }
+  .svc-registry-table thead th .sort-arrow { margin-left: 4px; font-size: 10px; }
+  .svc-registry-table tbody td {
+    padding: 6px 12px;
+    border-bottom: 1px solid rgba(153,204,255,0.08);
+    vertical-align: middle;
+  }
+  .svc-registry-table tbody tr { cursor: pointer; transition: background 0.15s; }
+  .svc-registry-table tbody tr:hover { background: rgba(153,204,255,0.08); }
+  .svc-registry-table tbody tr:last-child td { border-bottom: none; }
+  .svc-registry-table .svc-host-cell { color: var(--lcars-tan); font-family: 'Okuda','Antonio',monospace; font-size: 12px; }
+  .svc-registry-table .svc-name-cell { color: var(--lcars-blue); font-weight: 700; letter-spacing: 1px; }
+  .svc-registry-table .svc-state-badge {
+    display: inline-block;
+    padding: 2px 12px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    border: 1px solid;
+  }
+  .svc-state-badge.ready { background: rgba(153,204,102,0.15); border-color: var(--lcars-ok); color: var(--lcars-ok); }
+  .svc-state-badge.pending { background: rgba(255,153,0,0.15); border-color: var(--lcars-warning); color: var(--lcars-warning); }
+  .svc-state-badge.pending_delete { background: rgba(204,102,102,0.15); border-color: var(--lcars-critical); color: var(--lcars-critical); }
+  .svc-registry-count {
+    text-align: right;
+    padding: 8px 12px 0 0;
+    color: var(--lcars-tan);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .svc-host-divider td {
+    padding: 10px 12px 4px 12px;
+    color: var(--lcars-gold);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border-bottom: 1px solid rgba(255,168,0,0.3);
+  }
+
   .empty-state { padding: 24px; text-align: center; color: var(--lcars-tan); font-size: 14px; letter-spacing: 1px; }
 
   /* ── Service History Popup ── */
@@ -708,10 +768,11 @@ const dashboardHTML = `<!DOCTYPE html>
     background: var(--lcars-bg);
     border: 2px solid var(--lcars-blue);
     border-radius: 16px;
-    width: 600px;
-    max-width: 90vw;
-    max-height: 80vh;
-    overflow-y: auto;
+    width: 720px;
+    max-width: 92vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
     padding: 0;
   }
   .svc-history-header {
@@ -745,6 +806,60 @@ const dashboardHTML = `<!DOCTYPE html>
   .svc-history-close:hover { opacity: 0.8; }
   .svc-history-body {
     padding: 16px 20px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+  .svc-history-body-title {
+    color: var(--lcars-tan);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-weight: 700;
+    padding: 0 0 8px 0;
+    border-bottom: 1px solid rgba(255,168,0,0.2);
+    margin-bottom: 6px;
+  }
+  /* ── Service Detail Block ── */
+  .svc-detail-block {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(153,204,255,0.15);
+    flex-shrink: 0;
+  }
+  .svc-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 20px;
+  }
+  .svc-detail-item {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+  .svc-detail-label {
+    color: var(--lcars-tan);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    min-width: 80px;
+  }
+  .svc-detail-value {
+    color: var(--lcars-blue);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    word-break: break-word;
+  }
+  .svc-detail-value.ok { color: var(--lcars-ok); }
+  .svc-detail-value.warning { color: var(--lcars-warning); }
+  .svc-detail-value.critical { color: var(--lcars-critical); }
+  .svc-detail-value.unknown { color: var(--lcars-purple); }
+  .svc-detail-loading {
+    color: var(--lcars-blue);
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 8px 0;
   }
   .svc-history-row {
     display: flex;
@@ -772,6 +887,23 @@ const dashboardHTML = `<!DOCTYPE html>
   .svc-history-action-resolved { background: var(--lcars-ok); color: #000; }
   .svc-history-action-create { background: var(--lcars-blue); color: #000; }
   .svc-history-action-delete { background: var(--lcars-warning); color: #000; }
+  .svc-history-action-status_change { background: var(--lcars-purple); color: #fff; }
+  .svc-history-manual {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--lcars-purple);
+    border: 1px solid var(--lcars-purple);
+    border-radius: 6px;
+    padding: 1px 6px;
+    margin-left: 4px;
+  }
+  .badge.manual { border: 2px solid var(--lcars-purple); }
+  .alerts-manual-tag {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--lcars-purple);
+    font-weight: 700;
+  }
   .svc-history-msg {
     color: var(--lcars-text-light);
     font-size: 12px;
@@ -802,6 +934,42 @@ const dashboardHTML = `<!DOCTYPE html>
     color: var(--lcars-blue);
     padding: 20px;
     font-size: 13px;
+  }
+
+  /* ── Service Status Buttons ── */
+  .svc-status-buttons {
+    display: flex;
+    gap: 8px;
+    padding: 12px 0 4px 0;
+    border-top: 1px solid rgba(255,168,0,0.2);
+    margin-top: 10px;
+    justify-content: center;
+  }
+  .svc-status-btn {
+    font-family: 'Okuda', 'Antonio', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 22px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    color: #000;
+    font-weight: 700;
+  }
+  .svc-status-btn:hover { opacity: 0.85; transform: scale(1.04); }
+  .svc-status-btn:active { transform: scale(0.96); }
+  .svc-status-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .svc-status-btn-ok { background: var(--lcars-ok); }
+  .svc-status-btn-warning { background: var(--lcars-warning); }
+  .svc-status-btn-critical { background: var(--lcars-critical); }
+  .svc-status-result {
+    text-align: center;
+    font-size: 12px;
+    letter-spacing: 1px;
+    padding: 6px 0 0 0;
+    min-height: 18px;
   }
 
   /* ── Add Target Popup ── */
@@ -1694,7 +1862,7 @@ const dashboardHTML = `<!DOCTYPE html>
               <tr>
                 <td class="mono">{{.Timestamp}}</td>
                 <td><span class="badge {{.StatusClass}}">{{.StatusLabel}}</span></td>
-                <td>{{.Mode}}</td>
+                <td>{{.Mode}}{{if eq .Mode "manual"}} <span class="alerts-manual-tag">ADMIN</span>{{end}}</td>
                 <td>{{.Action}}</td>
                 <td class="mono">{{if .HostName}}{{.HostName}}{{else}}-{{end}}</td>
                 <td><strong>{{.ServiceName}}</strong></td>
@@ -1771,11 +1939,30 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
-          <div class="tag-list">
-            {{range .CachedServices}}
-            <span class="service-tag {{.State}}" onclick="showServiceHistory('{{.Service}}', '{{.Host}}')" style="cursor:pointer;">{{if .Host}}{{.Host}} / {{end}}{{.Service}} ({{.State}})</span>
-            {{end}}
-          </div>
+          <div class="svc-registry-count">{{len .CachedServices}} registered service{{if ne (len .CachedServices) 1}}s{{end}}</div>
+          <table class="svc-registry-table" id="svcRegistryTable">
+            <thead>
+              <tr>
+                <th onclick="sortTable(0,'string',this.closest('table'))">Host <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(1,'string',this.closest('table'))">Service Designation <span class="sort-arrow"></span></th>
+                <th onclick="sortTable(2,'string',this.closest('table'))">State <span class="sort-arrow"></span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {{$prevHost := ""}}
+              {{range .CachedServices}}
+              {{if and .Host (ne .Host $prevHost)}}
+              <tr class="svc-host-divider"><td colspan="3">{{.Host}}</td></tr>
+              {{end}}
+              <tr onclick="showServiceHistory('{{.Service}}', '{{.Host}}')">
+                <td class="svc-host-cell">{{if .Host}}{{.Host}}{{else}}-{{end}}</td>
+                <td class="svc-name-cell">{{.Service}}</td>
+                <td><span class="svc-state-badge {{.State}}">{{.State}}</span></td>
+              </tr>
+              {{$prevHost = .Host}}
+              {{end}}
+            </tbody>
+          </table>
           {{else}}
           <div class="empty-state">No services in cache memory</div>
           {{end}}
@@ -2095,7 +2282,7 @@ const dashboardHTML = `<!DOCTYPE html>
               <tr data-service="{{.Name}}" data-host="{{.HostName}}">
                 <td class="checkbox-cell"><input type="checkbox" class="svc-check" value="{{.Name}}" data-host="{{.HostName}}"></td>
                 <td class="mono">{{.HostName}}</td>
-                <td><strong>{{.Name}}</strong></td>
+                <td><strong style="cursor:pointer;color:var(--lcars-blue);" onclick="event.stopPropagation();showServiceHistory('{{.Name}}', '{{.HostName}}')">{{.Name}}</strong></td>
                 <td>{{.DisplayName}}</td>
                 <td>
                   {{if .HasCheckResult}}
@@ -2475,24 +2662,47 @@ if (typeof EventSource !== 'undefined') {
 }
 {{end}}
 
-function showServiceHistory(service, host) {
-  var overlay = document.createElement('div');
-  overlay.className = 'svc-history-overlay';
-  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-  var panel = document.createElement('div');
-  panel.className = 'svc-history-panel';
-  var title = host ? host + ' / ' + service : service;
-  panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div><div class="svc-history-body"><div class="svc-history-loading">Loading history...</div></div>';
-  overlay.appendChild(panel);
-  document.body.appendChild(overlay);
+function loadServiceDetail(panel, service, host) {
+  var block = panel.querySelector('#svc-detail-block');
+  if (!block) return;
+  var url = '/status/' + encodeURIComponent(service);
+  if (host) url += '?host=' + encodeURIComponent(host);
+  fetch(url, { credentials: 'include' }).then(function(r) { return r.json(); }).then(function(d) {
+    var exitLabels = ['OK','WARNING','CRITICAL','UNKNOWN'];
+    var exitClasses = ['ok','warning','critical','unknown'];
+    var exitCode = (d.last_check_result && d.last_check_result.exit_status != null) ? d.last_check_result.exit_status : -1;
+    var exitLabel = exitCode >= 0 && exitCode <= 3 ? exitLabels[exitCode] : 'N/A';
+    var exitCls = exitCode >= 0 && exitCode <= 3 ? exitClasses[exitCode] : '';
+    var output = (d.last_check_result && d.last_check_result.output) ? d.last_check_result.output : '-';
+    var lastCheck = '-';
+    if (d.last_check_result && d.last_check_result.timestamp) {
+      var dt = new Date(d.last_check_result.timestamp);
+      lastCheck = dt.toLocaleDateString('en-GB') + ' ' + dt.toLocaleTimeString('en-GB', {hour12:false});
+    }
+    var cacheState = d.cache_state || '-';
+    var inIcinga = d.exists_in_icinga ? 'Yes' : 'No';
+    var html = '<div class="svc-detail-grid">';
+    html += '<div class="svc-detail-item"><span class="svc-detail-label">Status</span><span class="svc-detail-value ' + exitCls + '">' + exitLabel + '</span></div>';
+    html += '<div class="svc-detail-item"><span class="svc-detail-label">Cache</span><span class="svc-detail-value">' + escHtml(cacheState) + '</span></div>';
+    html += '<div class="svc-detail-item"><span class="svc-detail-label">Last Check</span><span class="svc-detail-value">' + lastCheck + '</span></div>';
+    html += '<div class="svc-detail-item"><span class="svc-detail-label">In Icinga</span><span class="svc-detail-value">' + inIcinga + '</span></div>';
+    html += '<div class="svc-detail-item" style="grid-column:1/-1"><span class="svc-detail-label">Output</span><span class="svc-detail-value ' + exitCls + '">' + escHtml(output) + '</span></div>';
+    html += '</div>';
+    block.innerHTML = html;
+  }).catch(function() {
+    block.innerHTML = '<div class="svc-detail-loading">Sensor data unavailable</div>';
+  });
+}
 
-  var url = '/history?service=' + encodeURIComponent(service) + '&limit=5';
+function loadServiceHistoryBody(panel, service, host) {
+  var container = panel.querySelector('#svc-history-entries') || panel.querySelector('.svc-history-body');
+  container.innerHTML = '<div class="svc-history-loading">Loading history...</div>';
+  var url = '/history?service=' + encodeURIComponent(service) + '&limit=25';
   if (host) url += '&host=' + encodeURIComponent(host);
   fetch(url).then(function(r) { return r.json(); }).then(function(data) {
-    var body = panel.querySelector('.svc-history-body');
     var entries = data.entries || data;
     if (!entries || entries.length === 0) {
-      body.innerHTML = '<div class="svc-history-empty">No history entries found</div>';
+      container.innerHTML = '<div class="svc-history-empty">No history entries found</div>';
       return;
     }
     var html = '';
@@ -2509,14 +2719,71 @@ function showServiceHistory(service, host) {
       html += '<div class="svc-history-row">';
       html += '<span class="svc-history-time">' + ts + '</span>';
       html += '<span class="svc-history-action ' + actionClass + '">' + escHtml(e.action || '') + '</span>';
+      if (e.mode === 'manual') {
+        var who = (e.source_key || '').replace('admin:', '');
+        html += '<span class="svc-history-manual">MANUAL by ' + escHtml(who) + '</span>';
+      }
       html += '<span class="svc-history-exit ' + exitClass + '">EXIT ' + (e.exit_status != null ? e.exit_status : '?') + '</span>';
       html += '<span class="svc-history-msg" title="' + escHtml(e.message || '') + '">' + escHtml(e.message || '') + '</span>';
       html += '</div>';
     }
-    body.innerHTML = html;
+    container.innerHTML = html;
+  }).catch(function() {
+    container.innerHTML = '<div class="svc-history-empty">Failed to load history</div>';
+  });
+}
+
+function showServiceHistory(service, host) {
+  var overlay = document.createElement('div');
+  overlay.className = 'svc-history-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  var panel = document.createElement('div');
+  panel.className = 'svc-history-panel';
+  panel.dataset.service = service;
+  panel.dataset.host = host || '';
+  var title = host ? host + ' / ' + service : service;
+  var statusBtns = '<div class="svc-status-buttons">' +
+    '<button class="svc-status-btn svc-status-btn-ok" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',0,this)">OK</button>' +
+    '<button class="svc-status-btn svc-status-btn-warning" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',1,this)">Warning</button>' +
+    '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
+    '</div><div class="svc-status-result" id="svc-status-result"></div>';
+  panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
+    '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +
+    statusBtns +
+    '<div class="svc-history-body"><div class="svc-history-body-title">Transmission Log</div><div id="svc-history-entries"><div class="svc-history-loading">Loading history...</div></div></div>';
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  loadServiceDetail(panel, service, host);
+  loadServiceHistoryBody(panel, service, host);
+}
+
+function setServiceStatus(host, service, exitStatus, btn) {
+  var labels = ['OK', 'WARNING', 'CRITICAL', 'UNKNOWN'];
+  var resultEl = document.getElementById('svc-status-result');
+  var btns = btn.parentElement.querySelectorAll('.svc-status-btn');
+  for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+  if (resultEl) { resultEl.style.color = 'var(--lcars-blue)'; resultEl.textContent = 'Transmitting...'; }
+
+  fetch('/admin/services/' + encodeURIComponent(service) + '/status', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host: host, exit_status: exitStatus })
+  }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = false;
+    if (res.ok) {
+      if (resultEl) { resultEl.style.color = 'var(--lcars-ok)'; resultEl.textContent = 'Status set to ' + labels[exitStatus]; }
+      var panel = btn.closest('.svc-history-panel');
+      if (panel) {
+        setTimeout(function() { loadServiceHistoryBody(panel, panel.dataset.service, panel.dataset.host); }, 500);
+      }
+    } else {
+      if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = res.data.error || 'Failed'; }
+    }
   }).catch(function(err) {
-    var body = panel.querySelector('.svc-history-body');
-    body.innerHTML = '<div class="svc-history-empty">Failed to load history</div>';
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = false;
+    if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
   });
 }
 

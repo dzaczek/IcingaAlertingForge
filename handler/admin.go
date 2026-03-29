@@ -8,12 +8,14 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
+	"icinga-webhook-bridge/models"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -355,4 +357,102 @@ func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request)
 	h.DebugRing.SetEnabled(body.Enabled)
 	slog.Info("Debug ring toggled", "enabled", body.Enabled)
 	writeJSON(w, http.StatusOK, map[string]bool{"enabled": body.Enabled})
+}
+
+// HandleSetServiceStatus sends a manual passive check result to Icinga2.
+// POST /admin/services/{name}/status  body: {"host": "...", "exit_status": 0|1|2, "output": "..."}
+func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+
+	// Extract service name: /admin/services/{name}/status
+	path := strings.TrimPrefix(r.URL.Path, "/admin/services/")
+	serviceName := strings.TrimSuffix(path, "/status")
+	if serviceName == "" || serviceName == path {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body struct {
+		Host       string `json:"host"`
+		ExitStatus int    `json:"exit_status"`
+		Output     string `json:"output"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	if body.ExitStatus < 0 || body.ExitStatus > 3 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "exit_status must be 0, 1, 2, or 3"})
+		return
+	}
+
+	host := body.Host
+	if host == "" {
+		target, err := resolveSingleHost(h.Targets, "")
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		host = target.HostName
+	}
+
+	if body.Output == "" {
+		labels := []string{"OK", "WARNING", "CRITICAL", "UNKNOWN"}
+		body.Output = labels[body.ExitStatus] + ": Manual status set via dashboard"
+	}
+
+	if h.Limiter != nil {
+		if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
+			return
+		}
+		defer h.Limiter.ReleaseMutate()
+	}
+
+	start := time.Now()
+	if err := h.API.SendCheckResult(host, serviceName, body.ExitStatus, body.Output); err != nil {
+		slog.Error("Admin: failed to set service status", "host", host, "service", serviceName, "exit_status", body.ExitStatus, "error", err)
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	duration := time.Since(start)
+
+	adminUser, _, _ := r.BasicAuth()
+	labels := []string{"OK", "WARNING", "CRITICAL", "UNKNOWN"}
+	slog.Info("Admin: manual status change",
+		"host", host, "service", serviceName,
+		"exit_status", body.ExitStatus, "user", adminUser)
+
+	if h.History != nil {
+		_ = h.History.Append(models.HistoryEntry{
+			Timestamp:   time.Now(),
+			RequestID:   "",
+			SourceKey:   "admin:" + adminUser,
+			HostName:    host,
+			Mode:        "manual",
+			Action:      "status_change",
+			ServiceName: serviceName,
+			Severity:    strings.ToLower(labels[body.ExitStatus]),
+			ExitStatus:  body.ExitStatus,
+			Message:     body.Output,
+			IcingaOK:    true,
+			DurationMs:  duration.Milliseconds(),
+			RemoteAddr:  r.RemoteAddr,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":      "updated",
+		"host":        host,
+		"service":     serviceName,
+		"exit_status": body.ExitStatus,
+	})
 }

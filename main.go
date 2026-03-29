@@ -207,7 +207,13 @@ func main() {
 
 	// Admin endpoints (password protected)
 	mux.HandleFunc("/admin/services/bulk-delete", adminHandler.HandleBulkDelete)
-	mux.HandleFunc("/admin/services/", adminHandler.HandleDeleteService)
+	mux.HandleFunc("/admin/services/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/status") {
+			adminHandler.HandleSetServiceStatus(w, r)
+		} else {
+			adminHandler.HandleDeleteService(w, r)
+		}
+	})
 	mux.HandleFunc("/admin/services", adminHandler.HandleListServices)
 	mux.HandleFunc("/admin/ratelimit", adminHandler.HandleRateLimitStats)
 	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)

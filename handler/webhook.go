@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
@@ -34,6 +36,7 @@ type WebhookHandler struct {
 	SSE        *SSEBroker
 	DebugRing  *icinga.DebugRing
 	RetryQueue *queue.Queue
+	Audit      *audit.Logger
 }
 
 // ServeHTTP handles POST /webhook requests from Grafana.
@@ -63,6 +66,15 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.Metrics != nil {
 			h.Metrics.RecordAuthFailure(r.RemoteAddr, apiKey)
 		}
+		if h.Audit != nil {
+			h.Audit.Log(audit.Event{
+				EventType:  audit.EventAuthFailure,
+				Severity:   audit.SevHigh,
+				RemoteAddr: r.RemoteAddr,
+				Action:     "webhook.auth",
+				Outcome:    "failure",
+			})
+		}
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
@@ -87,8 +99,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var payload models.GrafanaPayload
-	if err := json.Unmarshal(rawBody, &payload); err != nil {
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
 		slog.Error("Failed to decode webhook payload", "error", err, "source", route.Source, "host", target.HostName)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
 		return
@@ -120,6 +132,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		"host", target.HostName,
 		"status", payload.Status,
 		"alert_count", len(payload.Alerts),
+		"format", format,
 	)
 
 	// ── Process each alert ──────────────────────────────────────────
@@ -142,6 +155,28 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if hasErrors {
 			h.Metrics.RecordError()
 		}
+	}
+
+	// Audit log
+	if h.Audit != nil {
+		outcome := "success"
+		if hasErrors {
+			outcome = "failure"
+		}
+		h.Audit.Log(audit.Event{
+			EventType:  audit.EventWebhook,
+			Severity:   audit.SevInfo,
+			Source:     route.Source,
+			RemoteAddr: r.RemoteAddr,
+			Resource:   target.HostName,
+			Action:     "webhook.process",
+			Outcome:    outcome,
+			RequestID:  requestID,
+			Details: map[string]string{
+				"alert_count": fmt.Sprintf("%d", len(payload.Alerts)),
+				"format":      format,
+			},
+		})
 	}
 
 	statusCode := http.StatusOK
@@ -184,6 +219,61 @@ func (h *WebhookHandler) processAlert(requestID, source string, target config.Ta
 		return h.handleTestMode(requestID, source, target, alert, remoteAddr)
 	}
 	return h.handleWorkMode(requestID, source, target, alert, remoteAddr)
+}
+
+// parseWebhookPayload auto-detects the webhook format and converts it
+// to the internal GrafanaPayload. Supported formats:
+//   - grafana: native Grafana Unified Alerting
+//   - alertmanager: Prometheus Alertmanager
+//   - universal: simplified IcingaAlertForge format
+func parseWebhookPayload(rawBody []byte) (models.GrafanaPayload, string, error) {
+	// Try to detect format from top-level fields
+	var probe struct {
+		// Alertmanager-specific fields
+		Version  string `json:"version"`
+		GroupKey string `json:"groupKey"`
+		Receiver string `json:"receiver"`
+		// Grafana/common fields
+		Status string          `json:"status"`
+		Alerts json.RawMessage `json:"alerts"`
+	}
+	if err := json.Unmarshal(rawBody, &probe); err != nil {
+		return models.GrafanaPayload{}, "", err
+	}
+
+	// Alertmanager: has "version", "groupKey", or "receiver" fields
+	if probe.Version != "" || probe.GroupKey != "" || probe.Receiver != "" {
+		var amPayload models.AlertmanagerPayload
+		if err := json.Unmarshal(rawBody, &amPayload); err != nil {
+			return models.GrafanaPayload{}, "", err
+		}
+		return amPayload.ToGrafanaPayload(), "alertmanager", nil
+	}
+
+	// Grafana native: has "status" at top level
+	if probe.Status != "" {
+		var payload models.GrafanaPayload
+		if err := json.Unmarshal(rawBody, &payload); err != nil {
+			return models.GrafanaPayload{}, "", err
+		}
+		return payload, "grafana", nil
+	}
+
+	// Universal format: has "alerts" but no "status" at top level
+	if probe.Alerts != nil {
+		var up models.UniversalPayload
+		if err := json.Unmarshal(rawBody, &up); err != nil {
+			return models.GrafanaPayload{}, "", err
+		}
+		return up.ToGrafanaPayload(), "universal", nil
+	}
+
+	// Fallback: try Grafana format
+	var payload models.GrafanaPayload
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		return models.GrafanaPayload{}, "", err
+	}
+	return payload, "grafana", nil
 }
 
 // writeJSON writes a JSON response with the given status code.

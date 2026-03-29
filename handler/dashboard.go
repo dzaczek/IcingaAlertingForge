@@ -2008,11 +2008,50 @@ const dashboardHTML = `<!DOCTYPE html>
             <span><span class="status-dot {{if gt .Stats.ErrorCount 0}}red{{else}}green{{end}}"></span> Error Detection</span>
             <span><span class="status-dot orange blink"></span> Monitoring Active</span>
           </div>
-          <div style="display:flex;gap:16px;margin-top:12px;flex-wrap:wrap;font-size:12px;letter-spacing:1px;text-transform:uppercase;">
-            {{if .HealthStatus}}<span style="padding:3px 10px;border-radius:4px;background:{{if .HealthStatus.Healthy}}var(--lcars-ok){{else}}var(--lcars-critical){{end}};color:#000;font-weight:700;">ICINGA2 {{if .HealthStatus.Healthy}}LINK UP{{else}}LINK DOWN{{end}}</span>{{end}}
-            {{if .QueueStats}}<span style="padding:3px 10px;border-radius:4px;background:{{if gt .QueueStats.Depth 0}}var(--lcars-warning){{else}}var(--lcars-blue){{end}};color:#000;font-weight:700;">QUEUE {{.QueueStats.Depth}}/{{.QueueStats.MaxSize}}</span>{{end}}
-            <span style="padding:3px 10px;border-radius:4px;background:{{if .AuditEnabled}}var(--lcars-ok){{else}}rgba(255,204,153,0.3){{end}};color:#000;font-weight:700;">AUDIT {{if .AuditEnabled}}ON{{else}}OFF{{end}}</span>
-            {{if .UserRole}}<span style="padding:3px 10px;border-radius:4px;background:var(--lcars-purple);color:#000;font-weight:700;">RBAC: {{.UserRole}}</span>{{end}}
+        </div>
+      </div>
+
+      <!-- Enterprise Features Status -->
+      <div class="lcars-panel gold">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow gold"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill"></div>
+            <span class="title-text" style="color:var(--lcars-gold);">Enterprise Subsystems</span>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div class="stat-grid">
+            {{if .HealthStatus}}
+            <div class="stat-cell {{if not .HealthStatus.Healthy}}critical{{end}}">
+              <div class="stat-label">Icinga2 Link</div>
+              <div class="stat-value {{if .HealthStatus.Healthy}}ok{{else}}critical{{end}}">{{if .HealthStatus.Healthy}}ONLINE{{else}}OFFLINE ({{.HealthStatus.ConsecutiveFails}} fails){{end}}</div>
+            </div>
+            {{end}}
+            {{if .QueueStats}}
+            <div class="stat-cell {{if gt .QueueStats.Depth 0}}warning{{end}}">
+              <div class="stat-label">Retry Queue</div>
+              <div class="stat-value {{if gt .QueueStats.Depth 0}}warning{{else}}ok{{end}}">{{.QueueStats.Depth}} / {{.QueueStats.MaxSize}}</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-label">Retried / Dropped</div>
+              <div class="stat-value">{{.QueueStats.TotalRetried}} / {{.QueueStats.TotalDropped}}</div>
+            </div>
+            {{end}}
+            <div class="stat-cell">
+              <div class="stat-label">Audit Log</div>
+              <div class="stat-value {{if .AuditEnabled}}ok{{else}}warning{{end}}">{{if .AuditEnabled}}ACTIVE{{else}}DISABLED{{end}}</div>
+            </div>
+            {{if .UserRole}}
+            <div class="stat-cell">
+              <div class="stat-label">RBAC Role</div>
+              <div class="stat-value purple">{{.UserRole}}</div>
+            </div>
+            {{end}}
+            <div class="stat-cell">
+              <div class="stat-label">Multi-Source</div>
+              <div class="stat-value ok">ACTIVE</div>
+            </div>
           </div>
         </div>
       </div>

@@ -200,21 +200,27 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Force re-authentication: ?reauth=1 always returns 401 to poison browser's
-	// cached Basic Auth with dummy credentials, enabling a fresh login prompt.
-	if r.URL.Query().Get("reauth") == "1" {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Credentials cleared</h2><p>Redirecting to login...</p></body></html>`)
-		return
-	}
-
 	// Admin mode requires both ?admin=1 query param AND valid credentials.
-	// Without ?admin=1, the dashboard renders in viewer mode regardless of credentials.
+	// A "_logged_out" cookie is set on logout to force a fresh 401 prompt
+	// even when the browser re-sends cached Basic Auth credentials.
 	wantAdmin := r.URL.Query().Get("admin") == "1"
 	isAdmin := false
 	if wantAdmin {
+		// If user just logged out, force 401 to get fresh credentials
+		if c, err := r.Cookie("_logged_out"); err == nil && c.Value == "1" {
+			// Clear the logout cookie so next attempt works normally
+			http.SetCookie(w, &http.Cookie{
+				Name:   "_logged_out",
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Enter credentials</h2><p>Authenticate to access command panel.</p></body></html>`)
+			return
+		}
 		if h.isAdmin(r) {
 			isAdmin = true
 		} else {
@@ -1910,7 +1916,7 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="bar-segment bar-seg-2">{{.Uptime}}</div>
       <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
-        {{if not .IsAdmin}}<a href="#" onclick="doReauth();return false;" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
+        {{if not .IsAdmin}}<a href="/status/beauty?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>
       <div class="bar-segment bar-seg-5">{{.Version}}</div>
     </div>
@@ -3693,26 +3699,10 @@ function rbacDeleteUser(username) {
     .catch(function(err) { settingsShowStatus('Failed to delete user: ' + err.message, true); });
 }
 
-function doReauth() {
-  // Poison the browser's Basic Auth cache by sending dummy credentials to an
-  // endpoint that always returns 401. This overwrites the cached credentials.
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
-  xhr.onloadend = function() {
-    // Now navigate to admin login — browser has dummy creds, gets 401, shows fresh prompt
-    window.location.href = '/status/beauty?admin=1';
-  };
-  xhr.send();
-}
-
 function doLogout() {
-  // Poison credentials then redirect to viewer mode
-  var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
-  xhr.onloadend = function() {
-    window.location.href = '/status/beauty';
-  };
-  xhr.send();
+  // Set logout cookie so server forces fresh 401 on next admin login
+  document.cookie = '_logged_out=1;path=/';
+  window.location.href = '/status/beauty';
 }
 
 // ── Preserve section on auto-refresh ──
@@ -3955,12 +3945,8 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', '/status/beauty?reauth=1', true, '__clear__', '__clear__');
-    xhr.onloadend = function() {
-      window.location.href = '/status/beauty';
-    };
-    xhr.send();
+    document.cookie = '_logged_out=1;path=/';
+    window.location.href = '/status/beauty';
   }
 
   function showWarning() {

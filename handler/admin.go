@@ -17,6 +17,7 @@ import (
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
+	"icinga-webhook-bridge/rbac"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -31,6 +32,7 @@ type AdminHandler struct {
 	User       string
 	Pass       string
 	RetryQueue *queue.Queue
+	RBAC       *rbac.Manager
 }
 
 // checkAuth validates HTTP Basic Auth credentials for admin endpoints.

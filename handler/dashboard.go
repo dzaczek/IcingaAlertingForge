@@ -983,17 +983,20 @@ const dashboardHTML = `<!DOCTYPE html>
     flex: 1;
     background: rgba(0,0,0,0.4);
     border: 1px solid var(--lcars-blue);
-    border-radius: 20px;
-    padding: 6px 16px;
+    border-left: 4px solid var(--lcars-gold);
+    border-radius: 4px;
+    padding: 8px 14px;
     color: var(--lcars-blue);
     font-family: 'Okuda','Antonio',sans-serif;
     font-size: 13px;
     letter-spacing: 1px;
     outline: none;
     transition: border-color 0.2s;
+    -webkit-appearance: none;
+    appearance: none;
   }
-  .table-filter input::placeholder { color: rgba(153,204,255,0.35); }
-  .table-filter input:focus { border-color: var(--lcars-orange); }
+  .table-filter input::placeholder { color: rgba(153,204,255,0.35); letter-spacing: 2px; }
+  .table-filter input:focus { border-color: var(--lcars-orange); border-left-color: var(--lcars-orange); }
   .table-filter-count {
     color: var(--lcars-tan);
     font-size: 11px;

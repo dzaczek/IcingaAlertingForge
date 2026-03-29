@@ -3791,6 +3791,74 @@ function switchIPTab(source, tab, btn) {
     if (el) el.textContent = parseInt(el.textContent || '0') + 1;
   }
 
+  // ── Live refresh: Recent Transmissions table ──
+  var _alertsRefreshTimer = null;
+  function refreshAlertsTable() {
+    fetch('/history?limit=20', { credentials: 'include' }).then(function(r) {
+      if (!r.ok) return;
+      return r.json();
+    }).then(function(resp) {
+      if (!resp) return;
+      try {
+        var entries = resp.entries || [];
+        var table = document.getElementById('alertsTable');
+        var container = table ? table.closest('.lcars-panel-body') : document.querySelector('#sec-alerts .lcars-panel-body');
+        if (!container) return;
+
+        if (entries.length === 0) {
+          container.innerHTML = '<div class="empty-state">No transmissions recorded</div>';
+          return;
+        }
+
+        var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
+        html += '<table id="alertsTable"><thead><tr>';
+        html += '<th onclick="sortTable(0,\'date\',this.closest(\'table\'))">Stardate <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(1,\'string\',this.closest(\'table\'))">Status <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(2,\'string\',this.closest(\'table\'))">Mode <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(3,\'string\',this.closest(\'table\'))">Action <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(4,\'string\',this.closest(\'table\'))">Host <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(5,\'string\',this.closest(\'table\'))">Service <span class="sort-arrow"></span></th>';
+        html += '<th onclick="sortTable(6,\'string\',this.closest(\'table\'))">Source <span class="sort-arrow"></span></th>';
+        html += '<th>Icinga</th>';
+        html += '<th onclick="sortTable(8,\'number\',this.closest(\'table\'))">Duration <span class="sort-arrow"></span></th>';
+        html += '</tr></thead><tbody>';
+
+        for (var i = 0; i < entries.length; i++) {
+          var e = entries[i];
+          var statusLabel = 'OK', statusClass = 'ok';
+          switch (e.exit_status) {
+            case 1: statusLabel = 'WARNING'; statusClass = 'warning'; break;
+            case 2: statusLabel = 'CRITICAL'; statusClass = 'critical'; break;
+          }
+          if (e.mode === 'test') { statusLabel = 'TEST'; statusClass = 'test'; }
+          if (e.mode === 'manual') { statusLabel += ' [MANUAL]'; statusClass += ' manual'; }
+          if (!e.icinga_ok || e.error) { statusClass = 'error'; }
+          var ts = e.timestamp ? new Date(e.timestamp).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC') : '';
+          var mode = escHtml(e.mode || '');
+          var manualTag = (e.mode === 'manual') ? ' <span class="alerts-manual-tag">ADMIN</span>' : '';
+          html += '<tr>';
+          html += '<td class="mono">' + ts + '</td>';
+          html += '<td><span class="badge ' + statusClass + '">' + escHtml(statusLabel) + '</span></td>';
+          html += '<td>' + mode + manualTag + '</td>';
+          html += '<td>' + escHtml(e.action || '') + '</td>';
+          html += '<td class="mono">' + (e.host_name ? escHtml(e.host_name) : '-') + '</td>';
+          html += '<td><strong>' + escHtml(e.service_name || '') + '</strong></td>';
+          html += '<td class="mono">' + escHtml(e.source_key || '') + '</td>';
+          html += '<td>' + (e.icinga_ok ? '<span class="icinga-ok">OK</span>' : '<span class="icinga-fail">FAIL</span>') + '</td>';
+          html += '<td class="duration">' + (e.duration_ms || 0) + 'ms</td>';
+          html += '</tr>';
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch(err) {}
+    }).catch(function() {});
+  }
+
+  function scheduleAlertsRefresh() {
+    if (_alertsRefreshTimer) clearTimeout(_alertsRefreshTimer);
+    _alertsRefreshTimer = setTimeout(refreshAlertsTable, 2000);
+  }
+
   if (typeof EventSource !== 'undefined') {
     var es = new EventSource('/status/beauty/events');
     es.onmessage = function(e) {
@@ -3802,6 +3870,7 @@ function switchIPTab(source, tab, btn) {
         if (data.mode === 'test') incCounter('stat-test');
         if (data.status === 'critical') incCounter('stat-critical');
         if (data.status === 'warning') incCounter('stat-warning');
+        scheduleAlertsRefresh();
       } catch(err) {}
     };
     es.onerror = function() {

@@ -972,6 +972,111 @@ const dashboardHTML = `<!DOCTYPE html>
     min-height: 18px;
   }
 
+  /* ── Table Filter ── */
+  .table-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .table-filter input {
+    flex: 1;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--lcars-blue);
+    border-radius: 20px;
+    padding: 6px 16px;
+    color: var(--lcars-blue);
+    font-family: 'Okuda','Antonio',sans-serif;
+    font-size: 13px;
+    letter-spacing: 1px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .table-filter input::placeholder { color: rgba(153,204,255,0.35); }
+  .table-filter input:focus { border-color: var(--lcars-orange); }
+  .table-filter-count {
+    color: var(--lcars-tan);
+    font-size: 11px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  /* ── Session Timeout Popup ── */
+  .session-popup-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .session-popup {
+    background: var(--lcars-bg);
+    border: 2px solid var(--lcars-warning);
+    border-radius: 16px;
+    width: 420px;
+    max-width: 90vw;
+    padding: 0;
+    overflow: hidden;
+    animation: sessionPulse 2s ease-in-out infinite;
+  }
+  @keyframes sessionPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(255,168,0,0.3); }
+    50% { box-shadow: 0 0 40px rgba(255,168,0,0.6); }
+  }
+  .session-popup-header {
+    background: var(--lcars-warning);
+    color: #000;
+    padding: 12px 20px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .session-popup-body {
+    padding: 20px;
+    text-align: center;
+  }
+  .session-popup-body p {
+    color: var(--lcars-text);
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin: 0 0 16px 0;
+  }
+  .session-countdown {
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--lcars-warning);
+    letter-spacing: 4px;
+    font-family: 'Okuda','Antonio',monospace;
+    margin: 10px 0 16px 0;
+  }
+  .session-popup-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    padding-bottom: 4px;
+  }
+  .session-btn {
+    font-family: 'Okuda','Antonio',sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 24px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: opacity 0.2s;
+  }
+  .session-btn:hover { opacity: 0.85; }
+  .session-btn-extend { background: var(--lcars-ok); color: #000; }
+  .session-btn-logout { background: var(--lcars-critical); color: #000; }
+
   /* ── About Section ── */
   .about-section { padding: 10px 0; }
   .about-section h3 {
@@ -1926,6 +2031,10 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
         <div class="lcars-panel-body">
           {{if .RecentAlerts}}
+          <div class="table-filter">
+            <input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable('alertsTable', this.value, 'filterAlertsCount')">
+            <span class="table-filter-count" id="filterAlertsCount"></span>
+          </div>
           <table id="alertsTable">
             <thead>
               <tr>
@@ -2022,7 +2131,10 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
-          <div class="svc-registry-count">{{len .CachedServices}} registered service{{if ne (len .CachedServices) 1}}s{{end}}</div>
+          <div class="table-filter">
+            <input type="text" id="filterServices" placeholder="Filter services..." oninput="filterTable('svcRegistryTable', this.value, 'filterServicesCount')">
+            <span class="table-filter-count" id="filterServicesCount">{{len .CachedServices}} registered</span>
+          </div>
           <table class="svc-registry-table" id="svcRegistryTable">
             <thead>
               <tr>
@@ -2341,11 +2453,14 @@ const dashboardHTML = `<!DOCTYPE html>
         </div>
         <div class="lcars-panel-body">
           {{if .IcingaServices}}
+          <div class="table-filter">
+            <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="filterTable('servicesTable', this.value, 'filterIcingaCount')">
+            <span class="table-filter-count" id="filterIcingaCount">{{len .IcingaServices}} registered</span>
+          </div>
           <div class="toolbar">
             <input type="checkbox" id="selectAll" onclick="toggleAll(this)">
             <label for="selectAll">Select All</label>
             <button class="btn btn-danger btn-sm" onclick="deleteSelected()" id="btnDeleteSelected" disabled>Delete Selected</button>
-            <span style="margin-left:auto; font-size:12px; color:var(--lcars-tan); letter-spacing:1px;">{{len .IcingaServices}} service(s) registered</span>
           </div>
           <table id="servicesTable">
             <thead>
@@ -2868,7 +2983,8 @@ function loadServiceDetail(panel, service, host) {
 function loadServiceHistoryBody(panel, service, host) {
   var container = panel.querySelector('#svc-history-entries') || panel.querySelector('.svc-history-body');
   container.innerHTML = '<div class="svc-history-loading">Loading history...</div>';
-  var url = '/history?service=' + encodeURIComponent(service) + '&limit=25';
+  var since = new Date(Date.now() - 24*60*60*1000).toISOString();
+  var url = '/history?service=' + encodeURIComponent(service) + '&limit=200&from=' + encodeURIComponent(since);
   if (host) url += '&host=' + encodeURIComponent(host);
   fetch(url).then(function(r) { return r.json(); }).then(function(data) {
     var entries = data.entries || data;
@@ -3528,6 +3644,130 @@ document.addEventListener('click', function(e) {
     showInfoPopup(key, text);
   }
 });
+
+// ── Table Filter ──
+function filterTable(tableId, query, countId) {
+  var table = document.getElementById(tableId);
+  if (!table) return;
+  var rows = table.querySelectorAll('tbody tr');
+  var q = query.toLowerCase();
+  var visible = 0;
+  var total = 0;
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    if (row.classList.contains('svc-host-divider')) {
+      row.style.display = '';
+      continue;
+    }
+    total++;
+    var text = row.textContent.toLowerCase();
+    if (!q || text.indexOf(q) !== -1) {
+      row.style.display = '';
+      visible++;
+    } else {
+      row.style.display = 'none';
+    }
+  }
+  // hide host dividers with no visible rows after them
+  if (tableId === 'svcRegistryTable') {
+    var dividers = table.querySelectorAll('.svc-host-divider');
+    for (var d = 0; d < dividers.length; d++) {
+      var next = dividers[d].nextElementSibling;
+      var hasVisible = false;
+      while (next && !next.classList.contains('svc-host-divider')) {
+        if (next.style.display !== 'none') hasVisible = true;
+        next = next.nextElementSibling;
+      }
+      dividers[d].style.display = hasVisible ? '' : 'none';
+    }
+  }
+  var countEl = document.getElementById(countId);
+  if (countEl) {
+    if (q) {
+      countEl.textContent = visible + ' / ' + total + ' matching';
+    } else {
+      countEl.textContent = total + ' registered';
+    }
+  }
+}
+
+// ── Session Timeout (30 min, 3 min warning) ──
+{{if .IsAdmin}}
+(function() {
+  var SESSION_MS = 30 * 60 * 1000;
+  var WARN_MS = 3 * 60 * 1000;
+  var sessionStart = Date.now();
+  var warningShown = false;
+  var countdownInterval = null;
+  var popupEl = null;
+
+  function resetSession() {
+    sessionStart = Date.now();
+    warningShown = false;
+    if (popupEl) { popupEl.remove(); popupEl = null; }
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  }
+
+  function doLogout() {
+    if (countdownInterval) clearInterval(countdownInterval);
+    if (popupEl) popupEl.remove();
+    window.location.href = '/status/beauty/logout';
+  }
+
+  function showWarning() {
+    if (warningShown) return;
+    warningShown = true;
+    var overlay = document.createElement('div');
+    overlay.className = 'session-popup-overlay';
+    overlay.id = 'sessionPopup';
+    var remaining = SESSION_MS - (Date.now() - sessionStart);
+    overlay.innerHTML = '<div class="session-popup">' +
+      '<div class="session-popup-header"><span>Session Expiring</span><span style="font-size:11px;">SECURITY PROTOCOL</span></div>' +
+      '<div class="session-popup-body">' +
+      '<p>Your command access session will terminate in</p>' +
+      '<div class="session-countdown" id="sessionCountdown"></div>' +
+      '<p>All unsaved operations will be lost.</p>' +
+      '<div class="session-popup-actions">' +
+      '<button class="session-btn session-btn-extend" onclick="window._sessionExtend()">Extend Session</button>' +
+      '<button class="session-btn session-btn-logout" onclick="window._sessionLogout()">Logout Now</button>' +
+      '</div></div></div>';
+    document.body.appendChild(overlay);
+    popupEl = overlay;
+
+    function updateCountdown() {
+      var left = Math.max(0, SESSION_MS - (Date.now() - sessionStart));
+      var min = Math.floor(left / 60000);
+      var sec = Math.floor((left % 60000) / 1000);
+      var el = document.getElementById('sessionCountdown');
+      if (el) el.textContent = (min < 10 ? '0' : '') + min + ':' + (sec < 10 ? '0' : '') + sec;
+      if (left <= 0) doLogout();
+    }
+    updateCountdown();
+    countdownInterval = setInterval(updateCountdown, 1000);
+  }
+
+  window._sessionExtend = function() {
+    resetSession();
+  };
+  window._sessionLogout = doLogout;
+
+  setInterval(function() {
+    var elapsed = Date.now() - sessionStart;
+    if (elapsed >= SESSION_MS) {
+      doLogout();
+    } else if (elapsed >= SESSION_MS - WARN_MS && !warningShown) {
+      showWarning();
+    }
+  }, 1000);
+
+  // Reset on user activity
+  ['click', 'keydown', 'scroll'].forEach(function(evt) {
+    document.addEventListener(evt, function() {
+      if (!warningShown) sessionStart = Date.now();
+    });
+  });
+})();
+{{end}}
 </script>
 
 </body>

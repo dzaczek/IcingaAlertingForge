@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -180,6 +181,28 @@ func main() {
 		Pass:      cfg.AdminPass,
 	}
 
+	// ── Auth Middleware ─────────────────────────────────────────────
+	requireAuth := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if cfg.AdminPass == "" {
+				http.Error(w, `{"error":"admin access not configured"}`, http.StatusForbidden)
+				return
+			}
+			user, pass, ok := r.BasicAuth()
+			if !ok ||
+				subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) != 1 ||
+				subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) != 1 {
+				if metricsCollector != nil && user != "" {
+					metricsCollector.RecordAuthFailure(r.RemoteAddr, user)
+				}
+				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			next(w, r)
+		}
+	}
+
 	// ── Register Routes ─────────────────────────────────────────────
 	mux := http.NewServeMux()
 
@@ -199,11 +222,13 @@ func main() {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, `<html><head><meta http-equiv="refresh" content="1;url=/status/beauty"></head><body>Logged out. Redirecting...</body></html>`)
 	})
-	mux.Handle("/status/", statusHandler)
+	mux.HandleFunc("/status/", requireAuth(func(w http.ResponseWriter, r *http.Request) {
+		statusHandler.ServeHTTP(w, r)
+	}))
 
-	// History endpoints
-	mux.HandleFunc("/history", historyHandler.HandleHistory)
-	mux.HandleFunc("/history/export", historyHandler.HandleExport)
+	// History endpoints (auth required — exposes alert names, hosts, IPs)
+	mux.HandleFunc("/history", requireAuth(historyHandler.HandleHistory))
+	mux.HandleFunc("/history/export", requireAuth(historyHandler.HandleExport))
 
 	// Admin endpoints (password protected)
 	mux.HandleFunc("/admin/services/bulk-delete", adminHandler.HandleBulkDelete)

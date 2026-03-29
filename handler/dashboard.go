@@ -2989,7 +2989,7 @@ function loadServiceHistoryBody(panel, service, host) {
   var since = new Date(Date.now() - 24*60*60*1000).toISOString();
   var url = '/history?service=' + encodeURIComponent(service) + '&limit=200&from=' + encodeURIComponent(since);
   if (host) url += '&host=' + encodeURIComponent(host);
-  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+  fetch(url, { credentials: 'include' }).then(function(r) { return r.json(); }).then(function(data) {
     var entries = data.entries || data;
     if (!entries || entries.length === 0) {
       container.innerHTML = '<div class="svc-history-empty">No history entries found</div>';

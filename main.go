@@ -250,6 +250,8 @@ func main() {
 		ConfigInDashboard: cfg.ConfigInDashboard,
 		RetryQueue:        retryQueue,
 		HealthChecker:     healthChecker,
+		Audit:             auditLogger,
+		RBAC:              rbacManager,
 	}
 
 	adminHandler := &handler.AdminHandler{

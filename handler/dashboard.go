@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/health"
@@ -17,6 +18,7 @@ import (
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
+	"icinga-webhook-bridge/rbac"
 )
 
 // DashboardHandler serves the GET /status/beauty HTML dashboard
@@ -35,6 +37,8 @@ type DashboardHandler struct {
 	ConfigInDashboard bool
 	RetryQueue        *queue.Queue
 	HealthChecker     *health.Checker
+	Audit             *audit.Logger
+	RBAC              *rbac.Manager
 }
 
 // ipEntry represents one IP address entry for template display.
@@ -63,6 +67,8 @@ type dashboardData struct {
 	SysStats       metrics.SystemStats
 	QueueStats     *queue.Stats
 	HealthStatus   *health.Status
+	AuditEnabled   bool
+	UserRole       string
 }
 
 type dashboardAlert struct {
@@ -265,6 +271,16 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.HealthChecker != nil {
 		hs := h.HealthChecker.GetStatus()
 		data.HealthStatus = &hs
+	}
+
+	if h.Audit != nil {
+		data.AuditEnabled = h.Audit.Enabled()
+	}
+
+	if isAdmin && h.RBAC != nil {
+		if user, ok := h.RBAC.GetUser(h.AdminUser); ok {
+			data.UserRole = string(user.Role)
+		}
 	}
 
 	var buf bytes.Buffer
@@ -2247,6 +2263,16 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="stat-cell {{if not .HealthStatus.Healthy}}critical{{end}}">
               <div class="stat-label">Icinga2 Link</div>
               <div class="stat-value {{if .HealthStatus.Healthy}}ok{{else}}critical{{end}}">{{if .HealthStatus.Healthy}}UP{{else}}DOWN ({{.HealthStatus.ConsecutiveFails}}){{end}}</div>
+            </div>
+            {{end}}
+            <div class="stat-cell">
+              <div class="stat-label">Audit Log</div>
+              <div class="stat-value {{if .AuditEnabled}}ok{{else}}warning{{end}}">{{if .AuditEnabled}}ACTIVE{{else}}OFF{{end}}</div>
+            </div>
+            {{if .UserRole}}
+            <div class="stat-cell">
+              <div class="stat-label">RBAC Role</div>
+              <div class="stat-value">{{.UserRole}}</div>
             </div>
             {{end}}
           </div>

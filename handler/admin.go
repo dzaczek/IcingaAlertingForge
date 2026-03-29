@@ -72,6 +72,22 @@ func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	return false
 }
 
+// requirePermission checks that the authenticated user has the given RBAC permission.
+// The primary admin user (ADMIN_USER) always has full access.
+func (h *AdminHandler) requirePermission(w http.ResponseWriter, r *http.Request, perm rbac.Permission) bool {
+	user, _, _ := r.BasicAuth()
+	// Primary admin has all permissions
+	if subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1 {
+		return true
+	}
+	// Check RBAC permission
+	if h.RBAC != nil && h.RBAC.HasPermission(user, perm) {
+		return true
+	}
+	writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+	return false
+}
+
 type adminServiceRef struct {
 	Host    string `json:"host"`
 	Service string `json:"service"`
@@ -85,6 +101,9 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermViewDashboard) {
 		return
 	}
 
@@ -141,6 +160,9 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 	if !h.checkAuth(w, r) {
 		return
 	}
+	if !h.requirePermission(w, r, rbac.PermDeleteService) {
+		return
+	}
 
 	serviceName := strings.TrimPrefix(r.URL.Path, "/admin/services/")
 	if serviceName == "" {
@@ -191,6 +213,9 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermDeleteService) {
 		return
 	}
 
@@ -255,6 +280,9 @@ func (h *AdminHandler) HandleRateLimitStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermViewDashboard) {
 		return
 	}
 
@@ -330,6 +358,9 @@ func (h *AdminHandler) HandleClearHistory(w http.ResponseWriter, r *http.Request
 	if !h.checkAuth(w, r) {
 		return
 	}
+	if !h.requirePermission(w, r, rbac.PermClearHistory) {
+		return
+	}
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -350,6 +381,9 @@ func (h *AdminHandler) HandleClearHistory(w http.ResponseWriter, r *http.Request
 // POST /admin/debug/toggle  body: {"enabled": true|false}
 func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request) {
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermDebugToggle) {
 		return
 	}
 	if h.DebugRing == nil {
@@ -387,6 +421,9 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermChangeStatus) {
 		return
 	}
 
@@ -487,6 +524,9 @@ func (h *AdminHandler) HandleQueueStats(w http.ResponseWriter, r *http.Request) 
 	if !h.checkAuth(w, r) {
 		return
 	}
+	if !h.requirePermission(w, r, rbac.PermViewQueue) {
+		return
+	}
 	if h.RetryQueue == nil {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
@@ -502,6 +542,9 @@ func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermFlushQueue) {
 		return
 	}
 	if h.RetryQueue == nil {
@@ -527,14 +570,11 @@ func (h *AdminHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	if !h.checkAuth(w, r) {
 		return
 	}
-	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+	if !h.requirePermission(w, r, rbac.PermManageUsers) {
 		return
 	}
-	// Only admin role can list users
-	user, _, _ := r.BasicAuth()
-	if !h.RBAC.HasPermission(user, rbac.PermManageUsers) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 	writeJSON(w, http.StatusOK, h.RBAC.ListUsers())
@@ -550,13 +590,11 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 	if !h.checkAuth(w, r) {
 		return
 	}
-	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+	if !h.requirePermission(w, r, rbac.PermManageUsers) {
 		return
 	}
-	user, _, _ := r.BasicAuth()
-	if !h.RBAC.HasPermission(user, rbac.PermManageUsers) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 
@@ -581,7 +619,8 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		Role:     role,
 	})
 
-	slog.Info("RBAC: user created/updated via admin API", "actor", user, "target_user", body.Username, "role", role)
+	actor, _, _ := r.BasicAuth()
+	slog.Info("RBAC: user created/updated via admin API", "actor", actor, "target_user", body.Username, "role", role)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":   "ok",
 		"username": body.Username,
@@ -599,13 +638,11 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 	if !h.checkAuth(w, r) {
 		return
 	}
-	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+	if !h.requirePermission(w, r, rbac.PermManageUsers) {
 		return
 	}
-	actor, _, _ := r.BasicAuth()
-	if !h.RBAC.HasPermission(actor, rbac.PermManageUsers) {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+	if h.RBAC == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 
@@ -618,6 +655,7 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Prevent self-deletion
+	actor, _, _ := r.BasicAuth()
 	if username == actor {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete your own account"})
 		return

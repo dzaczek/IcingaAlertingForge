@@ -16,6 +16,7 @@ import (
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/configstore"
 	"icinga-webhook-bridge/metrics"
+	"icinga-webhook-bridge/rbac"
 
 	"github.com/google/uuid"
 )
@@ -27,28 +28,48 @@ type SettingsHandler struct {
 	User     string
 	Pass     string
 	Metrics  *metrics.Collector
+	RBAC     *rbac.Manager
 	OnReload func(*config.Config) // called after config save to hot-reload components
 }
 
-// checkAuth validates HTTP Basic Auth credentials for settings endpoints.
+// checkAuth validates HTTP Basic Auth credentials and manage.config permission.
 func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if h.Pass == "" {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
 		return false
 	}
 	user, pass, ok := r.BasicAuth()
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
-	if !ok || !userOK || !passOK {
-		if h.Metrics != nil {
-			h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
-		}
-		slog.Warn("Settings auth failed", "remote_addr", r.RemoteAddr, "user", user)
+	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false
 	}
-	return true
+
+	// Check primary admin credentials
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
+	if userOK && passOK {
+		return true
+	}
+
+	// Check RBAC users — must have manage.config permission
+	if h.RBAC != nil {
+		if _, authenticated := h.RBAC.Authenticate(user, pass); authenticated {
+			if h.RBAC.HasPermission(user, rbac.PermManageConfig) {
+				return true
+			}
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+			return false
+		}
+	}
+
+	if h.Metrics != nil {
+		h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
+	}
+	slog.Warn("Settings auth failed", "remote_addr", r.RemoteAddr, "user", user)
+	w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	return false
 }
 
 // maskConfig returns a copy of the stored config with all secrets replaced by "***".

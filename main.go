@@ -379,6 +379,7 @@ func main() {
 			User:    cfg.AdminUser,
 			Pass:    cfg.AdminPass,
 			Metrics: metricsCollector,
+			RBAC:    rbacManager,
 		}
 		settingsHandler.OnReload = func(newCfg *config.Config) {
 			slog.Info("Hot-reloading configuration from dashboard store")

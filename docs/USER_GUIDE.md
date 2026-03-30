@@ -1,6 +1,6 @@
 # IcingaAlertForge — User Guide
 
-> A bridge that takes alerts from Grafana (or other tools) and sends them to Icinga2 as passive check results. Think of it as a translator between your alerting system and your monitoring dashboard.
+> **Webhook-to-Icinga2 bridge** — receives alerts from Grafana, Prometheus Alertmanager, or any HTTP source and forwards them to Icinga2 as passive check results. One binary, one direction: webhooks in, Icinga2 passive checks out.
 
 ---
 
@@ -23,16 +23,14 @@
 
 ## What Does It Do?
 
-Imagine you have **Grafana** watching your servers, databases, and applications. When something goes wrong, Grafana fires an alert. But your operations team uses **Icinga2** to track all incidents in one place.
-
-**IcingaAlertForge sits in between** — it receives alerts from Grafana and automatically creates or updates services in Icinga2. No manual copy-pasting, no missed alerts.
+IcingaAlertForge is a **bridge that transfers alerts into Icinga2 via webhooks**. The most common source is Grafana, but it also accepts Prometheus Alertmanager payloads and a universal JSON format — so any tool that can send an HTTP POST can push alerts through.
 
 ```
-Grafana Alert  ──►  IcingaAlertForge  ──►  Icinga2 Service
- "CPU is high"        (translates)         "CPU is high" ✓
+Grafana / Alertmanager / curl  ──►  IcingaAlertForge  ──►  Icinga2 Service
+      "CPU is high"                   (translates)         "CPU is high" ✓
 ```
 
-When the alert resolves in Grafana, the service in Icinga2 goes back to OK automatically.
+When an alert fires, the bridge creates or updates a passive service in Icinga2. When the alert resolves in the source, the Icinga2 service goes back to OK automatically. No agents, no plugins — just webhooks in, passive checks out.
 
 ---
 
@@ -690,4 +688,4 @@ Open the **Dev Panel** in the admin dashboard. It shows a real-time stream of ev
 | `IAF_TARGET_{ID}_NOTIFICATION_USERS` | — | Icinga2 notification users |
 | `IAF_TARGET_{ID}_NOTIFICATION_GROUPS` | — | Icinga2 notification groups |
 
-For the complete list of all environment variables, see the [Configuration Reference](CONFIGURATION.md).
+For the complete list of all environment variables, see the [Configuration Reference](guides/configuration.md).

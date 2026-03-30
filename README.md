@@ -2,35 +2,41 @@
 
 ![IcingaAlertForge header](docs/img/header.png)
 
-IcingaAlertForge is a small Go service that takes webhook alerts from Grafana and forwards them to Icinga2 as passive checks.
+**A webhook-to-Icinga2 bridge** — receives alerts from Grafana, Alertmanager, or any HTTP source and forwards them to Icinga2 as passive check results.
 
-<!-- LANG: hyphenation -->
-It is a one-way alert bridge from Grafana to Icinga2. The idea is simple: alerts are defined in Grafana, and Icinga is used as the place where those alerts are presented, tracked, and notified further.
+```
+Grafana / Alertmanager / curl  ──►  IcingaAlertForge  ──►  Icinga2
+        (webhook POST)                (bridge)              (passive checks)
+```
 
-This project started out of a fairly noble kind of laziness. I did not want to migrate everything into one monitoring system, and I did not want Icinga to carry every personal or experimental alert that lives in Grafana at home. Grafana stays flexible. Anyone in the house can create their own alerts there. Icinga stays focused on the handful of things that are truly critical. This bridge is the small piece in the middle that connects the two.
+The alert flow is **one-way**: sources send webhooks in, IcingaAlertForge translates them, and Icinga2 takes over presentation, tracking, and notifications. No agents, no plugins — just a single binary that connects your alerting tools to Icinga2.
 
-In practice, that means Grafana remains the place where alerts are easy to create and change, while Icinga becomes the place that watches the important problems that should not be missed. In other words, this project exists to push Grafana alerts into Icinga2, not the other way around.
+## Why
 
-This is a hobby project. It is developed mainly on weekends, so fixes and larger changes tend to land in batches rather than on a strict release schedule.
+Grafana is great for creating and adjusting alerts. Icinga2 is great for operations — structured dashboards, notification routing, escalation. This bridge lets you keep both and connect them without migrating anything.
+
+This is a hobby project, developed mainly on weekends.
 
 ## What It Does
 
-- receives Grafana Unified Alerting webhooks
+- receives webhooks from **Grafana Unified Alerting**, **Prometheus Alertmanager**, or any tool that sends HTTP POST (universal JSON format)
 - authenticates requests with API keys
-- routes alerts to the right dummy host in Icinga
-- creates missing hosts and services when needed
-- writes passive check results into Icinga2
-- lets Icinga handle alert presentation and notification logic for alerts that started in Grafana
-- keeps history, cache state, and admin views in one place
+- routes alerts to the right target host in Icinga2 based on the API key
+- auto-creates dummy hosts and services in Icinga2 when needed
+- writes passive check results (OK / WARNING / CRITICAL)
+- when an alert resolves in the source, the Icinga2 service goes back to OK automatically
+- keeps transmission history, retry queue, and admin dashboard
 
-## What It Supports
+## Key Features
 
-- more than one team or alert source
-- more than one API key for the same host or team
-<!-- LANG: hyphenation -->
-- host-specific notification settings in Icinga
-- a test environment with Grafana, Prometheus, Icinga2, and Icinga Web 2
-- an admin and status panel for live inspection
+- **multi-source**: Grafana, Alertmanager, custom scripts, CI/CD, IoT — anything that can POST JSON
+- **multi-target**: route alerts from different teams or sources to separate Icinga2 hosts
+- **multiple API keys** per target (rotation, staging/prod separation)
+- **retry queue** with exponential backoff when Icinga2 is unreachable
+- **RBAC** with viewer / operator / admin roles
+- **LCARS dashboard** (Star Trek themed) with real-time updates via SSE
+- **test mode** for safe experimentation without affecting production monitoring
+- bundled **test environment** with Grafana, Prometheus, Icinga2, and Icinga Web 2
 
 ## Documentation
 

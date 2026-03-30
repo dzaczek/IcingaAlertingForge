@@ -2,15 +2,13 @@
 
 ![IcingaAlertForge header](img/header.png)
 
-This folder holds the full documentation for IcingaAlertForge. The top level [README](../README.md) only gives a short project introduction. Everything else lives here.
-
-At its core, IcingaAlertForge is a bridge that moves alerts in one direction:
+This folder holds the full documentation for **IcingaAlertForge** — a webhook-to-Icinga2 bridge that transfers alerts from Grafana, Alertmanager, or any HTTP source into Icinga2 as passive check results.
 
 ```text
-Grafana Unified Alerting -> Icinga2
+Grafana / Alertmanager / any webhook  ──►  IcingaAlertForge  ──►  Icinga2
 ```
 
-Grafana remains the source of alerts. Icinga becomes the place where those alerts are shown, tracked, and notified.
+The alert flow is **one-way**: alert sources send webhooks, the bridge translates them, and Icinga2 handles presentation, tracking, and notifications.
 
 ## Reading Order
 

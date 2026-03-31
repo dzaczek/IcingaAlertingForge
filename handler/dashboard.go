@@ -3115,9 +3115,13 @@ function appendDevEntry(d) {
 }
 
 function escHtml(s) {
-  var div = document.createElement('div');
-  div.appendChild(document.createTextNode(s));
-  return div.innerHTML;
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // Check initial debug state from server

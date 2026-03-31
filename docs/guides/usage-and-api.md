@@ -269,6 +269,50 @@ The older string array form still works if exactly one host is configured:
 
 Returns the current mutate and status slot usage, plus queue depth.
 
+#### `GET /admin/queue`
+
+**Fast Track:** Returns the current retry queue statistics including the number of pending items.
+
+**Deep Dive:** Returns a JSON object with `size` representing the total number of queued webhooks, and `is_flushing` indicating if a flush operation is currently active.
+
+#### `POST /admin/queue/flush`
+
+**Fast Track:** Flushes the retry queue immediately, forcing an attempt to send all queued items.
+
+**Deep Dive:** Resets the backoff timers for all items in the retry queue and wakes up the background worker to process them immediately. Returns an empty JSON object with HTTP 200 on success.
+
+#### `GET /admin/users`
+
+**Fast Track:** Returns a list of all RBAC users.
+
+**Deep Dive:** Returns a JSON object mapping usernames to their respective roles (e.g. `{"admin": "admin", "viewer": "viewer"}`). Secrets/passwords are not returned.
+
+#### `POST /admin/users`
+
+**Fast Track:** Creates or updates an RBAC user.
+
+**Deep Dive:** Upserts a user in the RBAC system. Requires `username`, `password`, and `role` (one of `admin`, `operator`, `viewer`) in the JSON body. If the user already exists, their password or role is updated.
+
+Request body example:
+
+```json
+{
+  "username": "jane.doe",
+  "password": "secretpassword",
+  "role": "operator"
+}
+```
+
+#### `DELETE /admin/users/{username}`
+
+**Fast Track:** Deletes an RBAC user. You cannot delete your own account.
+
+**Deep Dive:** Removes the specified user from the RBAC system. Returns HTTP 200 with `{"status": "deleted"}`. Attempting to delete the currently authenticated user will return HTTP 400.
+
+```text
+DELETE /admin/users/jane.doe
+```
+
 <!-- CHANGED: added history clear and debug toggle admin endpoints -->
 
 #### `POST /admin/history/clear`

@@ -26,13 +26,13 @@ import (
 // It authenticates the request, parses the payload, and routes to the
 // appropriate mode handler (test or work).
 type WebhookHandler struct {
-	KeyStore  *auth.KeyStore
-	Cache     *cache.ServiceCache
-	API       *icinga.APIClient
-	History   *history.Logger
-	Targets   map[string]config.TargetConfig
-	Limiter   *icinga.RateLimiter
-	Metrics   *metrics.Collector
+	KeyStore   *auth.KeyStore
+	Cache      *cache.ServiceCache
+	API        *icinga.APIClient
+	History    *history.Logger
+	Targets    map[string]config.TargetConfig
+	Limiter    *icinga.RateLimiter
+	Metrics    *metrics.Collector
 	SSE        *SSEBroker
 	DebugRing  *icinga.DebugRing
 	RetryQueue *queue.Queue

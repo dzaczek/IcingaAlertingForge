@@ -131,60 +131,65 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	entries, err := l.readAll()
+	var matched []models.HistoryEntry
+
+	err := l.processAll(func(e models.HistoryEntry) error {
+		if filter.Service != "" && e.ServiceName != filter.Service {
+			return nil
+		}
+		if filter.Source != "" && e.SourceKey != filter.Source {
+			return nil
+		}
+		if filter.Host != "" && e.HostName != filter.Host {
+			return nil
+		}
+		if filter.Mode != "" && e.Mode != filter.Mode {
+			return nil
+		}
+		if !filter.From.IsZero() && e.Timestamp.Before(filter.From) {
+			return nil
+		}
+		if !filter.To.IsZero() && e.Timestamp.After(filter.To) {
+			return nil
+		}
+
+		if filter.Limit > 0 {
+			if len(matched) == filter.Limit {
+				copy(matched, matched[1:])
+				matched[filter.Limit-1] = e
+			} else {
+				matched = append(matched, e)
+			}
+		} else {
+			matched = append(matched, e)
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	// Apply filters
-	var filtered []models.HistoryEntry
-	for _, e := range entries {
-		if filter.Service != "" && e.ServiceName != filter.Service {
-			continue
-		}
-		if filter.Source != "" && e.SourceKey != filter.Source {
-			continue
-		}
-		if filter.Host != "" && e.HostName != filter.Host {
-			continue
-		}
-		if filter.Mode != "" && e.Mode != filter.Mode {
-			continue
-		}
-		if !filter.From.IsZero() && e.Timestamp.Before(filter.From) {
-			continue
-		}
-		if !filter.To.IsZero() && e.Timestamp.After(filter.To) {
-			continue
-		}
-		filtered = append(filtered, e)
-	}
-
 	// Reverse to get newest first
-	for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
-		filtered[i], filtered[j] = filtered[j], filtered[i]
+	for i, j := 0, len(matched)-1; i < j; i, j = i+1, j-1 {
+		matched[i], matched[j] = matched[j], matched[i]
 	}
 
-	// Apply limit
-	if filter.Limit > 0 && len(filtered) > filter.Limit {
-		filtered = filtered[:filter.Limit]
-	}
-
-	return filtered, nil
+	return matched, nil
 }
 
-// readAll reads all entries from the JSONL file.
-func (l *Logger) readAll() ([]models.HistoryEntry, error) {
+// processAll reads the JSONL file and calls the callback for each entry.
+func (l *Logger) processAll(cb func(models.HistoryEntry) error) error {
 	f, err := os.Open(l.filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil
 		}
-		return nil, fmt.Errorf("history: open file for reading: %w", err)
+		return fmt.Errorf("history: open file for reading: %w", err)
 	}
 	defer f.Close()
 
-	var entries []models.HistoryEntry
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB max line size
 	for scanner.Scan() {
@@ -196,10 +201,22 @@ func (l *Logger) readAll() ([]models.HistoryEntry, error) {
 		if err := json.Unmarshal(line, &entry); err != nil {
 			continue // skip malformed lines
 		}
-		entries = append(entries, entry)
+		if err := cb(entry); err != nil {
+			return err
+		}
 	}
 
-	return entries, scanner.Err()
+	return scanner.Err()
+}
+
+// readAll reads all entries from the JSONL file.
+func (l *Logger) readAll() ([]models.HistoryEntry, error) {
+	var entries []models.HistoryEntry
+	err := l.processAll(func(e models.HistoryEntry) error {
+		entries = append(entries, e)
+		return nil
+	})
+	return entries, err
 }
 
 // countLines quickly counts the number of newline characters in the history file.
@@ -283,26 +300,27 @@ func (l *Logger) Stats() (HistoryStats, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	entries, err := l.readAll()
-	if err != nil {
-		return HistoryStats{}, err
-	}
-
 	stats := HistoryStats{
-		TotalEntries:  len(entries),
-		ByMode:        make(map[string]int),
-		ByAction:      make(map[string]int),
-		BySeverity:       make(map[string]int),
-		BySeverityFiring: make(map[string]int),
-		BySource:         make(map[string]int),
+		TotalEntries:       0,
+		ByMode:             make(map[string]int),
+		ByAction:           make(map[string]int),
+		BySeverity:         make(map[string]int),
+		BySeverityFiring:   make(map[string]int),
+		BySource:           make(map[string]int),
 		BySourceIP:         make(map[string]map[string]int),
 		BySourceIPLastSeen: make(map[string]map[string]time.Time),
-		ErrorCount:    0,
-		RecentErrors:  []models.HistoryEntry{},
-		RecentEntries: []models.HistoryEntry{},
+		ErrorCount:         0,
+		RecentErrors:       []models.HistoryEntry{},
+		RecentEntries:      []models.HistoryEntry{},
 	}
 
-	for _, e := range entries {
+	// We want newest recent entries/errors, but we are reading oldest to newest.
+	// So we keep circular buffers and then copy/reverse them at the end.
+	recentEntriesBuf := make([]models.HistoryEntry, 0, 20)
+	recentErrorsBuf := make([]models.HistoryEntry, 0, 10)
+
+	err := l.processAll(func(e models.HistoryEntry) error {
+		stats.TotalEntries++
 		stats.ByMode[e.Mode]++
 		stats.ByAction[e.Action]++
 		if e.Severity != "" {
@@ -331,26 +349,42 @@ func (l *Logger) Stats() (HistoryStats, error) {
 		if e.DurationMs > 0 {
 			stats.TotalDurationMs += e.DurationMs
 		}
+
+		if len(recentEntriesBuf) == 20 {
+			// Shift and append
+			copy(recentEntriesBuf, recentEntriesBuf[1:])
+			recentEntriesBuf[19] = e
+		} else {
+			recentEntriesBuf = append(recentEntriesBuf, e)
+		}
+
+		if !e.IcingaOK || e.Error != "" {
+			if len(recentErrorsBuf) == 10 {
+				// Shift and append
+				copy(recentErrorsBuf, recentErrorsBuf[1:])
+				recentErrorsBuf[9] = e
+			} else {
+				recentErrorsBuf = append(recentErrorsBuf, e)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return HistoryStats{}, err
 	}
 
 	if stats.TotalEntries > 0 {
 		stats.AvgDurationMs = stats.TotalDurationMs / int64(stats.TotalEntries)
 	}
 
-	// Collect recent entries (last 20) — newest first
-	recentCount := 20
-	if len(entries) < recentCount {
-		recentCount = len(entries)
+	// Reverse into the final slice to get newest first
+	for i := len(recentEntriesBuf) - 1; i >= 0; i-- {
+		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[i])
 	}
-	for i := len(entries) - 1; i >= len(entries)-recentCount; i-- {
-		stats.RecentEntries = append(stats.RecentEntries, entries[i])
-	}
-
-	// Collect recent errors (last 10) — newest first
-	for i := len(entries) - 1; i >= 0 && len(stats.RecentErrors) < 10; i-- {
-		if !entries[i].IcingaOK || entries[i].Error != "" {
-			stats.RecentErrors = append(stats.RecentErrors, entries[i])
-		}
+	for i := len(recentErrorsBuf) - 1; i >= 0; i-- {
+		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[i])
 	}
 
 	return stats, nil
@@ -358,19 +392,19 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 // HistoryStats holds aggregate statistics about the webhook history.
 type HistoryStats struct {
-	TotalEntries    int                          `json:"total_entries"`
-	ByMode          map[string]int               `json:"by_mode"`
-	ByAction        map[string]int               `json:"by_action"`
-	BySeverity        map[string]int               `json:"by_severity"`
-	BySeverityFiring  map[string]int               `json:"by_severity_firing"`
-	BySource        map[string]int               `json:"by_source"`
+	TotalEntries       int                             `json:"total_entries"`
+	ByMode             map[string]int                  `json:"by_mode"`
+	ByAction           map[string]int                  `json:"by_action"`
+	BySeverity         map[string]int                  `json:"by_severity"`
+	BySeverityFiring   map[string]int                  `json:"by_severity_firing"`
+	BySource           map[string]int                  `json:"by_source"`
 	BySourceIP         map[string]map[string]int       `json:"by_source_ip"`
 	BySourceIPLastSeen map[string]map[string]time.Time `json:"-"`
-	ErrorCount      int                          `json:"error_count"`
-	TotalDurationMs int64                        `json:"total_duration_ms"`
-	AvgDurationMs   int64                        `json:"avg_duration_ms"`
-	RecentErrors    []models.HistoryEntry        `json:"recent_errors"`
-	RecentEntries   []models.HistoryEntry        `json:"recent_entries"`
+	ErrorCount         int                             `json:"error_count"`
+	TotalDurationMs    int64                           `json:"total_duration_ms"`
+	AvgDurationMs      int64                           `json:"avg_duration_ms"`
+	RecentErrors       []models.HistoryEntry           `json:"recent_errors"`
+	RecentEntries      []models.HistoryEntry           `json:"recent_entries"`
 }
 
 // stripPort removes the port from a host:port address, returning just the IP.

@@ -51,11 +51,11 @@ type StoredConfig struct {
 	CreatedAt time.Time `json:"created_at"`
 
 	// Icinga2
-	Icinga2Host          string `json:"icinga2_host"`
-	Icinga2User          string `json:"icinga2_user"`
-	Icinga2Pass          string `json:"icinga2_pass"`          // encrypted at rest
-	Icinga2HostAutoCreate bool  `json:"icinga2_host_auto_create"`
-	Icinga2TLSSkipVerify bool   `json:"icinga2_tls_skip_verify"`
+	Icinga2Host           string `json:"icinga2_host"`
+	Icinga2User           string `json:"icinga2_user"`
+	Icinga2Pass           string `json:"icinga2_pass"` // encrypted at rest
+	Icinga2HostAutoCreate bool   `json:"icinga2_host_auto_create"`
+	Icinga2TLSSkipVerify  bool   `json:"icinga2_tls_skip_verify"`
 
 	// Targets
 	Targets []TargetStore `json:"targets"`
@@ -314,11 +314,11 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 	// Convert targets with their API keys
 	for id, t := range cfg.Targets {
 		ts := TargetStore{
-			ID:          id,
-			Source:      t.Source,
-			HostName:    t.HostName,
-			HostDisplay: t.HostDisplay,
-			HostAddress: t.HostAddress,
+			ID:                    id,
+			Source:                t.Source,
+			HostName:              t.HostName,
+			HostDisplay:           t.HostDisplay,
+			HostAddress:           t.HostAddress,
 			NotificationUsers:     t.Notification.Users,
 			NotificationGroups:    t.Notification.Groups,
 			NotificationSvcStates: t.Notification.ServiceStates,

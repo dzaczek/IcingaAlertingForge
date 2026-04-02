@@ -2,9 +2,11 @@ package history
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -200,6 +202,32 @@ func (l *Logger) readAll() ([]models.HistoryEntry, error) {
 	return entries, scanner.Err()
 }
 
+// countLines quickly counts the number of newline characters in the history file.
+func (l *Logger) countLines() (int, error) {
+	f, err := os.Open(l.filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("history: open file for line counting: %w", err)
+	}
+	defer f.Close()
+
+	count := 0
+	buf := make([]byte, 32*1024)
+	for {
+		c, err := f.Read(buf)
+		count += bytes.Count(buf[:c], []byte{'\n'})
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return count, fmt.Errorf("history: read file for line counting: %w", err)
+		}
+	}
+	return count, nil
+}
+
 // rotateIfNeeded trims the history file to maxEntries if it exceeds the limit.
 // Called by the maintenance goroutine (takes its own lock).
 func (l *Logger) rotateIfNeeded() {
@@ -210,6 +238,12 @@ func (l *Logger) rotateIfNeeded() {
 
 // rotateLockedInline performs rotation while the lock is already held.
 func (l *Logger) rotateLockedInline() {
+	// Fast path: avoid expensive readAll (JSON parsing) if the file doesn't need rotation.
+	lineCount, err := l.countLines()
+	if err != nil || lineCount <= l.maxEntries {
+		return
+	}
+
 	entries, err := l.readAll()
 	if err != nil || len(entries) <= l.maxEntries {
 		return

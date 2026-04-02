@@ -172,13 +172,13 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 
 		if h.RetryQueue != nil {
 			_ = h.RetryQueue.Enqueue(queue.Item{
-				ID:        fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
-				Host:      target.HostName,
-				Service:   serviceName,
+				ID:         fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
+				Host:       target.HostName,
+				Service:    serviceName,
 				ExitStatus: exitStatus,
-				Message:   message,
-				Source:    source,
-				RequestID: requestID,
+				Message:    message,
+				Source:     source,
+				RequestID:  requestID,
 			})
 			queued = true
 		}

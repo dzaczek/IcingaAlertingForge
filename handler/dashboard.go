@@ -25,15 +25,15 @@ import (
 // DashboardHandler serves the GET /status/beauty HTML dashboard
 // with live statistics, recent alerts, and error information.
 type DashboardHandler struct {
-	Cache     *cache.ServiceCache
-	History   *history.Logger
-	API       *icinga.APIClient
-	Metrics   *metrics.Collector
-	Targets   map[string]config.TargetConfig
-	AdminUser string
-	AdminPass string
-	Version   string
-	StartedAt time.Time
+	Cache             *cache.ServiceCache
+	History           *history.Logger
+	API               *icinga.APIClient
+	Metrics           *metrics.Collector
+	Targets           map[string]config.TargetConfig
+	AdminUser         string
+	AdminPass         string
+	Version           string
+	StartedAt         time.Time
 	DebugRing         *icinga.DebugRing
 	ConfigInDashboard bool
 	RetryQueue        *queue.Queue
@@ -51,16 +51,16 @@ type ipEntry struct {
 
 // dashboardData is the template context for the beauty dashboard.
 type dashboardData struct {
-	GeneratedAt    string
-	Uptime         string
-	Version        string
-	Stats          history.HistoryStats
-	SourceIPs      map[string]map[string]int
-	SourceTopIPs   map[string][]ipEntry // top 10 by count
-	SourceLastIPs  map[string][]ipEntry // last 10 by time
-	CachedServices []cache.CacheEntry
-	RecentAlerts   []dashboardAlert
-	RecentErrors   []dashboardAlert
+	GeneratedAt       string
+	Uptime            string
+	Version           string
+	Stats             history.HistoryStats
+	SourceIPs         map[string]map[string]int
+	SourceTopIPs      map[string][]ipEntry // top 10 by count
+	SourceLastIPs     map[string][]ipEntry // last 10 by time
+	CachedServices    []cache.CacheEntry
+	RecentAlerts      []dashboardAlert
+	RecentErrors      []dashboardAlert
 	IsAdmin           bool
 	IsOperator        bool
 	CanManageConfig   bool
@@ -69,13 +69,13 @@ type dashboardData struct {
 	CanManageUsers    bool
 	PrimaryAdmin      string
 	ConfigInDashboard bool
-	IcingaServices []icinga.ServiceInfo
-	HostLabel      string
-	SysStats       metrics.SystemStats
-	QueueStats     *queue.Stats
-	HealthStatus   *health.Status
-	AuditEnabled   bool
-	UserRole       string
+	IcingaServices    []icinga.ServiceInfo
+	HostLabel         string
+	SysStats          metrics.SystemStats
+	QueueStats        *queue.Stats
+	HealthStatus      *health.Status
+	AuditEnabled      bool
+	UserRole          string
 }
 
 type dashboardAlert struct {
@@ -304,16 +304,16 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	canManageUsers := userRole == rbac.RoleAdmin
 
 	data := dashboardData{
-		GeneratedAt:    time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
-		Uptime:         uptime.String(),
-		Version:        h.Version,
-		Stats:          stats,
-		SourceIPs:      stats.BySourceIP,
-		SourceTopIPs:   sourceTopIPs,
-		SourceLastIPs:  sourceLastIPs,
-		CachedServices: h.Cache.AllEntries(),
-		RecentAlerts:   recentAlerts,
-		RecentErrors:   recentErrors,
+		GeneratedAt:       time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
+		Uptime:            uptime.String(),
+		Version:           h.Version,
+		Stats:             stats,
+		SourceIPs:         stats.BySourceIP,
+		SourceTopIPs:      sourceTopIPs,
+		SourceLastIPs:     sourceLastIPs,
+		CachedServices:    h.Cache.AllEntries(),
+		RecentAlerts:      recentAlerts,
+		RecentErrors:      recentErrors,
 		IsAdmin:           isAdmin,
 		IsOperator:        canChangeStatus,
 		CanManageConfig:   canManageConfig,
@@ -322,10 +322,10 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		CanManageUsers:    canManageUsers,
 		PrimaryAdmin:      h.AdminUser,
 		ConfigInDashboard: h.ConfigInDashboard,
-		IcingaServices: icingaServices,
-		HostLabel:      firstHostName(targetHostNames(h.Targets)),
-		SysStats:       sysStats,
-		UserRole:       string(userRole),
+		IcingaServices:    icingaServices,
+		HostLabel:         firstHostName(targetHostNames(h.Targets)),
+		SysStats:          sysStats,
+		UserRole:          string(userRole),
 	}
 
 	if h.RetryQueue != nil {

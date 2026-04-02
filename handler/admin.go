@@ -22,12 +22,12 @@ import (
 
 // AdminHandler serves admin API endpoints for service management.
 type AdminHandler struct {
-	Cache     *cache.ServiceCache
-	API       *icinga.APIClient
-	Limiter   *icinga.RateLimiter
-	History   *history.Logger
-	Metrics   *metrics.Collector
-	DebugRing *icinga.DebugRing
+	Cache      *cache.ServiceCache
+	API        *icinga.APIClient
+	Limiter    *icinga.RateLimiter
+	History    *history.Logger
+	Metrics    *metrics.Collector
+	DebugRing  *icinga.DebugRing
 	Targets    map[string]config.TargetConfig
 	User       string
 	Pass       string

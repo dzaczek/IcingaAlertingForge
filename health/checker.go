@@ -25,24 +25,24 @@ type HostResult struct {
 
 // Config holds health checker configuration.
 type Config struct {
-	Enabled      bool
-	IntervalSec  int
-	ServiceName  string // name of the self-monitoring service in Icinga2
-	TargetHost   string // Icinga2 host to register under
-	Register     bool   // auto-create service in Icinga2
+	Enabled     bool
+	IntervalSec int
+	ServiceName string // name of the self-monitoring service in Icinga2
+	TargetHost  string // Icinga2 host to register under
+	Register    bool   // auto-create service in Icinga2
 }
 
 // Status represents the current health state.
 type Status struct {
-	Healthy       bool      `json:"healthy"`
-	IcingaUp      bool      `json:"icinga_up"`
-	LastCheck     time.Time `json:"last_check"`
-	LastSuccess   time.Time `json:"last_success"`
-	LastError     string    `json:"last_error,omitempty"`
-	ConsecutiveFails int    `json:"consecutive_fails"`
-	TotalChecks   int64     `json:"total_checks"`
-	TotalFailures int64     `json:"total_failures"`
-	Uptime        string    `json:"uptime,omitempty"`
+	Healthy          bool      `json:"healthy"`
+	IcingaUp         bool      `json:"icinga_up"`
+	LastCheck        time.Time `json:"last_check"`
+	LastSuccess      time.Time `json:"last_success"`
+	LastError        string    `json:"last_error,omitempty"`
+	ConsecutiveFails int       `json:"consecutive_fails"`
+	TotalChecks      int64     `json:"total_checks"`
+	TotalFailures    int64     `json:"total_failures"`
+	Uptime           string    `json:"uptime,omitempty"`
 }
 
 // Checker runs periodic health probes against Icinga2.

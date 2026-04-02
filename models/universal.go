@@ -26,8 +26,8 @@ type UniversalPayload struct {
 // UniversalAlert represents a single alert in the universal format.
 type UniversalAlert struct {
 	Name        string            `json:"name"`
-	Status      string            `json:"status"`      // firing, resolved
-	Severity    string            `json:"severity"`     // critical, warning, ok
+	Status      string            `json:"status"`   // firing, resolved
+	Severity    string            `json:"severity"` // critical, warning, ok
 	Message     string            `json:"message"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`

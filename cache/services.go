@@ -167,11 +167,10 @@ func (c *ServiceCache) AllEntries() []CacheEntry {
 		})
 	}
 
+	// Optimize: lexicographical sort of Key (host\x1fservice) yields the same result
+	// as comparing Host and Service fields, since \x1f is lower than any valid character.
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Host == entries[j].Host {
-			return entries[i].Service < entries[j].Service
-		}
-		return entries[i].Host < entries[j].Host
+		return entries[i].Key < entries[j].Key
 	})
 
 	return entries

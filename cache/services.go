@@ -167,11 +167,11 @@ func (c *ServiceCache) AllEntries() []CacheEntry {
 		})
 	}
 
+	// Lexicographical sorting on the composite Key is faster than multi-field
+	// comparisons (Host then Service) because it avoids branching and relies
+	// directly on the stable `\x1f` separator built into the key.
 	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].Host == entries[j].Host {
-			return entries[i].Service < entries[j].Service
-		}
-		return entries[i].Host < entries[j].Host
+		return entries[i].Key < entries[j].Key
 	})
 
 	return entries

@@ -335,6 +335,7 @@ func main() {
 	// Health check (enhanced with Icinga2 connectivity status)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		resp := map[string]any{
 			"status":  "ok",
 			"version": version,

@@ -279,6 +279,7 @@ func parseWebhookPayload(rawBody []byte) (models.GrafanaPayload, string, error) 
 // writeJSON writes a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, statusCode int, data any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(statusCode)
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Debug("writeJSON encode error", "error", err)

@@ -317,7 +317,9 @@ func (l *Logger) Stats() (HistoryStats, error) {
 	// We want newest recent entries/errors, but we are reading oldest to newest.
 	// So we keep circular buffers and then copy/reverse them at the end.
 	recentEntriesBuf := make([]models.HistoryEntry, 0, 20)
+	recentEntriesPos := 0
 	recentErrorsBuf := make([]models.HistoryEntry, 0, 10)
+	recentErrorsPos := 0
 
 	err := l.processAll(func(e models.HistoryEntry) error {
 		stats.TotalEntries++
@@ -350,21 +352,19 @@ func (l *Logger) Stats() (HistoryStats, error) {
 			stats.TotalDurationMs += e.DurationMs
 		}
 
-		if len(recentEntriesBuf) == 20 {
-			// Shift and append
-			copy(recentEntriesBuf, recentEntriesBuf[1:])
-			recentEntriesBuf[19] = e
-		} else {
+		if len(recentEntriesBuf) < 20 {
 			recentEntriesBuf = append(recentEntriesBuf, e)
+		} else {
+			recentEntriesBuf[recentEntriesPos] = e
+			recentEntriesPos = (recentEntriesPos + 1) % 20
 		}
 
 		if !e.IcingaOK || e.Error != "" {
-			if len(recentErrorsBuf) == 10 {
-				// Shift and append
-				copy(recentErrorsBuf, recentErrorsBuf[1:])
-				recentErrorsBuf[9] = e
-			} else {
+			if len(recentErrorsBuf) < 10 {
 				recentErrorsBuf = append(recentErrorsBuf, e)
+			} else {
+				recentErrorsBuf[recentErrorsPos] = e
+				recentErrorsPos = (recentErrorsPos + 1) % 10
 			}
 		}
 
@@ -380,11 +380,13 @@ func (l *Logger) Stats() (HistoryStats, error) {
 	}
 
 	// Reverse into the final slice to get newest first
-	for i := len(recentEntriesBuf) - 1; i >= 0; i-- {
-		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[i])
+	for i := 0; i < len(recentEntriesBuf); i++ {
+		idx := (recentEntriesPos - 1 - i + len(recentEntriesBuf)) % len(recentEntriesBuf)
+		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[idx])
 	}
-	for i := len(recentErrorsBuf) - 1; i >= 0; i-- {
-		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[i])
+	for i := 0; i < len(recentErrorsBuf); i++ {
+		idx := (recentErrorsPos - 1 - i + len(recentErrorsBuf)) % len(recentErrorsBuf)
+		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[idx])
 	}
 
 	return stats, nil

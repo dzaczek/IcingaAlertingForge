@@ -245,6 +245,33 @@ Multi host example:
 DELETE /admin/services/HighCPU?host=a-dummy-dev
 ```
 
+#### `POST /admin/services/{name}/status`
+
+**Fast Track:** Manually sets the status of a specific service.
+
+**Deep Dive:** Sends a manual passive check result to Icinga2 for the specified service. The request body must include the `host`, `exit_status` (0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN), and `output` message.
+
+Request body example:
+
+```json
+{
+  "host": "a-dummy-dev",
+  "exit_status": 2,
+  "output": "CRITICAL: Manual status set via dashboard"
+}
+```
+
+Response example:
+
+```json
+{
+  "status": "updated",
+  "host": "a-dummy-dev",
+  "service": "HighCPU",
+  "exit_status": 2
+}
+```
+
 #### `POST /admin/services/bulk-delete`
 
 <!-- LANG: hyphenation -->

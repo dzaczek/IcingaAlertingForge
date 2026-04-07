@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"icinga-webhook-bridge/httputil"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
@@ -39,13 +40,13 @@ type AdminHandler struct {
 // Checks against both the primary admin credentials and RBAC users.
 func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if h.Pass == "" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
 		return false
 	}
 	user, pass, ok := r.BasicAuth()
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false
 	}
 
@@ -68,7 +69,7 @@ func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	}
 	slog.Warn("Admin auth failed", "remote_addr", r.RemoteAddr, "user", user)
 	w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	return false
 }
 
@@ -84,7 +85,7 @@ func (h *AdminHandler) requirePermission(w http.ResponseWriter, r *http.Request,
 	if h.RBAC != nil && h.RBAC.HasPermission(user, perm) {
 		return true
 	}
-	writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+	httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
 	return false
 }
 
@@ -97,7 +98,7 @@ type adminServiceRef struct {
 // GET /admin/services
 func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -109,7 +110,7 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 
 	targets, err := resolveScopedHosts(h.Targets, r.URL.Query().Get("host"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -147,14 +148,14 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		resp["errors"] = fetchErrors
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
 // HandleDeleteService deletes a service from Icinga2.
 // DELETE /admin/services/{service_name}
 func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -166,20 +167,20 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 
 	serviceName := strings.TrimPrefix(r.URL.Path, "/admin/services/")
 	if serviceName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
 		return
 	}
 
 	target, err := resolveSingleHost(h.Targets, r.URL.Query().Get("host"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
 	// Use rate limiter for mutation
 	if h.Limiter != nil {
 		if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
 			return
 		}
 		defer h.Limiter.ReleaseMutate()
@@ -187,7 +188,7 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 
 	if err := h.API.DeleteService(target.HostName, serviceName); err != nil {
 		slog.Error("Admin: failed to delete service", "host", target.HostName, "service", serviceName, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{
+		httputil.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"host":    target.HostName,
 			"error":   err.Error(),
 			"service": serviceName,
@@ -198,7 +199,7 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 	h.Cache.Remove(target.HostName, serviceName)
 	slog.Info("Admin: service deleted", "host", target.HostName, "service", serviceName)
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":  "deleted",
 		"host":    target.HostName,
 		"service": serviceName,
@@ -209,7 +210,7 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 // POST /admin/services/bulk-delete  body: {"services": ["svc1", "svc2"]}
 func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -223,11 +224,11 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 
 	refs, err := h.parseBulkDeleteRequest(r)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
 	if len(refs) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no services specified"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no services specified"})
 		return
 	}
 
@@ -269,14 +270,14 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 // HandleRateLimitStats returns current rate limiter statistics.
 // GET /admin/ratelimit
 func (h *AdminHandler) HandleRateLimitStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -287,12 +288,12 @@ func (h *AdminHandler) HandleRateLimitStats(w http.ResponseWriter, r *http.Reque
 	}
 
 	if h.Limiter == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "rate limiter not configured"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "rate limiter not configured"})
 		return
 	}
 
 	mInUse, mMax, sInUse, sMax, queued, maxQ := h.Limiter.Stats()
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"mutate": map[string]int{"in_use": mInUse, "max": mMax},
 		"status": map[string]int{"in_use": sInUse, "max": sMax},
 		"queue":  map[string]int{"current": queued, "max": maxQ},
@@ -362,19 +363,19 @@ func (h *AdminHandler) HandleClearHistory(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if h.History == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "history not configured"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "history not configured"})
 		return
 	}
 	if err := h.History.Clear(); err != nil {
 		slog.Error("Failed to clear history", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "history cleared"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "history cleared"})
 }
 
 // HandleDebugToggle enables/disables the API debug ring buffer.
@@ -387,17 +388,17 @@ func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if h.DebugRing == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "debug ring not configured"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "debug ring not configured"})
 		return
 	}
 
 	if r.Method == http.MethodGet {
-		writeJSON(w, http.StatusOK, map[string]bool{"enabled": h.DebugRing.Enabled()})
+		httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": h.DebugRing.Enabled()})
 		return
 	}
 
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -405,19 +406,19 @@ func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request)
 		Enabled bool `json:"enabled"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
 	h.DebugRing.SetEnabled(body.Enabled)
 	slog.Info("Debug ring toggled", "enabled", body.Enabled)
-	writeJSON(w, http.StatusOK, map[string]bool{"enabled": body.Enabled})
+	httputil.WriteJSON(w, http.StatusOK, map[string]bool{"enabled": body.Enabled})
 }
 
 // HandleSetServiceStatus sends a manual passive check result to Icinga2.
 // POST /admin/services/{name}/status  body: {"host": "...", "exit_status": 0|1|2, "output": "..."}
 func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -431,7 +432,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 	path := strings.TrimPrefix(r.URL.Path, "/admin/services/")
 	serviceName := strings.TrimSuffix(path, "/status")
 	if serviceName == "" || serviceName == path {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
 		return
 	}
 
@@ -442,12 +443,12 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 		Output     string `json:"output"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
 
 	if body.ExitStatus < 0 || body.ExitStatus > 3 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "exit_status must be 0, 1, 2, or 3"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "exit_status must be 0, 1, 2, or 3"})
 		return
 	}
 
@@ -455,7 +456,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 	if host == "" {
 		target, err := resolveSingleHost(h.Targets, "")
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 		host = target.HostName
@@ -468,7 +469,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 
 	if h.Limiter != nil {
 		if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "rate limit: " + err.Error()})
 			return
 		}
 		defer h.Limiter.ReleaseMutate()
@@ -477,7 +478,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 	start := time.Now()
 	if err := h.API.SendCheckResult(host, serviceName, body.ExitStatus, body.Output); err != nil {
 		slog.Error("Admin: failed to set service status", "host", host, "service", serviceName, "exit_status", body.ExitStatus, "error", err)
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
 	duration := time.Since(start)
@@ -506,7 +507,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":      "updated",
 		"host":        host,
 		"service":     serviceName,
@@ -518,7 +519,7 @@ func (h *AdminHandler) HandleSetServiceStatus(w http.ResponseWriter, r *http.Req
 // GET /admin/queue
 func (h *AdminHandler) HandleQueueStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -528,17 +529,17 @@ func (h *AdminHandler) HandleQueueStats(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.RetryQueue == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
-	writeJSON(w, http.StatusOK, h.RetryQueue.Stats())
+	httputil.WriteJSON(w, http.StatusOK, h.RetryQueue.Stats())
 }
 
 // HandleQueueFlush forces immediate retry of all queued items.
 // POST /admin/queue/flush
 func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -548,12 +549,12 @@ func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.RetryQueue == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 	processed := h.RetryQueue.Flush()
 	slog.Info("Admin: queue flush", "processed", processed)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":    "flushed",
 		"processed": processed,
 		"remaining": h.RetryQueue.Depth(),
@@ -564,7 +565,7 @@ func (h *AdminHandler) HandleQueueFlush(w http.ResponseWriter, r *http.Request) 
 // GET /admin/users
 func (h *AdminHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -574,17 +575,17 @@ func (h *AdminHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
-	writeJSON(w, http.StatusOK, h.RBAC.ListUsers())
+	httputil.WriteJSON(w, http.StatusOK, h.RBAC.ListUsers())
 }
 
 // HandleCreateUser adds or updates an RBAC user.
 // POST /admin/users
 func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -594,7 +595,7 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 
@@ -604,11 +605,11 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		Role     string `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 		return
 	}
 	if body.Username == "" || body.Password == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "username and password required"})
 		return
 	}
 
@@ -619,13 +620,13 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		Role:     role,
 	}); err != nil {
 		slog.Error("RBAC: failed to persist user", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save user"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save user"})
 		return
 	}
 
 	actor, _, _ := r.BasicAuth()
 	slog.Info("RBAC: user created/updated via admin API", "actor", actor, "target_user", body.Username, "role", role)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":   "ok",
 		"username": body.Username,
 		"role":     role,
@@ -636,7 +637,7 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 // DELETE /admin/users/{username}
 func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -646,7 +647,7 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if h.RBAC == nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "disabled"})
 		return
 	}
 
@@ -654,29 +655,29 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/admin/users/"), "/")
 	username := parts[0]
 	if username == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "username required"})
 		return
 	}
 
 	// Prevent self-deletion
 	actor, _, _ := r.BasicAuth()
 	if username == actor {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete your own account"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "cannot delete your own account"})
 		return
 	}
 
 	removed, err := h.RBAC.RemoveUser(username)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	if !removed {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 		return
 	}
 
 	slog.Info("RBAC: user deleted via admin API", "actor", actor, "target_user", username)
-	writeJSON(w, http.StatusOK, map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"status":   "deleted",
 		"username": username,
 	})

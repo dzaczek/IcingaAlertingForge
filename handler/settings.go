@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"icinga-webhook-bridge/httputil"
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
@@ -35,13 +36,13 @@ type SettingsHandler struct {
 // checkAuth validates HTTP Basic Auth credentials and manage.config permission.
 func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	if h.Pass == "" {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured (ADMIN_PASS not set)"})
 		return false
 	}
 	user, pass, ok := r.BasicAuth()
 	if !ok {
 		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false
 	}
 
@@ -58,7 +59,7 @@ func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool
 			if h.RBAC.HasPermission(user, rbac.PermManageConfig) {
 				return true
 			}
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
+			httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient permissions"})
 			return false
 		}
 	}
@@ -68,7 +69,7 @@ func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool
 	}
 	slog.Warn("Settings auth failed", "remote_addr", r.RemoteAddr, "user", user)
 	w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-	writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	return false
 }
 
@@ -89,7 +90,7 @@ func maskConfig(sc configstore.StoredConfig) configstore.StoredConfig {
 // GET /admin/settings
 func (h *SettingsHandler) HandleGetSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -97,14 +98,14 @@ func (h *SettingsHandler) HandleGetSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	sc := h.Store.Get()
-	writeJSON(w, http.StatusOK, maskConfig(sc))
+	httputil.WriteJSON(w, http.StatusOK, maskConfig(sc))
 }
 
 // HandlePatchSettings partially updates the stored config.
 // PATCH /admin/settings
 func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPatch {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -115,7 +116,7 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 
 	var patch configstore.StoredConfig
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 		return
 	}
 
@@ -162,21 +163,21 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 
 	if err := h.Store.Update(current); err != nil {
 		slog.Error("Settings: failed to save config", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
 		return
 	}
 
 	slog.Info("Settings: config updated", "remote_addr", r.RemoteAddr)
 	h.reload()
 
-	writeJSON(w, http.StatusOK, maskConfig(h.Store.Get()))
+	httputil.WriteJSON(w, http.StatusOK, maskConfig(h.Store.Get()))
 }
 
 // HandleAddTarget adds a new target to the configuration.
 // POST /admin/settings/targets
 func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -187,7 +188,7 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 
 	var target configstore.TargetStore
 	if err := json.NewDecoder(r.Body).Decode(&target); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 		return
 	}
 
@@ -198,14 +199,14 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 
 	// Validate required fields.
 	if target.HostName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "host_name is required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "host_name is required"})
 		return
 	}
 
 	// Reject HTML/script content in input fields.
 	for _, s := range []string{target.ID, target.HostName, target.HostDisplay, target.Source} {
 		if strings.ContainsAny(s, "<>\"'&") {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "input contains invalid characters"})
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "input contains invalid characters"})
 			return
 		}
 	}
@@ -215,7 +216,7 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 		key, err := generateAPIKey()
 		if err != nil {
 			slog.Error("Settings: failed to generate API key", "error", err)
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate API key"})
+			httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate API key"})
 			return
 		}
 		target.APIKeys = []string{key}
@@ -226,7 +227,7 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 	// Check for duplicate target ID.
 	for _, t := range current.Targets {
 		if t.ID == target.ID {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "target with this ID already exists"})
+			httputil.WriteJSON(w, http.StatusConflict, map[string]string{"error": "target with this ID already exists"})
 			return
 		}
 	}
@@ -235,7 +236,7 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 
 	if err := h.Store.Update(current); err != nil {
 		slog.Error("Settings: failed to save config after adding target", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
 		return
 	}
 
@@ -253,14 +254,14 @@ func (h *SettingsHandler) HandleAddTarget(w http.ResponseWriter, r *http.Request
 		"source":    target.Source,
 		"api_key":   firstKey,
 	}
-	writeJSON(w, http.StatusCreated, resp)
+	httputil.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // HandleDeleteTarget removes a target from the configuration.
 // DELETE /admin/settings/targets/{id}
 func (h *SettingsHandler) HandleDeleteTarget(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -269,7 +270,7 @@ func (h *SettingsHandler) HandleDeleteTarget(w http.ResponseWriter, r *http.Requ
 
 	targetID := strings.TrimPrefix(r.URL.Path, "/admin/settings/targets/")
 	if targetID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
 		return
 	}
 
@@ -285,7 +286,7 @@ func (h *SettingsHandler) HandleDeleteTarget(w http.ResponseWriter, r *http.Requ
 	}
 
 	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
 		return
 	}
 
@@ -293,21 +294,21 @@ func (h *SettingsHandler) HandleDeleteTarget(w http.ResponseWriter, r *http.Requ
 
 	if err := h.Store.Update(current); err != nil {
 		slog.Error("Settings: failed to save config after deleting target", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
 		return
 	}
 
 	slog.Info("Settings: target deleted", "target_id", targetID)
 	h.reload()
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "target_id": targetID})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "target_id": targetID})
 }
 
 // HandleGenerateKey generates a new API key for a target.
 // POST /admin/settings/targets/{id}/generate-key
 func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -318,7 +319,7 @@ func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Reque
 	path := strings.TrimPrefix(r.URL.Path, "/admin/settings/targets/")
 	targetID := strings.TrimSuffix(path, "/generate-key")
 	if targetID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
 		return
 	}
 
@@ -331,7 +332,7 @@ func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Reque
 			key, err := generateAPIKey()
 			if err != nil {
 				slog.Error("Settings: failed to generate API key", "error", err)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate API key"})
+				httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate API key"})
 				return
 			}
 			newKey = key
@@ -341,13 +342,13 @@ func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Reque
 	}
 
 	if !found {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
 		return
 	}
 
 	if err := h.Store.Update(current); err != nil {
 		slog.Error("Settings: failed to save config after generating key", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
 		return
 	}
 
@@ -355,7 +356,7 @@ func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Reque
 	h.reload()
 
 	// Return the full new key in cleartext (only time it is shown).
-	writeJSON(w, http.StatusOK, map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"target_id": targetID,
 		"api_key":   newKey,
 	})
@@ -365,7 +366,7 @@ func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Reque
 // GET /admin/settings/targets/{id}/reveal-keys
 func (h *SettingsHandler) HandleRevealKeys(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -375,14 +376,14 @@ func (h *SettingsHandler) HandleRevealKeys(w http.ResponseWriter, r *http.Reques
 	path := strings.TrimPrefix(r.URL.Path, "/admin/settings/targets/")
 	targetID := strings.TrimSuffix(path, "/reveal-keys")
 	if targetID == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "target ID required"})
 		return
 	}
 
 	current := h.Store.Get()
 	for _, t := range current.Targets {
 		if t.ID == targetID {
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 				"target_id": targetID,
 				"api_keys":  t.APIKeys,
 			})
@@ -390,14 +391,14 @@ func (h *SettingsHandler) HandleRevealKeys(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
+	httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
 }
 
 // HandleTestIcinga tests the Icinga2 connection using stored credentials.
 // POST /admin/settings/test-icinga
 func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -406,7 +407,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 
 	sc := h.Store.Get()
 	if sc.Icinga2Host == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"status": "error", "error": "icinga2_host not configured"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"status": "error", "error": "icinga2_host not configured"})
 		return
 	}
 
@@ -422,7 +423,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 	url := strings.TrimRight(sc.Icinga2Host, "/") + "/v1/status"
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, url, nil)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"status": "error", "error": "failed to create request: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"status": "error", "error": "failed to create request: " + err.Error()})
 		return
 	}
 	req.SetBasicAuth(sc.Icinga2User, sc.Icinga2Pass)
@@ -430,7 +431,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 
 	resp, err := client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "error", "error": "connection failed: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "error", "error": "connection failed: " + err.Error()})
 		return
 	}
 	defer resp.Body.Close()
@@ -438,7 +439,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 
 	if resp.StatusCode != http.StatusOK {
-		writeJSON(w, http.StatusOK, map[string]string{
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{
 			"status": "error",
 			"error":  fmt.Sprintf("icinga2 returned HTTP %d: %s", resp.StatusCode, string(body)),
 		})
@@ -469,7 +470,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":          "ok",
 		"icinga2_version": version,
 	})
@@ -479,7 +480,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 // GET /admin/settings/export
 func (h *SettingsHandler) HandleExportConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -489,7 +490,7 @@ func (h *SettingsHandler) HandleExportConfig(w http.ResponseWriter, r *http.Requ
 	data, err := h.Store.Export()
 	if err != nil {
 		slog.Error("Settings: failed to export config", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to export: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to export: " + err.Error()})
 		return
 	}
 
@@ -502,7 +503,7 @@ func (h *SettingsHandler) HandleExportConfig(w http.ResponseWriter, r *http.Requ
 // HandleImportConfig restores configuration from a previously exported backup.
 func (h *SettingsHandler) HandleImportConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	if !h.checkAuth(w, r) {
@@ -519,23 +520,23 @@ func (h *SettingsHandler) HandleImportConfig(w http.ResponseWriter, r *http.Requ
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&importData); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON: " + err.Error()})
 		return
 	}
 
 	if importData.Meta.Version == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing or invalid meta.version in import file"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "missing or invalid meta.version in import file"})
 		return
 	}
 
 	// Validate imported config has at least one target with a host name
 	if len(importData.Config.Targets) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "import must contain at least one target"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "import must contain at least one target"})
 		return
 	}
 	for _, t := range importData.Config.Targets {
 		if t.HostName == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target " + t.ID + " missing host_name"})
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "target " + t.ID + " missing host_name"})
 			return
 		}
 	}
@@ -560,14 +561,14 @@ func (h *SettingsHandler) HandleImportConfig(w http.ResponseWriter, r *http.Requ
 
 	if err := h.Store.Update(importData.Config); err != nil {
 		slog.Error("Settings: import failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
 		return
 	}
 
 	slog.Info("Configuration imported from backup", "targets", len(importData.Config.Targets))
 	h.reload()
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":  "imported",
 		"targets": fmt.Sprintf("%d", len(importData.Config.Targets)),
 	})

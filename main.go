@@ -476,6 +476,7 @@ func main() {
 			"GET  /history/export",
 			"GET  /admin/services",
 			"DELETE /admin/services/{name}",
+			"POST /admin/services/{name}/status",
 			"POST /admin/services/bulk-delete",
 			"GET  /admin/ratelimit",
 			"POST /admin/history/clear",

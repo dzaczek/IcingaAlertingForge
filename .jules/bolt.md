@@ -1,3 +1,7 @@
+## 2024-05-31 - [Optimize `escHtml`]
+**Learning:** In a codebase embedding JavaScript inside a Go template for a dashboard, `escHtml` was previously using a DOM-mutating method to encode text entities (`var div = document.createElement('div'); div.appendChild(document.createTextNode(s)); return div.innerHTML;`). This caused significant performance overhead, as generating and altering a DOM element on-the-fly inside mapping functions or loops (like history log iterations) is much slower than simple string replacements.
+**Action:** Always favor native string replacement or regular expression substitutions for HTML escaping logic inside browser execution, rather than instantiating explicit DOM nodes repeatedly.
+
 ## 2024-04-01 - History file inline rotation bottleneck
 **Learning:** `history.Logger.rotateLockedInline()` runs every 100 appends. Previously, it called `readAll()` to get the current number of entries, which meant doing O(N) unmarshaling of every JSON line in the file, resulting in 300ms+ spikes when the file grew to ~90k lines, stalling heavy load.
 **Action:** Always count lines efficiently (e.g. `bytes.Count(buf, []byte{'\n'})`) to verify constraints before performing expensive parse-heavy operations in recurring/background tasks.

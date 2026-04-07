@@ -7,7 +7,7 @@ Back to the [Documentation Index](../README.md)
 Configuration can come from two sources:
 
 1. **Environment variables** (default) — all settings come from env vars or a `.env` file
-2. **Dashboard mode** — set `CONFIG_IN_DASHBOARD=true` to manage configuration through the Beauty Panel's Settings section
+2. **Dashboard mode** — set `CONFIG_IN_DASHBOARD=true` to manage configuration through the [Beauty Panel's Settings section](beauty-panel.md#settings-panel).
 
 The current model is built around managed dummy hosts. Each configured host gets its own routing rules, its own API keys, and its own notification settings.
 
@@ -20,6 +20,40 @@ When `CONFIG_IN_DASHBOARD=true`, the bridge stores configuration in a JSON file 
 | `CONFIG_IN_DASHBOARD` | `false` | Enable dashboard-based configuration |
 | `CONFIG_ENCRYPTION_KEY` | auto-generated | Encryption key for secrets at rest |
 | `CONFIG_FILE_PATH` | `/var/log/webhook-bridge/config.json` | Path to the JSON config file |
+
+### Configuration Loading Flow
+
+The following sequence diagram shows how configuration is loaded on startup depending on the `CONFIG_IN_DASHBOARD` setting.
+
+```mermaid
+flowchart TD
+    Start([Application Start]) --> CheckMode{CONFIG_IN_DASHBOARD<br>is true?}
+
+    %% Environment Variable Mode
+    CheckMode -- No --> ReadEnv[Read all from Env Vars / .env]
+    ReadEnv --> BuildEnvCfg[Build Runtime Configuration]
+    BuildEnvCfg --> RunEnv([Run Bridge])
+
+    %% Dashboard Mode
+    CheckMode -- Yes --> CheckJSON{config.json<br>exists?}
+
+    %% First Start (Migration)
+    CheckJSON -- No --> ReadMigrate[Read from Env Vars]
+    ReadMigrate --> GenKey[Generate Encryption Key]
+    GenKey --> Encrypt[Encrypt Secrets]
+    Encrypt --> SaveJSON[Save config.json]
+    SaveJSON --> BuildJSONCfg[Build Runtime Configuration]
+
+    %% Subsequent Starts
+    CheckJSON -- Yes --> LoadJSON[Load config.json]
+    LoadJSON --> ReadKey[Read Encryption Key]
+    ReadKey --> Decrypt[Decrypt Secrets]
+    Decrypt --> BuildJSONCfg
+
+    BuildJSONCfg --> RunDashboard([Run Bridge with Dashboard Config])
+    RunDashboard -.-> WebUI[Beauty Panel Settings UI]
+    WebUI -. "Hot Reload (Save JSON)" .-> RunDashboard
+```
 
 On first start, the bridge performs a one-time migration from environment variables to the JSON file. Subsequent starts load from JSON. Secrets (Icinga2 password, admin password, API keys) are encrypted at rest using AES-256-GCM. An encryption key is auto-generated at `/var/log/webhook-bridge/.config.key` if not provided.
 
@@ -58,22 +92,22 @@ So you do not create separate HTTP paths for each team. You keep one URL and let
 |---|---|---|---|
 | `SERVER_PORT` | No | `8080` | HTTP port |
 | `SERVER_HOST` | No | `0.0.0.0` | HTTP bind address |
-| `ICINGA2_HOST` | Yes | — | Icinga2 API base URL, for example `https://icinga2.example.com:5665` |
-| `ICINGA2_USER` | Yes | — | Icinga2 API user |
-| `ICINGA2_PASS` | Yes | — | Icinga2 API password |
-| `ICINGA2_HOST_AUTO_CREATE` | No | `false` | Create configured dummy hosts if they do not exist |
-| `ICINGA2_TLS_SKIP_VERIFY` | No | `false` | Skip TLS verification |
-| `HISTORY_FILE` | No | `/var/log/webhook-bridge/history.jsonl` | JSONL history file |
-| `HISTORY_MAX_ENTRIES` | No | `10000` | Rotation limit for history |
+| `ICINGA2_HOST` | Yes | — | Icinga2 API base URL, for example `https://icinga2.example.com:5665` (Visible in Settings Panel) |
+| `ICINGA2_USER` | Yes | — | Icinga2 API user (Visible in Settings Panel) |
+| `ICINGA2_PASS` | Yes | — | Icinga2 API password (Visible in Settings Panel) |
+| `ICINGA2_HOST_AUTO_CREATE` | No | `false` | Create configured dummy hosts if they do not exist (Visible in Settings Panel) |
+| `ICINGA2_TLS_SKIP_VERIFY` | No | `false` | Skip TLS verification (Visible in Settings Panel) |
+| `HISTORY_FILE` | No | `/var/log/webhook-bridge/history.jsonl` | JSONL history file (Visible in Settings Panel) |
+| `HISTORY_MAX_ENTRIES` | No | `10000` | Rotation limit for history (Visible in Settings Panel) |
 <!-- LANG: hyphenation -->
-| `CACHE_TTL_MINUTES` | No | `60` | TTL for the in-memory service cache |
-| `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` |
-| `LOG_FORMAT` | No | `json` | `json` or `text` |
-| `ADMIN_USER` | No | `admin` | Admin username |
-| `ADMIN_PASS` | No | empty | Admin password. If empty, admin APIs are disabled |
-| `RATELIMIT_MUTATE_MAX` | No | `5` | Concurrent create and delete operations |
-| `RATELIMIT_STATUS_MAX` | No | `20` | Concurrent status update operations |
-| `RATELIMIT_MAX_QUEUE` | No | `100` | Maximum queued status jobs |
+| `CACHE_TTL_MINUTES` | No | `60` | TTL for the in-memory service cache (Visible in Settings Panel) |
+| `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, `error` (Visible in Settings Panel) |
+| `LOG_FORMAT` | No | `json` | `json` or `text` (Visible in Settings Panel) |
+| `ADMIN_USER` | No | `admin` | Admin username (Visible in Settings Panel) |
+| `ADMIN_PASS` | No | empty | Admin password. If empty, admin APIs are disabled (Visible in Settings Panel) |
+| `RATELIMIT_MUTATE_MAX` | No | `5` | Concurrent create and delete operations (Visible in Settings Panel) |
+| `RATELIMIT_STATUS_MAX` | No | `20` | Concurrent status update operations (Visible in Settings Panel) |
+| `RATELIMIT_MAX_QUEUE` | No | `100` | Maximum queued status jobs (Visible in Settings Panel) |
 
 ## Host Routing Model
 
@@ -104,15 +138,15 @@ If `SOURCE` is missing, the bridge falls back to the normalized target ID.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `IAF_TARGET_<ID>_HOST_NAME` | Yes | — | Icinga host name created or used for this target |
-| `IAF_TARGET_<ID>_HOST_DISPLAY` | No | `<HOST_NAME>` | Host display name |
+| `IAF_TARGET_<ID>_HOST_NAME` | Yes | — | Icinga host name created or used for this target (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_HOST_DISPLAY` | No | `<HOST_NAME>` | Host display name (Visible in Settings Panel) |
 | `IAF_TARGET_<ID>_HOST_ADDRESS` | No | empty | Optional metadata stored as `vars.iaf_host_address` |
-| `IAF_TARGET_<ID>_API_KEYS` | Yes | — | Comma-separated webhook keys for this host |
-| `IAF_TARGET_<ID>_SOURCE` | No | normalized target ID | Source label stored in logs and history |
-| `IAF_TARGET_<ID>_NOTIFICATION_USERS` | No | empty | Comma-separated Icinga users |
-| `IAF_TARGET_<ID>_NOTIFICATION_GROUPS` | No | empty | Comma-separated Icinga groups and user groups |
-| `IAF_TARGET_<ID>_NOTIFICATION_SERVICE_STATES` | No | empty | Comma-separated service states such as `critical,warning` |
-| `IAF_TARGET_<ID>_NOTIFICATION_HOST_STATES` | No | empty | Comma-separated host states such as `down` |
+| `IAF_TARGET_<ID>_API_KEYS` | Yes | — | Comma-separated webhook keys for this host (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_SOURCE` | No | normalized target ID | Source label stored in logs and history (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_NOTIFICATION_USERS` | No | empty | Comma-separated Icinga users (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_NOTIFICATION_GROUPS` | No | empty | Comma-separated Icinga groups and user groups (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_NOTIFICATION_SERVICE_STATES` | No | empty | Comma-separated service states such as `critical,warning` (Visible in Settings Panel) |
+| `IAF_TARGET_<ID>_NOTIFICATION_HOST_STATES` | No | empty | Comma-separated host states such as `down` (Visible in Settings Panel) |
 
 Important details:
 

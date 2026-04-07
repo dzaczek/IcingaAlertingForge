@@ -20,8 +20,8 @@ type Collector struct {
 	totalLatencyMs atomic.Int64 // sum of all request latencies for avg calculation
 
 	// Auth security
-	mu             sync.RWMutex
-	failedAuths    []AuthFailure
+	mu              sync.RWMutex
+	failedAuths     []AuthFailure
 	failedAuthTotal atomic.Int64
 }
 
@@ -35,23 +35,23 @@ type AuthFailure struct {
 // SystemStats holds a snapshot of system metrics.
 type SystemStats struct {
 	// Runtime
-	GoRoutines   int    `json:"goroutines"`
-	MemAllocMB   float64 `json:"mem_alloc_mb"`
-	MemSysMB     float64 `json:"mem_sys_mb"`
-	MemHeapMB    float64 `json:"mem_heap_mb"`
-	MemStackMB   float64 `json:"mem_stack_mb"`
+	GoRoutines     int     `json:"goroutines"`
+	MemAllocMB     float64 `json:"mem_alloc_mb"`
+	MemSysMB       float64 `json:"mem_sys_mb"`
+	MemHeapMB      float64 `json:"mem_heap_mb"`
+	MemStackMB     float64 `json:"mem_stack_mb"`
 	GCPauseTotalMs float64 `json:"gc_pause_total_ms"`
-	GCRuns       uint32 `json:"gc_runs"`
-	NumCPU       int    `json:"num_cpu"`
+	GCRuns         uint32  `json:"gc_runs"`
+	NumCPU         int     `json:"num_cpu"`
 
 	// App metrics
-	Uptime           string  `json:"uptime"`
-	UptimeSeconds    float64 `json:"uptime_seconds"`
-	TotalRequests    int64   `json:"total_requests"`
-	TotalErrors      int64   `json:"total_errors"`
-	ErrorRate        float64 `json:"error_rate_pct"`
-	AvgLatencyMs     float64 `json:"avg_latency_ms"`
-	RequestsPerMin   float64 `json:"requests_per_min"`
+	Uptime         string  `json:"uptime"`
+	UptimeSeconds  float64 `json:"uptime_seconds"`
+	TotalRequests  int64   `json:"total_requests"`
+	TotalErrors    int64   `json:"total_errors"`
+	ErrorRate      float64 `json:"error_rate_pct"`
+	AvgLatencyMs   float64 `json:"avg_latency_ms"`
+	RequestsPerMin float64 `json:"requests_per_min"`
 
 	// Security
 	FailedAuthTotal  int64          `json:"failed_auth_total"`
@@ -187,12 +187,12 @@ func (c *Collector) Snapshot() SystemStats {
 		GCRuns:         mem.NumGC,
 		NumCPU:         runtime.NumCPU(),
 
-		Uptime:        uptime.Round(time.Second).String(),
-		UptimeSeconds: uptime.Seconds(),
-		TotalRequests: totalReqs,
-		TotalErrors:   totalErrs,
-		ErrorRate:     errorRate,
-		AvgLatencyMs:  avgLatency,
+		Uptime:         uptime.Round(time.Second).String(),
+		UptimeSeconds:  uptime.Seconds(),
+		TotalRequests:  totalReqs,
+		TotalErrors:    totalErrs,
+		ErrorRate:      errorRate,
+		AvgLatencyMs:   avgLatency,
 		RequestsPerMin: reqPerMin,
 
 		FailedAuthTotal:  c.failedAuthTotal.Load(),

@@ -241,13 +241,13 @@ func main() {
 
 	// ── Create Handlers ─────────────────────────────────────────────
 	webhookHandler := &handler.WebhookHandler{
-		KeyStore:  keyStore,
-		Cache:     serviceCache,
-		API:       apiClient,
-		History:   historyLogger,
-		Targets:   cfg.Targets,
-		Limiter:   rateLimiter,
-		Metrics:   metricsCollector,
+		KeyStore:   keyStore,
+		Cache:      serviceCache,
+		API:        apiClient,
+		History:    historyLogger,
+		Targets:    cfg.Targets,
+		Limiter:    rateLimiter,
+		Metrics:    metricsCollector,
 		SSE:        sseBroker,
 		DebugRing:  debugRing,
 		RetryQueue: retryQueue,
@@ -283,12 +283,12 @@ func main() {
 	}
 
 	adminHandler := &handler.AdminHandler{
-		Cache:     serviceCache,
-		API:       apiClient,
-		Limiter:   rateLimiter,
-		History:   historyLogger,
-		Metrics:   metricsCollector,
-		DebugRing: debugRing,
+		Cache:      serviceCache,
+		API:        apiClient,
+		Limiter:    rateLimiter,
+		History:    historyLogger,
+		Metrics:    metricsCollector,
+		DebugRing:  debugRing,
 		Targets:    cfg.Targets,
 		User:       cfg.AdminUser,
 		Pass:       cfg.AdminPass,
@@ -491,6 +491,7 @@ func main() {
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
 		mux.ServeHTTP(w, r)
 	})
 

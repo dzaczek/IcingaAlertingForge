@@ -9,8 +9,8 @@ func TestMapSeverityToExitStatus(t *testing.T) {
 	}{
 		{"critical", 2},
 		{"warning", 1},
-		{"", 2},       // unknown defaults to critical
-		{"info", 2},   // unknown defaults to critical
+		{"", 2},     // unknown defaults to critical
+		{"info", 2}, // unknown defaults to critical
 	}
 
 	for _, tt := range tests {

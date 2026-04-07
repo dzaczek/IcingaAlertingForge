@@ -3116,16 +3116,12 @@ function appendDevEntry(d) {
 
 function escHtml(s) {
   if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, function(m) {
-    switch (m) {
-      case '&': return '&amp;';
-      case '<': return '&lt;';
-      case '>': return '&gt;';
-      case '"': return '&quot;';
-      case "'": return '&#39;';
-      default: return m;
-    }
-  });
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 // Check initial debug state from server
@@ -3446,9 +3442,9 @@ function showNewTargetKey(targetId, key) {
   popup.className = 'target-popup';
   popup.innerHTML = '<div class="target-popup-header" style="background:var(--lcars-ok);"><span>Target Registered</span></div>'
     + '<div class="target-popup-body">'
-    + '<div style="color:var(--lcars-ok);font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Target "' + targetId + '" is online</div>'
+    + '<div style="color:var(--lcars-ok);font-family:Orbitron,sans-serif;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;">Target "' + escHtml(targetId) + '" is online</div>'
     + '<div class="target-popup-row"><label class="target-popup-label" style="color:var(--lcars-critical);">API Key — Copy Now, Shown Only Once</label>'
-    + '<input class="target-popup-input" id="new-target-key-display" value="' + key + '" readonly style="font-family:monospace;font-size:13px;border-color:var(--lcars-ok);" onclick="this.select();" />'
+    + '<input class="target-popup-input" id="new-target-key-display" value="' + escHtml(key) + '" readonly style="font-family:monospace;font-size:13px;border-color:var(--lcars-ok);" onclick="this.select();" />'
     + '</div>'
     + '</div>'
     + '<div class="target-popup-actions"><button class="target-popup-btn" style="background:var(--lcars-blue);color:#000;" onclick="copyNewTargetKey()">Copy Key</button><button class="target-popup-btn confirm" onclick="this.closest(\'.target-popup-overlay\').remove()">Dismiss</button></div>';

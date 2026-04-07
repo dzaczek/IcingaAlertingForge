@@ -11,7 +11,7 @@ const debugRingSize = 100
 // DebugEntry captures a single API request/response pair.
 type DebugEntry struct {
 	Timestamp    time.Time `json:"timestamp"`
-	Direction    string    `json:"direction"`               // "inbound" (Grafana->IAF) or "outbound" (IAF->Icinga2)
+	Direction    string    `json:"direction"` // "inbound" (Grafana->IAF) or "outbound" (IAF->Icinga2)
 	Method       string    `json:"method"`
 	URL          string    `json:"url"`
 	RequestBody  string    `json:"request_body,omitempty"`
@@ -19,8 +19,8 @@ type DebugEntry struct {
 	ResponseBody string    `json:"response_body,omitempty"`
 	DurationMs   int64     `json:"duration_ms"`
 	Error        string    `json:"error,omitempty"`
-	Source       string    `json:"source,omitempty"`         // webhook source key (inbound only)
-	RemoteAddr   string    `json:"remote_addr,omitempty"`    // client IP (inbound only)
+	Source       string    `json:"source,omitempty"`      // webhook source key (inbound only)
+	RemoteAddr   string    `json:"remote_addr,omitempty"` // client IP (inbound only)
 }
 
 // DebugRing is a thread-safe ring buffer that stores recent API interactions.
@@ -29,8 +29,8 @@ type DebugRing struct {
 	entries  []DebugEntry
 	pos      int
 	count    int
-	enabled  atomic.Bool        // collection only happens when enabled
-	listener func(DebugEntry)   // optional real-time callback
+	enabled  atomic.Bool      // collection only happens when enabled
+	listener func(DebugEntry) // optional real-time callback
 }
 
 // NewDebugRing creates a new ring buffer for API debug entries.

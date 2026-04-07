@@ -62,17 +62,18 @@ Admin mode uses the same HTTP Basic Auth credentials as the admin API.
 
 ### Settings Panel
 
-When `CONFIG_IN_DASHBOARD=true`, the Settings section provides full configuration management:
+When `CONFIG_IN_DASHBOARD=true`, the Settings section provides full configuration management.
+For detailed explanations of these settings and how they correspond to environment variables, please see the [Configuration Guide](configuration.md).
 
-- **Icinga2 Connection** — host URL, user, password, TLS settings, test connection button
-- **Targets & Webhooks** — add/delete targets via LCARS-style popup, reveal/hide API keys, generate new keys, copy keys to clipboard
-- **Admin Credentials** — change admin user and password
-- **History & Cache** — file path, max entries, cache TTL
-- **Logging** — level and format
-- **Rate Limiting** — mutate, status, and queue limits
-- **Export/Import Backup** — full config backup as JSON (includes real secrets), restore from backup file
+- **Icinga2 Connection** — host URL (`ICINGA2_HOST`), user (`ICINGA2_USER`), password (`ICINGA2_PASS`), TLS settings (`ICINGA2_TLS_SKIP_VERIFY`), test connection button.
+- **Targets & Webhooks** — add/delete targets via LCARS-style popup, reveal/hide API keys (`IAF_TARGET_<ID>_API_KEYS`), generate new keys, copy keys to clipboard.
+- **Admin Credentials** — change admin user (`ADMIN_USER`) and password (`ADMIN_PASS`).
+- **History & Cache** — file path (`HISTORY_FILE`), max entries (`HISTORY_MAX_ENTRIES`), cache TTL (`CACHE_TTL_MINUTES`).
+- **Logging** — level (`LOG_LEVEL`) and format (`LOG_FORMAT`).
+- **Rate Limiting** — mutate (`RATELIMIT_MUTATE_MAX`), status (`RATELIMIT_STATUS_MAX`), and queue limits (`RATELIMIT_MAX_QUEUE`).
+- **Export/Import Backup** — full config backup as JSON (includes real secrets), restore from backup file.
 
-On first start with `CONFIG_IN_DASHBOARD=true`, the bridge migrates environment variables into a JSON config file stored on the Docker volume. Subsequent starts load from the JSON file. Secrets are encrypted at rest with AES-256-GCM using an auto-generated key.
+On first start with `CONFIG_IN_DASHBOARD=true`, the bridge migrates environment variables into a JSON config file stored on the Docker volume. Subsequent starts load from the JSON file. Secrets are encrypted at rest with AES-256-GCM using an auto-generated key. The flow diagram for this is documented in the [Configuration Guide](configuration.md#dashboard-configuration-mode).
 
 ### Security Panel
 

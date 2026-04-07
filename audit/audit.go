@@ -16,26 +16,26 @@ import (
 type EventType string
 
 const (
-	EventAuthSuccess  EventType = "auth.success"
-	EventAuthFailure  EventType = "auth.failure"
-	EventWebhook      EventType = "webhook.received"
-	EventStatusChange EventType = "status.change"
+	EventAuthSuccess   EventType = "auth.success"
+	EventAuthFailure   EventType = "auth.failure"
+	EventWebhook       EventType = "webhook.received"
+	EventStatusChange  EventType = "status.change"
 	EventServiceCreate EventType = "service.create"
 	EventServiceDelete EventType = "service.delete"
-	EventAdminAction  EventType = "admin.action"
-	EventQueueRetry   EventType = "queue.retry"
-	EventHealthCheck  EventType = "health.check"
-	EventConfigChange EventType = "config.change"
+	EventAdminAction   EventType = "admin.action"
+	EventQueueRetry    EventType = "queue.retry"
+	EventHealthCheck   EventType = "health.check"
+	EventConfigChange  EventType = "config.change"
 )
 
 // Severity levels aligned with CEF format.
 type Severity int
 
 const (
-	SevInfo    Severity = 1
-	SevLow     Severity = 3
-	SevMedium  Severity = 5
-	SevHigh    Severity = 7
+	SevInfo     Severity = 1
+	SevLow      Severity = 3
+	SevMedium   Severity = 5
+	SevHigh     Severity = 7
 	SevCritical Severity = 9
 )
 

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"icinga-webhook-bridge/httputil"
 	"net/http"
 	"strings"
 	"time"
@@ -20,7 +21,7 @@ type StatusHandler struct {
 // ServeHTTP handles GET /status/{service_name}.
 func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -33,7 +34,7 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	target, err := resolveSingleHost(h.Targets, r.URL.Query().Get("host"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -58,5 +59,5 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		response["exists_in_icinga"] = false
 	}
 
-	writeJSON(w, http.StatusOK, response)
+	httputil.WriteJSON(w, http.StatusOK, response)
 }

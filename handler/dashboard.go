@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"icinga-webhook-bridge/httputil"
 	"bytes"
 	"crypto/subtle"
 	"fmt"
@@ -202,7 +203,7 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 // ServeHTTP renders the beauty dashboard.
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 

@@ -16,6 +16,7 @@ import (
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
+	"icinga-webhook-bridge/httputil"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
@@ -42,7 +43,7 @@ type WebhookHandler struct {
 // ServeHTTP handles POST /webhook requests from Grafana.
 func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -75,7 +76,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Outcome:    "failure",
 			})
 		}
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
@@ -84,7 +85,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		slog.Error("Webhook route points to unknown target",
 			"target_id", route.TargetID,
 			"remote_addr", r.RemoteAddr)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "webhook route misconfigured"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "webhook route misconfigured"})
 		return
 	}
 
@@ -95,19 +96,19 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Error("Failed to read webhook body", "error", err, "source", route.Source)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read body"})
 		return
 	}
 
 	payload, format, err := parseWebhookPayload(rawBody)
 	if err != nil {
 		slog.Error("Failed to decode webhook payload", "error", err, "source", route.Source, "host", target.HostName)
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON payload"})
 		return
 	}
 
 	if len(payload.Alerts) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no alerts in payload"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "no alerts in payload"})
 		return
 	}
 
@@ -184,7 +185,7 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		statusCode = http.StatusBadGateway
 	}
 
-	writeJSON(w, statusCode, map[string]any{
+	httputil.WriteJSON(w, statusCode, map[string]any{
 		"request_id": requestID,
 		"source":     route.Source,
 		"target_id":  target.ID,
@@ -276,11 +277,3 @@ func parseWebhookPayload(rawBody []byte) (models.GrafanaPayload, string, error) 
 	return payload, "grafana", nil
 }
 
-// writeJSON writes a JSON response with the given status code.
-func writeJSON(w http.ResponseWriter, statusCode int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		slog.Debug("writeJSON encode error", "error", err)
-	}
-}

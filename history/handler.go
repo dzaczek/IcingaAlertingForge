@@ -7,18 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"icinga-webhook-bridge/httputil"
 	"icinga-webhook-bridge/models"
 )
-
-// writeJSON writes a JSON response with the given status code.
-func writeJSON(w http.ResponseWriter, statusCode int, data any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(statusCode)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		// Just log error; response is already sent
-		// slog.Debug("writeJSON encode error", "error", err)
-	}
-}
 
 // Handler provides HTTP handlers for querying and exporting webhook history.
 type Handler struct {
@@ -33,7 +24,7 @@ func NewHandler(logger *Logger) *Handler {
 // HandleHistory serves GET /history with optional query filters.
 func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -72,7 +63,7 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 
 	entries, err := h.logger.Query(filter)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query history"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to query history"})
 		return
 	}
 
@@ -97,7 +88,7 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 // HandleExport serves GET /history/export — streams the raw JSONL file.
 func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 
@@ -109,7 +100,7 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to open history file"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to open history file"})
 		return
 	}
 	defer f.Close()

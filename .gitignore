@@ -1,4 +1,5 @@
 # Binaries
+icinga-webhook-bridge
 webhook-bridge
 *.exe
 *.dll

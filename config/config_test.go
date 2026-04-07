@@ -44,7 +44,10 @@ func setMultiTargetEnv(t *testing.T) {
 func TestLoad_ValidLegacyConfig(t *testing.T) {
 	setLegacyTestEnv(t)
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if cfg.ServerPort != "8080" {
 		t.Errorf("expected default server port 8080, got %s", cfg.ServerPort)
@@ -69,7 +72,10 @@ func TestLoad_ValidLegacyConfig(t *testing.T) {
 func TestLoad_ValidMultiTargetConfig(t *testing.T) {
 	setMultiTargetEnv(t)
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if len(cfg.Targets) != 2 {
 		t.Fatalf("expected 2 targets, got %d", len(cfg.Targets))
@@ -100,12 +106,10 @@ func TestLoad_MissingRequiredVar(t *testing.T) {
 
 	os.Unsetenv("ICINGA2_HOST")
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for missing required env var")
-		}
-	}()
-	Load()
+	_, err := Load()
+	if err == nil {
+		t.Error("expected error for missing required env var")
+	}
 }
 
 func TestLoad_NoWebhookKeys(t *testing.T) {
@@ -114,19 +118,20 @@ func TestLoad_NoWebhookKeys(t *testing.T) {
 	t.Setenv("ICINGA2_PASS", "pass")
 	t.Setenv("ICINGA2_HOST_NAME", "host")
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic for no webhook keys")
-		}
-	}()
-	Load()
+	_, err := Load()
+	if err == nil {
+		t.Error("expected error for no webhook keys")
+	}
 }
 
 func TestLoad_CustomPort(t *testing.T) {
 	setLegacyTestEnv(t)
 	t.Setenv("SERVER_PORT", "9090")
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if cfg.ServerPort != "9090" {
 		t.Errorf("expected port 9090, got %s", cfg.ServerPort)
@@ -140,7 +145,10 @@ func TestLoad_TLSSkipVerify(t *testing.T) {
 	setLegacyTestEnv(t)
 	t.Setenv("ICINGA2_TLS_SKIP_VERIFY", "true")
 
-	cfg := Load()
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if !cfg.Icinga2TLSSkipVerify {
 		t.Error("expected TLS skip verify to be true")

@@ -217,10 +217,12 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if c, err := r.Cookie("_logged_out"); err == nil && c.Value == "1" {
 			// Clear the logout cookie so next attempt works normally
 			http.SetCookie(w, &http.Cookie{
-				Name:   "_logged_out",
-				Value:  "",
-				Path:   "/",
-				MaxAge: -1,
+				Name:     "_logged_out",
+				Value:    "",
+				Path:     "/",
+				MaxAge:   -1,
+				HttpOnly: true,
+				Secure:   true,
 			})
 			w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")

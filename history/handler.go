@@ -10,6 +10,8 @@ import (
 	"icinga-webhook-bridge/models"
 )
 
+const maxHistoryLimit = 10000
+
 // writeJSON writes a JSON response with the given status code.
 func writeJSON(w http.ResponseWriter, statusCode int, data any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -43,6 +45,9 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 	if l := q.Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
 			limit = n
+			if limit > maxHistoryLimit {
+				limit = maxHistoryLimit
+			}
 		}
 	}
 

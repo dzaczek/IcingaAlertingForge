@@ -132,6 +132,12 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 	defer l.mu.Unlock()
 
 	var matched []models.HistoryEntry
+	var matchedPos int
+	var totalMatched int
+
+	if filter.Limit > 0 {
+		matched = make([]models.HistoryEntry, filter.Limit)
+	}
 
 	err := l.processAll(func(e models.HistoryEntry) error {
 		if filter.Service != "" && e.ServiceName != filter.Service {
@@ -154,12 +160,9 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 		}
 
 		if filter.Limit > 0 {
-			if len(matched) == filter.Limit {
-				copy(matched, matched[1:])
-				matched[filter.Limit-1] = e
-			} else {
-				matched = append(matched, e)
-			}
+			matched[matchedPos] = e
+			matchedPos = (matchedPos + 1) % filter.Limit
+			totalMatched++
 		} else {
 			matched = append(matched, e)
 		}
@@ -169,6 +172,20 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	if filter.Limit > 0 {
+		count := totalMatched
+		if count > filter.Limit {
+			count = filter.Limit
+		}
+		// Unroll the ring buffer and reverse it simultaneously to get newest first
+		result := make([]models.HistoryEntry, count)
+		for i := 0; i < count; i++ {
+			idx := (matchedPos - 1 - i + filter.Limit) % filter.Limit
+			result[i] = matched[idx]
+		}
+		return result, nil
 	}
 
 	// Reverse to get newest first
@@ -315,9 +332,14 @@ func (l *Logger) Stats() (HistoryStats, error) {
 	}
 
 	// We want newest recent entries/errors, but we are reading oldest to newest.
-	// So we keep circular buffers and then copy/reverse them at the end.
-	recentEntriesBuf := make([]models.HistoryEntry, 0, 20)
-	recentErrorsBuf := make([]models.HistoryEntry, 0, 10)
+	// So we keep ring buffers to avoid O(N) slice shifting, and unroll/reverse at the end.
+	recentEntriesBuf := make([]models.HistoryEntry, 20)
+	recentEntriesPos := 0
+	recentEntriesTotal := 0
+
+	recentErrorsBuf := make([]models.HistoryEntry, 10)
+	recentErrorsPos := 0
+	recentErrorsTotal := 0
 
 	err := l.processAll(func(e models.HistoryEntry) error {
 		stats.TotalEntries++
@@ -350,22 +372,14 @@ func (l *Logger) Stats() (HistoryStats, error) {
 			stats.TotalDurationMs += e.DurationMs
 		}
 
-		if len(recentEntriesBuf) == 20 {
-			// Shift and append
-			copy(recentEntriesBuf, recentEntriesBuf[1:])
-			recentEntriesBuf[19] = e
-		} else {
-			recentEntriesBuf = append(recentEntriesBuf, e)
-		}
+		recentEntriesBuf[recentEntriesPos] = e
+		recentEntriesPos = (recentEntriesPos + 1) % 20
+		recentEntriesTotal++
 
 		if !e.IcingaOK || e.Error != "" {
-			if len(recentErrorsBuf) == 10 {
-				// Shift and append
-				copy(recentErrorsBuf, recentErrorsBuf[1:])
-				recentErrorsBuf[9] = e
-			} else {
-				recentErrorsBuf = append(recentErrorsBuf, e)
-			}
+			recentErrorsBuf[recentErrorsPos] = e
+			recentErrorsPos = (recentErrorsPos + 1) % 10
+			recentErrorsTotal++
 		}
 
 		return nil
@@ -379,12 +393,23 @@ func (l *Logger) Stats() (HistoryStats, error) {
 		stats.AvgDurationMs = stats.TotalDurationMs / int64(stats.TotalEntries)
 	}
 
-	// Reverse into the final slice to get newest first
-	for i := len(recentEntriesBuf) - 1; i >= 0; i-- {
-		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[i])
+	// Unroll the ring buffers to get newest first
+	recentEntriesCount := recentEntriesTotal
+	if recentEntriesCount > 20 {
+		recentEntriesCount = 20
 	}
-	for i := len(recentErrorsBuf) - 1; i >= 0; i-- {
-		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[i])
+	for i := 0; i < recentEntriesCount; i++ {
+		idx := (recentEntriesPos - 1 - i + 20) % 20
+		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[idx])
+	}
+
+	recentErrorsCount := recentErrorsTotal
+	if recentErrorsCount > 10 {
+		recentErrorsCount = 10
+	}
+	for i := 0; i < recentErrorsCount; i++ {
+		idx := (recentErrorsPos - 1 - i + 10) % 10
+		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[idx])
 	}
 
 	return stats, nil

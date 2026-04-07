@@ -13,3 +13,7 @@
 ## 2024-04-04 - Lexicographical sorting optimization
 **Learning:** `cache.ServiceCache.AllEntries()` sorted entries using a multi-field comparison (`Host` then `Service`). However, since `CacheEntry` already has a composite `Key` field (`Host + \x1f + Service`) with a stable, low-byte separator, a direct lexicographical comparison of the `Key` field is functionally equivalent but significantly faster, as it avoids branching and multiple string comparisons.
 **Action:** When objects share a stable composite string key with a low-byte separator, use single-string lexicographical sorting over multi-field comparisons to optimize sort operations.
+
+## 2026-04-05 - Bounded slice shifting CPU bottleneck
+**Learning:** When scanning large files line-by-line to maintain a "recent N" sliding window, `history.Logger.Query()` and `history.Logger.Stats()` used `copy(slice, slice[1:])` on every processed entry beyond the limit. For a file with `L` lines and a limit `N`, this resulted in O(L * N) time complexity, leading to severe CPU usage and performance degradation during queries.
+**Action:** Replace slice shifting loops with O(1) ring buffers (tracking insertion position with modulo arithmetic: `pos = (pos + 1) % N`). Unroll the buffer correctly in reverse only once at the end of the process.

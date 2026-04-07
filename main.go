@@ -35,7 +35,11 @@ var version = "dev"
 
 func main() {
 	// ── Load Configuration ──────────────────────────────────────────
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("configuration error", "error", err)
+		os.Exit(1)
+	}
 
 	// ── Setup Structured Logging ────────────────────────────────────
 	setupLogging(cfg.LogLevel, cfg.LogFormat)

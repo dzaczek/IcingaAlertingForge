@@ -11,6 +11,9 @@ import (
 	"icinga-webhook-bridge/models"
 )
 
+const maxHistoryLimit = 10000
+
+
 // Handler provides HTTP handlers for querying and exporting webhook history.
 type Handler struct {
 	logger *Logger
@@ -34,6 +37,9 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 	if l := q.Get("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
 			limit = n
+			if limit > maxHistoryLimit {
+				limit = maxHistoryLimit
+			}
 		}
 	}
 

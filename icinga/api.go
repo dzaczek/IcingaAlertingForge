@@ -9,12 +9,14 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
 // APIClient communicates with the Icinga2 REST API (port 5665)
 // to submit passive check results.
 type APIClient struct {
+	mu         sync.RWMutex
 	BaseURL    string
 	User       string
 	Pass       string
@@ -66,6 +68,8 @@ func NewAPIClient(baseURL, user, pass string, tlsSkipVerify bool) *APIClient {
 
 // UpdateCredentials replaces the API client's connection details for hot-reload.
 func (c *APIClient) UpdateCredentials(baseURL, user, pass string, tlsSkipVerify bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.BaseURL = baseURL
 	c.User = user
 	c.Pass = pass
@@ -104,6 +108,8 @@ type processCheckResultPayload struct {
 // SendCheckResult submits a passive check result to Icinga2 for the given host and service.
 // exitStatus: 0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN
 func (c *APIClient) SendCheckResult(host, service string, exitStatus int, message string) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	payload := processCheckResultPayload{
 		Type:         "Service",
 		Filter:       fmt.Sprintf(`host.name==%q && service.name==%q`, host, service),
@@ -187,6 +193,12 @@ func (h HostInfo) IsDummy() bool {
 
 // GetHostInfo retrieves detailed host information from Icinga2.
 func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.getHostInfo(host)
+}
+
+func (c *APIClient) getHostInfo(host string) (HostInfo, error) {
 	reqURL := fmt.Sprintf("%s/v1/objects/hosts/%s", c.BaseURL, url.PathEscape(host))
 	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
 	if err != nil {
@@ -249,7 +261,9 @@ func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
 
 // HostExists is a convenience wrapper around GetHostInfo.
 func (c *APIClient) HostExists(host string) (bool, error) {
-	info, err := c.GetHostInfo(host)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	info, err := c.getHostInfo(host)
 	if err != nil {
 		return false, err
 	}
@@ -260,6 +274,8 @@ func (c *APIClient) HostExists(host string) (bool, error) {
 // The host is marked with IAF-specific vars so we can detect it on
 // subsequent startups and avoid conflicts with Director.
 func (c *APIClient) CreateHost(spec HostSpec) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if spec.DisplayName == "" {
 		spec.DisplayName = spec.Name
 	}
@@ -353,6 +369,8 @@ func cloneNotificationVars(src map[string]any) map[string]any {
 
 // ListServices returns all services for the given host from Icinga2.
 func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	filter := map[string]any{
 		"filter": fmt.Sprintf(`host.name==%q`, host),
 		"attrs":  []string{"name", "display_name", "state", "last_check_result", "notes", "vars"},
@@ -469,6 +487,8 @@ func (s ServiceInfo) IsLegacyManagedByUs() bool {
 // Labels and annotations from the Grafana webhook are stored as Icinga2 attributes
 // so operators can see the full alert context in the Icinga2 UI.
 func (c *APIClient) CreateService(host, name string, labels, annotations map[string]string) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	// Build notes from annotations (summary + description)
 	notes := "Managed by IcingaAlertingForge | auto-created"
 	if s := annotations["summary"]; s != "" {
@@ -566,6 +586,8 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 // DeleteService removes a service from Icinga2 via the REST API.
 // Uses DELETE /v1/objects/services/<host>!<service> with cascade=true.
 func (c *APIClient) DeleteService(host, name string) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s?cascade=1", c.BaseURL, url.PathEscape(host), url.PathEscape(name))
 	req, err := http.NewRequest(http.MethodDelete, reqURL, nil)
 	if err != nil {
@@ -595,6 +617,8 @@ func (c *APIClient) DeleteService(host, name string) error {
 
 // GetServiceStatus queries Icinga2 for the current status of a service on a host.
 func (c *APIClient) GetServiceStatus(host, service string) (exitStatus int, output string, checkTime time.Time, err error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	filter := map[string]any{
 		"filter": fmt.Sprintf(`host.name==%q && service.name==%q`, host, service),
 		"attrs":  []string{"state", "last_check_result"},

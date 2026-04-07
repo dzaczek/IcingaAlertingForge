@@ -2125,14 +2125,14 @@ const dashboardHTML = `<!DOCTYPE html>
           {{if .Stats.BySource}}
           <div class="tag-list">
             {{range $source, $count := .Stats.BySource}}
-            <span class="source-tag clickable" onclick="toggleSourceDetail('{{$source}}')">{{$source}} <span class="count">({{$count}})</span></span>
+            <span class="source-tag clickable js-source-toggle" data-source="{{$source}}">{{$source}} <span class="count">({{$count}})</span></span>
             {{end}}
           </div>
           {{range $source, $count := .Stats.BySource}}
           <div class="source-detail" id="source-detail-{{$source}}" style="display:none">
             <div class="ip-tabs">
-              <span class="ip-tab active" onclick="switchIPTab('{{$source}}', 'last', this)">Last 10</span>
-              <span class="ip-tab" onclick="switchIPTab('{{$source}}', 'top', this)">Top 10</span>
+              <span class="ip-tab active js-ip-tab" data-source="{{$source}}" data-tab="last">Last 10</span>
+              <span class="ip-tab js-ip-tab" data-source="{{$source}}" data-tab="top">Top 10</span>
             </div>
             <div class="ip-tab-content" id="ip-last-{{$source}}">
               <div class="source-detail-title">Recent connections</div>
@@ -2289,7 +2289,7 @@ const dashboardHTML = `<!DOCTYPE html>
               {{if and .Host (ne .Host $prevHost)}}
               <tr class="svc-host-divider"><td colspan="3">{{.Host}}</td></tr>
               {{end}}
-              <tr onclick="showServiceHistory('{{.Service}}', '{{.Host}}')">
+              <tr class="js-service-history" data-service="{{.Service}}" data-host="{{.Host}}">
                 <td class="svc-host-cell">{{if .Host}}{{.Host}}{{else}}-{{end}}</td>
                 <td class="svc-name-cell">{{.Service}}</td>
                 <td><span class="svc-state-badge {{.State}}">{{.State}}</span></td>
@@ -2663,7 +2663,7 @@ const dashboardHTML = `<!DOCTYPE html>
               <tr data-service="{{.Name}}" data-host="{{.HostName}}">
                 <td class="checkbox-cell">{{if $.CanDeleteService}}<input type="checkbox" class="svc-check" value="{{.Name}}" data-host="{{.HostName}}">{{end}}</td>
                 <td class="mono">{{.HostName}}</td>
-                <td><strong style="cursor:pointer;color:var(--lcars-blue);" onclick="event.stopPropagation();showServiceHistory('{{.Name}}', '{{.HostName}}')">{{.Name}}</strong></td>
+                <td><strong style="cursor:pointer;color:var(--lcars-blue);" class="js-service-history-trigger">{{.Name}}</strong></td>
                 <td>{{.DisplayName}}</td>
                 <td>
                   {{if .HasCheckResult}}
@@ -4087,6 +4087,39 @@ function filterTable(tableId, query, countId) {
   });
 })();
 {{end}}
+
+document.addEventListener('click', function(e) {
+  // Source detail toggle
+  const sourceToggle = e.target.closest('.js-source-toggle');
+  if (sourceToggle) {
+    toggleSourceDetail(sourceToggle.dataset.source);
+    return;
+  }
+
+  // IP tabs
+  const ipTab = e.target.closest('.js-ip-tab');
+  if (ipTab) {
+    switchIPTab(ipTab.dataset.source, ipTab.dataset.tab, ipTab);
+    return;
+  }
+
+  // Service history (Registry table or Icinga table strong tag)
+  const historyTrigger = e.target.closest('.js-service-history-trigger');
+  if (historyTrigger) {
+    e.stopPropagation();
+    const row = historyTrigger.closest('tr');
+    if (row) {
+      showServiceHistory(row.dataset.service, row.dataset.host);
+    }
+    return;
+  }
+
+  const historyRow = e.target.closest('.js-service-history');
+  if (historyRow) {
+    showServiceHistory(historyRow.dataset.service, historyRow.dataset.host);
+    return;
+  }
+});
 </script>
 
 </body>

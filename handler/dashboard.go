@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
+	"sync"
 	"time"
 
 	"icinga-webhook-bridge/audit"
@@ -264,14 +265,26 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If admin, fetch live services from Icinga2
 	var icingaServices []icinga.ServiceInfo
 	if isAdmin {
+			// ⚡ Bolt: Fetch services concurrently to prevent dashboard load times from scaling linearly with the number of configured targets.
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+
 		for _, target := range sortedTargets(h.Targets) {
-			svcs, err := h.API.ListServices(target.HostName)
-			if err != nil {
-				slog.Error("Dashboard: failed to list Icinga2 services", "host", target.HostName, "error", err)
-				continue
-			}
-			icingaServices = append(icingaServices, svcs...)
+				wg.Add(1)
+				go func(t config.TargetConfig) {
+					defer wg.Done()
+					svcs, err := h.API.ListServices(t.HostName)
+					if err != nil {
+						slog.Error("Dashboard: failed to list Icinga2 services", "host", t.HostName, "error", err)
+						return
+					}
+					mu.Lock()
+					icingaServices = append(icingaServices, svcs...)
+					mu.Unlock()
+				}(target)
 		}
+			wg.Wait()
+
 		sort.Slice(icingaServices, func(i, j int) bool {
 			if icingaServices[i].HostName == icingaServices[j].HostName {
 				return icingaServices[i].Name < icingaServices[j].Name

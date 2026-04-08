@@ -17,3 +17,7 @@
 ## 2026-04-05 - Bounded slice shifting CPU bottleneck
 **Learning:** When scanning large files line-by-line to maintain a "recent N" sliding window, `history.Logger.Query()` and `history.Logger.Stats()` used `copy(slice, slice[1:])` on every processed entry beyond the limit. For a file with `L` lines and a limit `N`, this resulted in O(L * N) time complexity, leading to severe CPU usage and performance degradation during queries.
 **Action:** Replace slice shifting loops with O(1) ring buffers (tracking insertion position with modulo arithmetic: `pos = (pos + 1) % N`). Unroll the buffer correctly in reverse only once at the end of the process.
+
+## 2024-04-06 - Stream raw bytes during history rotation
+**Learning:** `history.Logger.rotateLockedInline()` used to load the entire JSONL file by unmarshaling each line into objects, slicing off the old entries, and marshaling the remainder back into JSON strings. This was a severe memory and CPU bottleneck causing massive GC pressure and latency spikes when rotating large logs.
+**Action:** Always process line-based formats using raw byte streaming when no data mutation is required. For file truncation (like log rotation), scan and skip bytes/lines, then write the remaining raw bytes directly to a temporary file before renaming, bypassing unmarshaling/marshaling entirely.

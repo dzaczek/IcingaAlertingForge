@@ -272,39 +272,73 @@ func (l *Logger) rotateIfNeeded() {
 
 // rotateLockedInline performs rotation while the lock is already held.
 func (l *Logger) rotateLockedInline() {
-	// Fast path: avoid expensive readAll (JSON parsing) if the file doesn't need rotation.
+	// Fast path: avoid expensive processing if the file doesn't need rotation.
 	lineCount, err := l.countLines()
 	if err != nil || lineCount <= l.maxEntries {
 		return
 	}
 
-	entries, err := l.readAll()
-	if err != nil || len(entries) <= l.maxEntries {
-		return
-	}
+	skip := lineCount - l.maxEntries
 
-	// Keep only the last maxEntries
-	entries = entries[len(entries)-l.maxEntries:]
-
-	f, err := os.Create(l.filePath)
+	f, err := os.Open(l.filePath)
 	if err != nil {
-		slog.Error("history: failed to rotate file", "error", err)
+		slog.Error("history: failed to open file for rotation", "error", err)
 		return
 	}
-	defer f.Close()
 
-	writer := bufio.NewWriter(f)
-	for _, e := range entries {
-		data, err := json.Marshal(e)
-		if err != nil {
+	tempPath := l.filePath + ".tmp"
+	out, err := os.Create(tempPath)
+	if err != nil {
+		f.Close()
+		slog.Error("history: failed to create temp file for rotation", "error", err)
+		return
+	}
+
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	writer := bufio.NewWriter(out)
+
+	skipped := 0
+	kept := 0
+	for scanner.Scan() {
+		if skipped < skip {
+			skipped++
 			continue
 		}
-		writer.Write(data)
+		writer.Write(scanner.Bytes())
 		writer.WriteByte('\n')
+		kept++
 	}
-	writer.Flush()
 
-	slog.Info("history: rotated file", "kept", len(entries), "max", l.maxEntries)
+	if err := scanner.Err(); err != nil {
+		out.Close()
+		f.Close()
+		os.Remove(tempPath)
+		slog.Error("history: scanner error during rotation", "error", err)
+		return
+	}
+
+	if err := writer.Flush(); err != nil {
+		out.Close()
+		f.Close()
+		os.Remove(tempPath)
+		slog.Error("history: failed to flush temp file", "error", err)
+		return
+	}
+	if err := out.Close(); err != nil {
+		f.Close()
+		os.Remove(tempPath)
+		slog.Error("history: failed to close temp file", "error", err)
+		return
+	}
+	f.Close()
+
+	if err := os.Rename(tempPath, l.filePath); err != nil {
+		slog.Error("history: failed to rename rotated file", "error", err)
+		return
+	}
+
+	slog.Info("history: rotated file", "kept", kept, "max", l.maxEntries)
 }
 
 // FilePath returns the path to the history JSONL file (used for export).

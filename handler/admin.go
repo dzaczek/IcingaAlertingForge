@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"icinga-webhook-bridge/cache"
@@ -116,15 +117,26 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 
 	services := make([]icinga.ServiceInfo, 0)
 	var fetchErrors []string
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
 	for _, target := range targets {
-		hostServices, err := h.API.ListServices(target.HostName)
-		if err != nil {
-			slog.Error("Failed to list services from Icinga2", "host", target.HostName, "error", err)
-			fetchErrors = append(fetchErrors, target.HostName+": "+err.Error())
-			continue
-		}
-		services = append(services, hostServices...)
+		wg.Add(1)
+		go func(t config.TargetConfig) {
+			defer wg.Done()
+			hostServices, err := h.API.ListServices(t.HostName)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				slog.Error("Failed to list services from Icinga2", "host", t.HostName, "error", err)
+				fetchErrors = append(fetchErrors, t.HostName+": "+err.Error())
+				return
+			}
+			services = append(services, hostServices...)
+		}(target)
 	}
+	wg.Wait()
 
 	sort.Slice(services, func(i, j int) bool {
 		if services[i].HostName == services[j].HostName {

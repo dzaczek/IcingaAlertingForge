@@ -25,3 +25,7 @@
 ## 2026-04-08 - Dashboard target services fetch bottleneck
 **Learning:** `DashboardHandler.ServeHTTP` fetched services for each target sequentially (`h.API.ListServices(target.HostName)`) in a single thread. This sequential I/O caused an N+1 API call bottleneck where the total dashboard rendering time scaled linearly with the number of configured targets, potentially leading to unacceptable delays on larger setups.
 **Action:** When a single request needs to retrieve independent data from multiple remote services or nodes (like listing configurations across distinct targets), use concurrency structures (e.g., `sync.WaitGroup` and `sync.Mutex`) to parallelize the requests, collapsing the total wait time to O(1) relative to target count.
+
+## 2024-05-31 - Sequential N+1 API call bottleneck
+**Learning:** `admin.HandleListServices` fetched services from multiple target hosts sequentially inside a loop (`for _, target := range targets`). In deployments with multiple configured Icinga2 targets, this caused the API response time to scale linearly with the number of targets (N), introducing significant latency delays for dashboard users.
+**Action:** When fetching independent data from multiple remote targets or services, use concurrency structures (`sync.WaitGroup` and `sync.Mutex`) to execute the fetches simultaneously. This reduces the wait time from O(N) to roughly O(1) relative to the number of targets.

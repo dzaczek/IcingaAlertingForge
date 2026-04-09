@@ -105,6 +105,8 @@ func main() {
 		cfg.Icinga2Pass,
 		cfg.Icinga2TLSSkipVerify,
 	)
+	apiClient.ConflictPolicy = icinga.ConflictPolicy(cfg.Icinga2ConflictPolicy)
+	apiClient.Force = cfg.Icinga2Force
 	debugRing := icinga.NewDebugRing()
 	apiClient.Debug = debugRing
 
@@ -421,6 +423,12 @@ func main() {
 			webhookHandler.Targets = newCfg.Targets
 
 			apiClient.UpdateCredentials(newCfg.Icinga2Host, newCfg.Icinga2User, newCfg.Icinga2Pass, newCfg.Icinga2TLSSkipVerify)
+			apiClient.ConflictPolicy = icinga.ConflictPolicy(newCfg.Icinga2ConflictPolicy)
+			apiClient.Force = newCfg.Icinga2Force
+
+			if err := ensureConfiguredHosts(apiClient, newCfg.Targets, newCfg.Icinga2HostAutoCreate); err != nil {
+				slog.Error("Failed to prepare target hosts on config reload", "error", err)
+			}
 
 			statusHandler.Targets = newCfg.Targets
 			adminHandler.Targets = newCfg.Targets
@@ -647,13 +655,26 @@ func ensureConfiguredHosts(apiClient *icinga.APIClient, targets map[string]confi
 			continue
 		}
 
-		slog.Warn("CONFLICT: Host exists but is NOT a dummy host — it may be managed by Director or manual config. "+
-			"Services created by IcingaAlertingForge may conflict with existing configuration!",
-			"target_id", target.ID,
-			"host", target.HostName,
-			"check_command", hostInfo.CheckCommand,
-			"display_name", hostInfo.DisplayName,
-			"managed_by", hostInfo.ManagedBy)
+		msg := "CONFLICT: Host exists but is NOT managed by the bridge (it may be managed by Director or manual config)"
+		if apiClient.Force {
+			slog.Warn(msg+" — FORCE enabled, bridge will take control",
+				"target_id", target.ID, "host", target.HostName)
+			continue
+		}
+
+		switch apiClient.ConflictPolicy {
+		case icinga.ConflictPolicyFail:
+			return fmt.Errorf("host %s conflict: %s", target.HostName, msg)
+		case icinga.ConflictPolicySkip:
+			slog.Warn(msg+" — operation will be skipped for this host",
+				"target_id", target.ID, "host", target.HostName)
+		default: // warn
+			slog.Warn(msg+" — services created by the bridge may conflict with existing configuration!",
+				"target_id", target.ID, "host", target.HostName,
+				"check_command", hostInfo.CheckCommand,
+				"display_name", hostInfo.DisplayName,
+				"managed_by", hostInfo.ManagedBy)
+		}
 	}
 
 	return nil

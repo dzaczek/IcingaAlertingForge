@@ -2,12 +2,14 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
 	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
@@ -86,6 +88,7 @@ func (h *WebhookHandler) ensureServiceExists(requestID string, target config.Tar
 		"host", target.HostName, "service", serviceName, "request_id", requestID)
 
 	err := h.API.CreateService(target.HostName, serviceName, alert.Labels, alert.Annotations)
+	var conflict *icinga.ErrConflict
 	switch {
 	case err == nil:
 		h.Cache.Register(target.HostName, serviceName)
@@ -94,6 +97,12 @@ func (h *WebhookHandler) ensureServiceExists(requestID string, target config.Tar
 		h.Cache.Register(target.HostName, serviceName)
 		slog.Info("Service already exists in Icinga2, cache repaired",
 			"host", target.HostName, "service", serviceName, "request_id", requestID)
+	case errors.As(err, &conflict):
+		// For auto-create, if it's a conflict (policy skip/fail), we treat it as "ready" so we can still
+		// send the check result (Icinga will take care of the actual permission check).
+		h.Cache.Register(target.HostName, serviceName)
+		slog.Warn("Service auto-create refused (conflict policy)",
+			"host", target.HostName, "service", serviceName, "error", err, "request_id", requestID)
 	default:
 		h.Cache.Remove(target.HostName, serviceName)
 		slog.Error("Failed to auto-create service",

@@ -135,6 +135,11 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 	// Boolean fields are applied directly from the patch.
 	current.Icinga2HostAutoCreate = patch.Icinga2HostAutoCreate
 	current.Icinga2TLSSkipVerify = patch.Icinga2TLSSkipVerify
+	current.Icinga2Force = patch.Icinga2Force
+
+	if patch.Icinga2ConflictPolicy != "" {
+		current.Icinga2ConflictPolicy = patch.Icinga2ConflictPolicy
+	}
 
 	if patch.HistoryFile != "" {
 		current.HistoryFile = patch.HistoryFile

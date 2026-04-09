@@ -64,6 +64,103 @@ func TestSendCheckResult_ServerError(t *testing.T) {
 	}
 }
 
+func TestConflictDetection(t *testing.T) {
+	mux := http.NewServeMux()
+
+	// Managed host
+	mux.HandleFunc("/v1/objects/hosts/managed-host", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"},"check_command":"dummy"}}]}`))
+	})
+	// Unmanaged host
+	mux.HandleFunc("/v1/objects/hosts/unmanaged-host", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"attrs":{"check_command":"hostalive"}}]}`))
+	})
+	// Managed service
+	mux.HandleFunc("/v1/objects/services/host!managed-svc", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"attrs":{"name":"managed-svc","vars":{"managed_by":"IcingaAlertingForge"},"check_command":"dummy"}}]}`))
+	})
+	// Unmanaged service
+	mux.HandleFunc("/v1/objects/services/host!unmanaged-svc", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"attrs":{"name":"unmanaged-svc","check_command":"check_cpu"}}]}`))
+	})
+	// Non-existent
+	mux.HandleFunc("/v1/objects/hosts/missing", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	// Delete mock success
+	mux.HandleFunc("/v1/objects/services/host!managed-svc-del", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"name":"managed-svc-del","vars":{"managed_by":"IcingaAlertingForge"}}}]}`))
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"code":200}]}`))
+		}
+	})
+
+	server := httptest.NewTLSServer(mux)
+	defer server.Close()
+
+	client := &APIClient{
+		BaseURL:    server.URL,
+		HTTPClient: server.Client(),
+	}
+
+	t.Run("CreateHost_Managed_Success", func(t *testing.T) {
+		err := client.CreateHost(HostSpec{Name: "managed-host"})
+		if err != nil {
+			t.Errorf("expected no error for managed host, got %v", err)
+		}
+	})
+
+	t.Run("CreateHost_Unmanaged_Fail", func(t *testing.T) {
+		client.ConflictPolicy = ConflictPolicyFail
+		err := client.CreateHost(HostSpec{Name: "unmanaged-host"})
+		if err == nil {
+			t.Fatal("expected conflict error")
+		}
+		if _, ok := err.(*ErrConflict); !ok {
+			t.Errorf("expected ErrConflict, got %T", err)
+		}
+	})
+
+	t.Run("CreateHost_Unmanaged_Force_Success", func(t *testing.T) {
+		client.Force = true
+		err := client.CreateHost(HostSpec{Name: "unmanaged-host"})
+		if err != nil {
+			t.Errorf("expected no error with Force=true, got %v", err)
+		}
+		client.Force = false
+	})
+
+	t.Run("CreateService_Unmanaged_Skip", func(t *testing.T) {
+		client.ConflictPolicy = ConflictPolicySkip
+		err := client.CreateService("host", "unmanaged-svc", nil, nil)
+		if err == nil {
+			t.Fatal("expected conflict error for skip policy")
+		}
+	})
+
+	t.Run("DeleteService_Unmanaged_Fail", func(t *testing.T) {
+		err := client.DeleteService("host", "unmanaged-svc")
+		if err == nil {
+			t.Fatal("expected conflict error for deletion of unmanaged service")
+		}
+	})
+
+	t.Run("DeleteService_Managed_Success", func(t *testing.T) {
+		err := client.DeleteService("host", "managed-svc-del")
+		if err != nil {
+			t.Errorf("expected success for managed service deletion, got %v", err)
+		}
+	})
+}
+
 func TestSendCheckResult_BasicAuth(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, pass, ok := r.BasicAuth()
@@ -91,6 +188,10 @@ func TestSendCheckResult_BasicAuth(t *testing.T) {
 
 func TestCreateService_Success(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if r.Method != http.MethodPut {
 			t.Errorf("expected PUT, got %s", r.Method)
 		}
@@ -293,6 +394,11 @@ func TestListServices_ParsesLegacyCreatedAtFallback(t *testing.T) {
 
 func TestDeleteService_Success(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"}}}]}`))
+			return
+		}
 		if r.Method != http.MethodDelete {
 			t.Errorf("expected DELETE, got %s", r.Method)
 		}
@@ -524,6 +630,10 @@ func TestGetHostInfo_NotFound(t *testing.T) {
 
 func TestCreateHost_Success(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		if r.Method != http.MethodPut {
 			t.Errorf("expected PUT, got %s", r.Method)
 		}

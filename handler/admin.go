@@ -187,6 +187,16 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 	}
 
 	if err := h.API.DeleteService(target.HostName, serviceName); err != nil {
+		var conflict *icinga.ErrConflict
+		if errors.As(err, &conflict) {
+			slog.Warn("Admin: delete service refused (conflict)", "host", target.HostName, "service", serviceName, "error", err)
+			httputil.WriteJSON(w, http.StatusForbidden, map[string]string{
+				"host":    target.HostName,
+				"error":   err.Error(),
+				"service": serviceName,
+			})
+			return
+		}
 		slog.Error("Admin: failed to delete service", "host", target.HostName, "service", serviceName, "error", err)
 		httputil.WriteJSON(w, http.StatusBadGateway, map[string]string{
 			"host":    target.HostName,
@@ -249,6 +259,17 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 		if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
 			if h.Limiter != nil {
 				h.Limiter.ReleaseMutate()
+			}
+			var conflict *icinga.ErrConflict
+			if errors.As(err, &conflict) {
+				slog.Warn("Admin: bulk delete refused (conflict)", "host", ref.Host, "service", ref.Service, "error", err)
+				results = append(results, map[string]any{
+					"host":    ref.Host,
+					"service": ref.Service,
+					"status":  "error",
+					"error":   "rate limit: " + err.Error(),
+				})
+				continue
 			}
 			slog.Error("Admin: bulk delete failed", "host", ref.Host, "service", ref.Service, "error", err)
 			results = append(results, map[string]any{

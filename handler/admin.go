@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"icinga-webhook-bridge/httputil"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -122,19 +122,20 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 
 	for _, target := range targets {
 		wg.Add(1)
-		go func(t config.TargetConfig) {
+		go func(targetHostName string) {
 			defer wg.Done()
-			hostServices, err := h.API.ListServices(t.HostName)
+			hostServices, err := h.API.ListServices(targetHostName)
 
 			mu.Lock()
 			defer mu.Unlock()
+
 			if err != nil {
-				slog.Error("Failed to list services from Icinga2", "host", t.HostName, "error", err)
-				fetchErrors = append(fetchErrors, t.HostName+": "+err.Error())
+				slog.Error("Failed to list services from Icinga2", "host", targetHostName, "error", err)
+				fetchErrors = append(fetchErrors, targetHostName+": "+err.Error())
 				return
 			}
 			services = append(services, hostServices...)
-		}(target)
+		}(target.HostName)
 	}
 	wg.Wait()
 

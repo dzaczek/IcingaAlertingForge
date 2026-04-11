@@ -29,3 +29,7 @@
 ## 2024-05-31 - Sequential N+1 API call bottleneck
 **Learning:** `admin.HandleListServices` fetched services from multiple target hosts sequentially inside a loop (`for _, target := range targets`). In deployments with multiple configured Icinga2 targets, this caused the API response time to scale linearly with the number of targets (N), introducing significant latency delays for dashboard users.
 **Action:** When fetching independent data from multiple remote targets or services, use concurrency structures (`sync.WaitGroup` and `sync.Mutex`) to execute the fetches simultaneously. This reduces the wait time from O(N) to roughly O(1) relative to the number of targets.
+
+## 2024-04-11 - Concurrent service fetching to avoid N+1 API bottlenecks
+**Learning:** Sequential loops for querying multiple targets (like Icinga2 hosts) introduce N+1 API call bottlenecks, significantly degrading performance as the number of targets grows.
+**Action:** When fetching independent data from multiple remote targets or services, use concurrency structures (e.g., `sync.WaitGroup` and `sync.Mutex`) instead of sequential loops. This reduces wait times to O(1) relative to the target count, bounded by the slowest individual request.

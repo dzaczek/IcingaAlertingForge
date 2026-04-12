@@ -827,6 +827,33 @@ const dashboardHTML = `<!DOCTYPE html>
   }
   .svc-registry-table tbody tr { cursor: pointer; transition: background 0.15s; }
   .svc-registry-table tbody tr:hover { background: rgba(153,204,255,0.08); }
+  tr.frozen-row { background: rgba(100,180,255,0.13) !important; }
+  tr.frozen-row:hover { background: rgba(100,180,255,0.2) !important; }
+  .frozen-inline-badge {
+    display: inline-block;
+    font-size: 11px;
+    margin-left: 5px;
+    color: var(--lcars-blue);
+    vertical-align: middle;
+  }
+  .frozen-unfreeze-btn {
+    font-family: 'Okuda','Antonio',sans-serif;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    background: var(--lcars-yellow);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 3px 10px;
+    cursor: pointer;
+    font-weight: 700;
+    margin-left: 6px;
+    vertical-align: middle;
+    transition: opacity 0.15s;
+  }
+  .frozen-unfreeze-btn:hover { opacity: 0.8; }
+  .frozen-unfreeze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .svc-registry-table tbody tr:last-child td { border-bottom: none; }
   .svc-registry-table .svc-host-cell { color: var(--lcars-tan); font-family: 'Okuda','Antonio',monospace; font-size: 12px; }
   .svc-registry-table .svc-name-cell { color: var(--lcars-blue); font-weight: 700; letter-spacing: 1px; }
@@ -3454,6 +3481,7 @@ function freezeService(host, service, btn) {
       if (resultEl) { resultEl.style.color = 'var(--lcars-blue)'; resultEl.textContent = msg; }
       _updateFreezeBtn(panel, true, res.data.frozen_until);
       if (panel) { setTimeout(function() { loadServiceDetail(panel, service, host); }, 300); }
+      setTimeout(applyFrozenHighlight, 150);
     } else {
       if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = res.data.error || 'Failed'; }
     }
@@ -3481,6 +3509,7 @@ function unfreezeService(host, service, btn) {
       if (resultEl) { resultEl.style.color = 'var(--lcars-ok)'; resultEl.textContent = 'Service unfrozen'; }
       _updateFreezeBtn(panel, false, null);
       if (panel) { setTimeout(function() { loadServiceDetail(panel, service, host); }, 300); }
+      setTimeout(applyFrozenHighlight, 150);
     } else {
       if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = res.data.error || 'Failed'; }
     }
@@ -3488,6 +3517,59 @@ function unfreezeService(host, service, btn) {
     btn.disabled = false;
     if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
   });
+}
+
+function applyFrozenHighlight() {
+  if (!_canChangeStatus) return;
+  fetch('/admin/services/frozen', { credentials: 'include' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = data.frozen || [];
+      // Build lookup set keyed by host\x1fservice
+      var frozenSet = {};
+      for (var i = 0; i < items.length; i++) {
+        frozenSet[(items[i].host || '') + '\x1f' + items[i].service] = items[i];
+      }
+      // Remove old highlights from all rows
+      document.querySelectorAll('tr.frozen-row').forEach(function(tr) {
+        tr.classList.remove('frozen-row');
+        tr.querySelectorAll('.frozen-inline-badge').forEach(function(b) { b.remove(); });
+        tr.querySelectorAll('.frozen-unfreeze-btn').forEach(function(b) { b.remove(); });
+      });
+      // Apply to all table rows that carry data-service
+      document.querySelectorAll('tr[data-service]').forEach(function(tr) {
+        var svc  = tr.dataset.service || '';
+        var host = tr.dataset.host   || '';
+        if (!frozenSet[host + '\x1f' + svc]) return;
+        tr.classList.add('frozen-row');
+        // Snowflake badge next to service name
+        var nameEl = tr.querySelector('strong');
+        if (nameEl && !nameEl.querySelector('.frozen-inline-badge')) {
+          var badge = document.createElement('span');
+          badge.className = 'frozen-inline-badge';
+          badge.textContent = ' ❄';
+          nameEl.appendChild(badge);
+        }
+        // Unfreeze button in last cell
+        var lastTd = tr.querySelector('td:last-child');
+        if (lastTd && !lastTd.querySelector('.frozen-unfreeze-btn')) {
+          var btn = document.createElement('button');
+          btn.className = 'frozen-unfreeze-btn';
+          btn.textContent = 'Unfreeze';
+          (function(h, s) {
+            btn.onclick = function(ev) { ev.stopPropagation(); unfreezeFromList(h, s, btn); };
+          })(host, svc);
+          lastTd.appendChild(btn);
+        }
+      });
+      // Update sidebar badge
+      var badge = document.getElementById('frozen-count-badge');
+      if (badge) {
+        if (items.length > 0) { badge.textContent = items.length; badge.style.display = ''; }
+        else { badge.style.display = 'none'; }
+      }
+    })
+    .catch(function() {});
 }
 
 function loadFrozenList() {
@@ -3545,7 +3627,7 @@ function unfreezeFromList(host, service, btn) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ host: host })
   }).then(function(r) { return r.json(); })
-  .then(function() { loadFrozenList(); })
+  .then(function() { loadFrozenList(); applyFrozenHighlight(); })
   .catch(function() { btn.disabled = false; });
 }
 
@@ -4137,6 +4219,7 @@ function switchIPTab(source, tab, btn) {
         }
         html += '</tbody></table>';
         container.innerHTML = html;
+        applyFrozenHighlight();
       } catch(err) {}
     }).catch(function() {});
   }
@@ -4145,6 +4228,9 @@ function switchIPTab(source, tab, btn) {
     if (_alertsRefreshTimer) clearTimeout(_alertsRefreshTimer);
     _alertsRefreshTimer = setTimeout(refreshAlertsTable, 2000);
   }
+
+  // Apply frozen highlights to all tables on initial load
+  setTimeout(applyFrozenHighlight, 600);
 
   if (typeof EventSource !== 'undefined') {
     var es = new EventSource('/status/beauty/events');

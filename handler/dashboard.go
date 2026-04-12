@@ -1106,7 +1106,7 @@ const dashboardHTML = `<!DOCTYPE html>
   .svc-status-btn-ok { background: var(--lcars-ok); }
   .svc-status-btn-warning { background: var(--lcars-warning); }
   .svc-status-btn-critical { background: var(--lcars-critical); }
-  .svc-status-result {
+  .svc-status-result, .svc-freeze-result {
     text-align: center;
     font-size: 12px;
     letter-spacing: 1px;
@@ -3396,10 +3396,10 @@ function showServiceHistory(service, host) {
           '<option value="86400">1 day</option>' +
           '<option value="604800">7 days</option>' +
         '</select>' +
-        '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
-        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
+        '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">&#10052; Freeze</button>' +
+        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">&#9728; Unfreeze</button>' +
       '</div>' +
-      '<div class="svc-status-result" id="svc-freeze-result"></div>';
+      '<div class="svc-freeze-result" id="svc-freeze-result"></div>';
   }
   panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
     '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +
@@ -3447,18 +3447,19 @@ function _updateFreezeBtn(panel, isFrozen, frozenUntil) {
   var unfreezeBtn = panel.querySelector('#svc-unfreeze-btn');
   var sel = panel.querySelector('#svc-freeze-duration');
   if (!freezeBtn || !unfreezeBtn) return;
+  // Both buttons always visible — highlight the active action
   if (isFrozen) {
-    freezeBtn.disabled = true;
-    freezeBtn.style.opacity = '0.4';
-    if (sel) { sel.disabled = true; sel.style.opacity = '0.4'; }
-    unfreezeBtn.disabled = false;
-    unfreezeBtn.style.opacity = '';
+    freezeBtn.style.opacity = '0.5';
+    if (sel) sel.style.opacity = '0.5';
+    unfreezeBtn.style.opacity = '1';
+    unfreezeBtn.style.fontWeight = 'bold';
+    freezeBtn.style.fontWeight = '';
   } else {
-    freezeBtn.disabled = false;
-    freezeBtn.style.opacity = '';
-    if (sel) { sel.disabled = false; sel.style.opacity = ''; }
-    unfreezeBtn.disabled = true;
-    unfreezeBtn.style.opacity = '0.4';
+    freezeBtn.style.opacity = '1';
+    freezeBtn.style.fontWeight = 'bold';
+    if (sel) sel.style.opacity = '1';
+    unfreezeBtn.style.opacity = '0.5';
+    unfreezeBtn.style.fontWeight = '';
   }
 }
 

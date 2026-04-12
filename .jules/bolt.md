@@ -21,3 +21,7 @@
 ## 2024-04-06 - Stream raw bytes during history rotation
 **Learning:** `history.Logger.rotateLockedInline()` used to load the entire JSONL file by unmarshaling each line into objects, slicing off the old entries, and marshaling the remainder back into JSON strings. This was a severe memory and CPU bottleneck causing massive GC pressure and latency spikes when rotating large logs.
 **Action:** Always process line-based formats using raw byte streaming when no data mutation is required. For file truncation (like log rotation), scan and skip bytes/lines, then write the remaining raw bytes directly to a temporary file before renaming, bypassing unmarshaling/marshaling entirely.
+
+## 2026-04-08 - Dashboard target services fetch bottleneck
+**Learning:** `DashboardHandler.ServeHTTP` fetched services for each target sequentially (`h.API.ListServices(target.HostName)`) in a single thread. This sequential I/O caused an N+1 API call bottleneck where the total dashboard rendering time scaled linearly with the number of configured targets, potentially leading to unacceptable delays on larger setups.
+**Action:** When a single request needs to retrieve independent data from multiple remote services or nodes (like listing configurations across distinct targets), use concurrency structures (e.g., `sync.WaitGroup` and `sync.Mutex`) to parallelize the requests, collapsing the total wait time to O(1) relative to target count.

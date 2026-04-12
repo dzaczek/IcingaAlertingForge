@@ -14,14 +14,17 @@ classDiagram
         +Map Annotations
         +Time StartsAt
         +Time EndsAt
+        +AlertName() String
+        +Severity() String
+        +Summary() String
     }
     class AlertmanagerPayload {
         +[]AlertmanagerAlert Alerts
-        +ToGrafanaPayload()
+        +ToGrafanaPayload() GrafanaPayload
     }
     class UniversalPayload {
         +[]UniversalAlert Alerts
-        +ToGrafanaPayload()
+        +ToGrafanaPayload() GrafanaPayload
     }
 
     AlertmanagerPayload --> GrafanaPayload
@@ -31,18 +34,63 @@ classDiagram
 
 ---
 
-## `GrafanaPayload` & `GrafanaAlert`
-*   **Fast Track:** The native internal format for alerts.
-*   **Deep Dive:** IcingaAlertForge internally normalizes all incoming webhooks into `GrafanaPayload`. It contains a `Status` (e.g., "firing" or "resolved") and an array of `GrafanaAlert` objects. Key methods on `GrafanaAlert` include `AlertName()` (extracts the Icinga2 service name), `Severity()` (extracts the warning/critical level), and `Summary()` (the human-readable message).
+## Webhook Payloads
 
-## `AlertmanagerPayload` & `AlertmanagerAlert`
+### `models.GrafanaPayload` (Struct)
+*   **Fast Track:** The native internal format for alerts, matching the Grafana Unified Alerting schema.
+*   **Deep Dive:** IcingaAlertForge internally normalizes all incoming webhooks into this structure.
+    - **Fields:**
+        - `Status` (string): Overall status of the webhook (e.g., "firing", "resolved").
+        - `Alerts` ([]GrafanaAlert): Slice of individual alerts.
+
+### `models.GrafanaAlert` (Struct)
+*   **Fast Track:** Represents a single alert within a payload.
+*   **Deep Dive:**
+    - **Fields:**
+        - `Status` (string): Status of this specific alert.
+        - `Labels` (map[string]string): Key-value pairs defining the alert context.
+        - `Annotations` (map[string]string): Key-value pairs for human-readable metadata.
+        - `StartsAt` (time.Time): When the alert started firing.
+        - `EndsAt` (time.Time): When the alert was resolved.
+    - **Methods:**
+        - `AlertName()`: Returns the `alertname` label, which becomes the Icinga2 service name.
+        - `Severity()`: Returns the `severity` label (e.g., "critical", "warning").
+        - `Mode()`: Returns the `mode` label (e.g., "test").
+        - `TestAction()`: Returns the `test_action` label (e.g., "create", "delete").
+        - `Summary()`: Returns the `summary` annotation.
+        - `IsTestMode()`: Returns true if `Mode()` is "test".
+
+### `models.AlertmanagerPayload` (Struct)
 *   **Fast Track:** Parses incoming webhooks from Prometheus Alertmanager.
-*   **Deep Dive:** Maps the Alertmanager JSON schema (e.g., `GroupKey`, `Receiver`, `Alerts`). Provides a critical `ToGrafanaPayload()` method which translates `AlertmanagerAlert` structures into `GrafanaAlert` format so the main `WebhookHandler` can process them seamlessly.
+*   **Deep Dive:**
+    - **Methods:**
+        - `ToGrafanaPayload()`: Translates the full Alertmanager structure into a `GrafanaPayload` for uniform processing by the bridge.
 
-## `UniversalPayload` & `UniversalAlert`
-*   **Fast Track:** A simplified JSON structure for custom scripts and third-party integrations (e.g., CI/CD pipelines, IoT devices) that don't use Grafana or Alertmanager.
-*   **Deep Dive:** Expects a simple `{"alerts": [{"name": "MyAlert", "status": "firing", "severity": "critical", "message": "Failed!"}]}`. Provides `ToGrafanaPayload()` which injects standard `Labels` and `Annotations` to simulate a Grafana alert.
+### `models.UniversalPayload` (Struct)
+*   **Fast Track:** A simplified JSON structure for custom scripts and third-party integrations.
+*   **Deep Dive:**
+    - **Methods:**
+        - `ToGrafanaPayload()`: Maps `Name`, `Status`, `Severity`, and `Message` into the standard `Labels` and `Annotations` of a `GrafanaPayload`.
 
-## History Logs (`HistoryEntry`)
+---
+
+## History and Events
+
+### `models.HistoryEntry` (Struct)
 *   **Fast Track:** Defines the structure of recorded alert events in the persistent JSONL log.
-*   **Deep Dive:** When a webhook is processed or fails, a `HistoryEntry` is generated. It tracks `ID`, `Timestamp`, `Source`, `Target`, `Payload`, `Result` (success, error), and `ProcessingTimeMs`. This model is deeply integrated with the `history` and `handler` packages for the Beauty Panel dashboard and CSV exports.
+*   **Deep Dive:**
+    - **Fields:**
+        - `Timestamp` (time.Time): When the event was processed.
+        - `RequestID` (string): Unique UUID for the webhook request.
+        - `SourceKey` (string): The identifier of the API key used.
+        - `HostName` (string): Target Icinga2 host.
+        - `Mode` (string): "work" or "test".
+        - `Action` (string): "firing", "resolved", "create", or "delete".
+        - `ServiceName` (string): Icinga2 service name.
+        - `Severity` (string): Alert severity level.
+        - `ExitStatus` (int): Icinga2 exit code (0, 1, 2, 3).
+        - `Message` (string): Human-readable output or error details.
+        - `IcingaOK` (bool): True if the Icinga2 API call succeeded.
+        - `DurationMs` (int64): Server-side processing time.
+        - `Error` (string): Detailed error message if `IcingaOK` is false.
+        - `RemoteAddr` (string): Source IP of the webhook request.

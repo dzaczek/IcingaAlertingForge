@@ -22,26 +22,61 @@ graph TD
     Processor -- Retry --> Sender
 ```
 
-## `Queue`
+## `queue.Queue` (Struct)
 
-### `New(cfg, sender)` / `Start(ctx)`
-*   **Fast Track:** Initializes the queue and starts the background processor.
-*   **Deep Dive:** Takes a `CheckResultSender` interface (implemented by `icinga.APIClient`). It immediately attempts to `loadFromDisk()` if a `FilePath` is configured. `Start` launches a goroutine that ticks every `CheckInterval` (default 10s) to evaluate queued items.
+Buffers failed Icinga2 check results and retries them with exponential backoff.
 
-### `Enqueue(item)`
+### `New(cfg, sender)`
+*   **Fast Track:** Initializes the queue and optionally restores state from disk.
+*   **Deep Dive:**
+    - **Parameters:** `cfg` (Config), `sender` (CheckResultSender).
+    - **Returns:** `*Queue`.
+    - **Behavior:** If `cfg.FilePath` is set and exists, it calls `loadFromDisk()` to restore any items from a previous session.
+
+### `(q *Queue).Start(ctx)`
+*   **Fast Track:** Begins the background retry processor.
+*   **Deep Dive:** Launches a goroutine that ticks every `CheckInterval` (default 10s) to evaluate queued items and attempt retries.
+
+### `(q *Queue).Enqueue(item)`
 *   **Fast Track:** Adds a failed check result to the back of the queue.
-*   **Deep Dive:** Locks the queue. If `len(items) >= MaxSize`, it drops the *oldest* item (`items[1:]`), preventing unbounded memory growth. It sets `Attempts = 0` and schedules the `NextRetry = time.Now() + RetryBase`. Returns `nil` even on drop (logged as a warning).
+*   **Deep Dive:**
+    - **Parameters:** `item` (Item).
+    - **Behavior:** Thread-safe append to the in-memory buffer. If the queue is at `MaxSize`, it drops the *oldest* item to make room. It automatically sets the initial `NextRetry` based on `RetryBase`.
 
-### `processor(ctx)` & `processReady()`
-*   **Fast Track:** The core loop that retries items.
-*   **Deep Dive:** On every tick, it scans the buffer for items where `NextRetry <= time.Now()`. It builds a list of `ready` items and releases the lock. It iterates over the ready list, calling `sender.SendCheckResult`.
-    *   **Success:** It calls `removeByID(id)` and increments `totalRetried`.
-    *   **Failure:** It calls `incrementAttempt(id)`.
+### `(q *Queue).Flush()`
+*   **Fast Track:** Forces an immediate retry of all queued items.
+*   **Deep Dive:**
+    - **Returns:** `int` (number of successfully processed items).
+    - **Behavior:** Resets `NextRetry` for all items to "now" and attempts to send them immediately. Successfully sent items are removed from the queue.
 
-### `backoff(attempts, base, max)`
-*   **Fast Track:** Calculates exponential backoff.
-*   **Deep Dive:** Implements exponential backoff: `base * 2^attempts`. It caps the duration at `max` (default 5 minutes).
+### `(q *Queue).Drain()`
+*   **Fast Track:** Persists all in-memory items to disk for a graceful shutdown.
+*   **Deep Dive:** Stops the background processor and marshals the `items` slice to the configured `FilePath`. This ensures no alerts are lost during bridge maintenance or restarts.
 
-### `Drain()`
-*   **Fast Track:** Secures the queue during a graceful shutdown.
-*   **Deep Dive:** Cancels the processor context, locks the queue, and writes all in-memory items to `FilePath` via `json.MarshalIndent`. This guarantees no alerts are lost if the IcingaAlertForge bridge is restarted while Icinga2 is down.
+### `(q *Queue).Stats()`
+*   **Fast Track:** Returns current queue statistics.
+*   **Deep Dive:**
+    - **Returns:** `Stats`.
+    - **Behavior:** Returns a snapshot of queue depth, max size, total retried/dropped/failed counts, and whether the processor is currently active.
+
+---
+
+## Data Structures
+
+### `queue.Item` (Struct)
+*   **Fast Track:** Represents a single queued check result.
+*   **Deep Dive:** Contains all context needed to retry the alert: `Host`, `Service`, `ExitStatus`, `Message`, `Source`, `RequestID`, `Attempts` (counter), and `NextRetry` (timestamp).
+
+### `queue.Stats` (Struct)
+*   **Fast Track:** Statistics for dashboard and API consumption.
+*   **Deep Dive:** Includes `Depth`, `MaxSize`, `OldestItem`, `TotalRetried`, `TotalDropped`, `TotalFailed`, and `Processing` (boolean).
+
+### `queue.Config` (Struct)
+*   **Fast Track:** Configuration parameters for the queue.
+*   **Deep Dive:**
+    - `Enabled`: Whether the queue is active.
+    - `MaxSize`: Limit of items in memory.
+    - `FilePath`: Where to persist the queue on shutdown.
+    - `RetryBase`: Initial backoff duration (e.g., 5s).
+    - `RetryMax`: Maximum backoff duration (e.g., 5m).
+    - `CheckInterval`: How often the background loop runs.

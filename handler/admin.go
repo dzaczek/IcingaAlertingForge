@@ -716,3 +716,79 @@ func (h *AdminHandler) HandleDeleteUser(w http.ResponseWriter, r *http.Request) 
 		"username": username,
 	})
 }
+
+// HandleFreezeService freezes or unfreezes alert forwarding for a service.
+// POST   /admin/services/{name}/freeze  body: {"host":"...","duration_seconds":N} N=0 → permanent
+// DELETE /admin/services/{name}/freeze  body: {"host":"..."}
+func (h *AdminHandler) HandleFreezeService(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+	if !h.requirePermission(w, r, rbac.PermChangeStatus) {
+		return
+	}
+
+	// Extract service name: /admin/services/{name}/freeze
+	path := strings.TrimPrefix(r.URL.Path, "/admin/services/")
+	serviceName := strings.TrimSuffix(path, "/freeze")
+	if serviceName == "" || serviceName == path {
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "service name required"})
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	var body struct {
+		Host            string `json:"host"`
+		DurationSeconds int    `json:"duration_seconds"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	host := body.Host
+	if host == "" {
+		target, err := resolveSingleHost(h.Targets, "")
+		if err != nil {
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		host = target.HostName
+	}
+
+	if r.Method == http.MethodDelete {
+		h.Cache.Unfreeze(host, serviceName)
+		slog.Info("Service unfrozen", "host", host, "service", serviceName)
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"status":  "unfrozen",
+			"host":    host,
+			"service": serviceName,
+		})
+		return
+	}
+
+	// POST — freeze
+	var until *time.Time
+	if body.DurationSeconds > 0 {
+		t := time.Now().Add(time.Duration(body.DurationSeconds) * time.Second)
+		until = &t
+	}
+	h.Cache.Freeze(host, serviceName, until)
+
+	resp := map[string]any{
+		"status":  "frozen",
+		"host":    host,
+		"service": serviceName,
+	}
+	if until != nil {
+		resp["frozen_until"] = until.Format(time.RFC3339)
+	} else {
+		resp["frozen_until"] = nil
+	}
+	slog.Info("Service frozen", "host", host, "service", serviceName, "until", until)
+	httputil.WriteJSON(w, http.StatusOK, resp)
+}

@@ -394,6 +394,8 @@ func main() {
 	mux.HandleFunc("/admin/services/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/status") {
 			adminHandler.HandleSetServiceStatus(w, r)
+		} else if strings.HasSuffix(r.URL.Path, "/freeze") {
+			adminHandler.HandleFreezeService(w, r)
 		} else {
 			adminHandler.HandleDeleteService(w, r)
 		}

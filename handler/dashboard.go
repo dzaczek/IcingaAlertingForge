@@ -1087,6 +1087,69 @@ const dashboardHTML = `<!DOCTYPE html>
     min-height: 18px;
   }
 
+  /* ── Service Freeze Controls ── */
+  .svc-freeze-controls {
+    display: flex;
+    gap: 8px;
+    padding: 10px 0 4px 0;
+    border-top: 1px solid rgba(100,180,255,0.2);
+    margin-top: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .svc-freeze-btn {
+    font-family: 'Okuda', 'Antonio', sans-serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 20px;
+    padding: 7px 18px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    font-weight: 700;
+    color: #000;
+    background: var(--lcars-blue);
+  }
+  .svc-freeze-btn:hover { opacity: 0.85; transform: scale(1.04); }
+  .svc-freeze-btn:active { transform: scale(0.96); }
+  .svc-freeze-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .svc-freeze-btn-unfreeze { background: var(--lcars-yellow); }
+  .svc-freeze-select {
+    font-family: 'Okuda', 'Antonio', sans-serif;
+    font-size: 12px;
+    letter-spacing: 1px;
+    background: #1a1a2e;
+    color: var(--lcars-blue);
+    border: 1px solid var(--lcars-blue);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+  .svc-frozen-badge {
+    display: inline-block;
+    background: var(--lcars-blue);
+    color: #000;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    margin-left: 6px;
+  }
+  .svc-detail-frozen-row {
+    grid-column: 1 / -1;
+    background: rgba(100,180,255,0.08);
+    border: 1px solid rgba(100,180,255,0.3);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    color: var(--lcars-blue);
+    letter-spacing: 1px;
+  }
+
   /* ── Table Filter ── */
   .table-filter {
     display: flex;
@@ -3198,8 +3261,17 @@ function loadServiceDetail(panel, service, host) {
     html += '<div class="svc-detail-item"><span class="svc-detail-label">Last Check</span><span class="svc-detail-value">' + lastCheck + '</span></div>';
     html += '<div class="svc-detail-item"><span class="svc-detail-label">In Icinga</span><span class="svc-detail-value">' + inIcinga + '</span></div>';
     html += '<div class="svc-detail-item" style="grid-column:1/-1"><span class="svc-detail-label">Output</span><span class="svc-detail-value ' + exitCls + '">' + escHtml(output) + '</span></div>';
+    if (d.is_frozen) {
+      var frozenLabel = d.frozen_until
+        ? 'FROZEN until ' + new Date(d.frozen_until).toLocaleString('en-GB', {hour12:false})
+        : 'FROZEN — permanent (alerts suppressed)';
+      html += '<div class="svc-detail-frozen-row">&#10052; ' + frozenLabel + '</div>';
+    }
     html += '</div>';
     block.innerHTML = html;
+    // Refresh freeze button state in the panel
+    var panel = block.closest('.svc-history-panel');
+    if (panel) { _updateFreezeBtn(panel, d.is_frozen, d.frozen_until || null); }
   }).catch(function() {
     block.innerHTML = '<div class="svc-detail-loading">Sensor data unavailable</div>';
   });
@@ -3255,16 +3327,34 @@ function showServiceHistory(service, host) {
   panel.dataset.host = host || '';
   var title = host ? host + ' / ' + service : service;
   var statusBtns = '';
+  var freezeControls = '';
   if (_canChangeStatus) {
     statusBtns = '<div class="svc-status-buttons">' +
       '<button class="svc-status-btn svc-status-btn-ok" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',0,this)">OK</button>' +
       '<button class="svc-status-btn svc-status-btn-warning" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',1,this)">Warning</button>' +
       '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
       '</div><div class="svc-status-result" id="svc-status-result"></div>';
+    freezeControls =
+      '<div class="svc-freeze-controls" id="svc-freeze-controls">' +
+        '<select class="svc-freeze-select" id="svc-freeze-duration">' +
+          '<option value="0">Permanent</option>' +
+          '<option value="600">10 min</option>' +
+          '<option value="900">15 min</option>' +
+          '<option value="1800">30 min</option>' +
+          '<option value="3600">60 min</option>' +
+          '<option value="7200">2 h</option>' +
+          '<option value="86400">1 day</option>' +
+          '<option value="604800">7 days</option>' +
+        '</select>' +
+        '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
+        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" style="display:none" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
+      '</div>' +
+      '<div class="svc-status-result" id="svc-freeze-result"></div>';
   }
   panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
     '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +
     statusBtns +
+    freezeControls +
     '<div class="svc-history-body"><div class="svc-history-body-title">Transmission Log</div><div id="svc-history-entries"><div class="svc-history-loading">Loading history...</div></div></div>';
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
@@ -3298,6 +3388,81 @@ function setServiceStatus(host, service, exitStatus, btn) {
     }
   }).catch(function(err) {
     for (var i = 0; i < btns.length; i++) btns[i].disabled = false;
+    if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
+  });
+}
+
+function _updateFreezeBtn(panel, isFrozen, frozenUntil) {
+  var freezeBtn = panel.querySelector('#svc-freeze-btn');
+  var unfreezeBtn = panel.querySelector('#svc-unfreeze-btn');
+  var sel = panel.querySelector('#svc-freeze-duration');
+  if (!freezeBtn || !unfreezeBtn) return;
+  if (isFrozen) {
+    freezeBtn.style.display = 'none';
+    if (sel) sel.style.display = 'none';
+    unfreezeBtn.style.display = '';
+  } else {
+    freezeBtn.style.display = '';
+    if (sel) sel.style.display = '';
+    unfreezeBtn.style.display = 'none';
+  }
+}
+
+function freezeService(host, service, btn) {
+  var panel = btn.closest('.svc-history-panel');
+  var sel = panel ? panel.querySelector('#svc-freeze-duration') : null;
+  var duration = sel ? parseInt(sel.value, 10) : 0;
+  var resultEl = panel ? panel.querySelector('#svc-freeze-result') : null;
+  btn.disabled = true;
+  if (resultEl) { resultEl.style.color = 'var(--lcars-blue)'; resultEl.textContent = 'Freezing...'; }
+
+  fetch('/admin/services/' + encodeURIComponent(service) + '/freeze', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host: host, duration_seconds: duration })
+  }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    if (res.ok) {
+      var msg = res.data.frozen_until
+        ? 'Frozen until ' + new Date(res.data.frozen_until).toLocaleString('en-GB', {hour12:false})
+        : 'Frozen permanently';
+      if (resultEl) { resultEl.style.color = 'var(--lcars-blue)'; resultEl.textContent = msg; }
+      _updateFreezeBtn(panel, true, res.data.frozen_until);
+      if (panel) { setTimeout(function() { loadServiceDetail(panel, service, host); }, 300); }
+    } else {
+      if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = res.data.error || 'Failed'; }
+    }
+  }).catch(function() {
+    btn.disabled = false;
+    if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
+  });
+}
+
+function unfreezeService(host, service, btn) {
+  var panel = btn.closest('.svc-history-panel');
+  var resultEl = panel ? panel.querySelector('#svc-freeze-result') : null;
+  btn.disabled = true;
+  if (resultEl) { resultEl.style.color = 'var(--lcars-blue)'; resultEl.textContent = 'Unfreezing...'; }
+
+  fetch('/admin/services/' + encodeURIComponent(service) + '/freeze', {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host: host })
+  }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+  .then(function(res) {
+    btn.disabled = false;
+    if (res.ok) {
+      if (resultEl) { resultEl.style.color = 'var(--lcars-ok)'; resultEl.textContent = 'Service unfrozen'; }
+      _updateFreezeBtn(panel, false, null);
+      if (panel) { setTimeout(function() { loadServiceDetail(panel, service, host); }, 300); }
+    } else {
+      if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = res.data.error || 'Failed'; }
+    }
+  }).catch(function() {
+    btn.disabled = false;
     if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
   });
 }

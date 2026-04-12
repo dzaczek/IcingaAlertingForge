@@ -39,11 +39,18 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cacheState := h.Cache.GetState(target.HostName, serviceName)
+	frozen, frozenUntil := h.Cache.GetFreezeInfo(target.HostName, serviceName)
 
 	response := map[string]any{
 		"host":        target.HostName,
 		"service":     serviceName,
 		"cache_state": string(cacheState),
+		"is_frozen":   frozen,
+	}
+	if frozen && frozenUntil != nil {
+		response["frozen_until"] = frozenUntil.Format(time.RFC3339)
+	} else if frozen {
+		response["frozen_until"] = nil
 	}
 
 	// Try to get current status from Icinga2

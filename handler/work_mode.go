@@ -167,6 +167,19 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 
 	h.ensureServiceExists(requestID, target, alert)
 
+	// Skip forwarding to Icinga2 if the service is frozen
+	if h.Cache.IsFrozen(target.HostName, serviceName) {
+		slog.Info("Service is frozen — skipping Icinga2 forward",
+			"host", target.HostName, "service", serviceName, "request_id", requestID)
+		h.logHistory(requestID, source, target.HostName, "work", "frozen_skip", serviceName,
+			severity, exitStatus, message, true, 0, "", remoteAddr)
+		return map[string]any{
+			"status":  "frozen",
+			"host":    target.HostName,
+			"service": serviceName,
+		}
+	}
+
 	// Send check result to Icinga2
 	start := time.Now()
 	err := h.API.SendCheckResult(target.HostName, serviceName, exitStatus, message)

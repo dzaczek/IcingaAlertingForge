@@ -3542,24 +3542,21 @@ function applyFrozenHighlight() {
         var host = tr.dataset.host   || '';
         if (!frozenSet[host + '\x1f' + svc]) return;
         tr.classList.add('frozen-row');
-        // Snowflake badge next to service name
+        // Put ❄ badge + Unfreeze button in the same <td> as the service <strong>
         var nameEl = tr.querySelector('strong');
-        if (nameEl && !nameEl.querySelector('.frozen-inline-badge')) {
+        var nameTd = nameEl ? nameEl.closest('td') : null;
+        if (nameTd && !nameTd.querySelector('.frozen-unfreeze-btn')) {
           var badge = document.createElement('span');
           badge.className = 'frozen-inline-badge';
           badge.textContent = ' ❄';
           nameEl.appendChild(badge);
-        }
-        // Unfreeze button in last cell
-        var lastTd = tr.querySelector('td:last-child');
-        if (lastTd && !lastTd.querySelector('.frozen-unfreeze-btn')) {
           var btn = document.createElement('button');
           btn.className = 'frozen-unfreeze-btn';
           btn.textContent = 'Unfreeze';
           (function(h, s) {
             btn.onclick = function(ev) { ev.stopPropagation(); unfreezeFromList(h, s, btn); };
           })(host, svc);
-          lastTd.appendChild(btn);
+          nameTd.appendChild(btn);
         }
       });
       // Update sidebar badge

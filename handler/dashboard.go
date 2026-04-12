@@ -3397,7 +3397,7 @@ function showServiceHistory(service, host) {
           '<option value="604800">7 days</option>' +
         '</select>' +
         '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
-        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" style="display:none" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
+        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
       '</div>' +
       '<div class="svc-status-result" id="svc-freeze-result"></div>';
   }
@@ -3448,13 +3448,17 @@ function _updateFreezeBtn(panel, isFrozen, frozenUntil) {
   var sel = panel.querySelector('#svc-freeze-duration');
   if (!freezeBtn || !unfreezeBtn) return;
   if (isFrozen) {
-    freezeBtn.style.display = 'none';
-    if (sel) sel.style.display = 'none';
-    unfreezeBtn.style.display = '';
+    freezeBtn.disabled = true;
+    freezeBtn.style.opacity = '0.4';
+    if (sel) { sel.disabled = true; sel.style.opacity = '0.4'; }
+    unfreezeBtn.disabled = false;
+    unfreezeBtn.style.opacity = '';
   } else {
-    freezeBtn.style.display = '';
-    if (sel) sel.style.display = '';
-    unfreezeBtn.style.display = 'none';
+    freezeBtn.disabled = false;
+    freezeBtn.style.opacity = '';
+    if (sel) { sel.disabled = false; sel.style.opacity = ''; }
+    unfreezeBtn.disabled = true;
+    unfreezeBtn.style.opacity = '0.4';
   }
 }
 

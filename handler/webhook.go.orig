@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -139,34 +138,17 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// ── Process each alert ──────────────────────────────────────────
 	requestStart := time.Now()
-	results := make([]map[string]any, len(payload.Alerts))
+	var results []map[string]any
 	hasErrors := false
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex              // protects hasErrors
-	sem := make(chan struct{}, 10) // Concurrency limit of 10
-
-	for i, alert := range payload.Alerts {
-		wg.Add(1)
-		sem <- struct{}{} // Acquire token
-
-		go func(index int, alert models.GrafanaAlert) {
-			defer wg.Done()
-			defer func() { <-sem }() // Release token
-
-			start := time.Now()
-			result := h.processAlert(requestID, route.Source, target, alert, r.RemoteAddr)
-			result["duration_ms"] = time.Since(start).Milliseconds()
-
-			if resultHasError(result) {
-				mu.Lock()
-				hasErrors = true
-				mu.Unlock()
-			}
-			results[index] = result
-		}(i, alert)
+	for _, alert := range payload.Alerts {
+		start := time.Now()
+		result := h.processAlert(requestID, route.Source, target, alert, r.RemoteAddr)
+		result["duration_ms"] = time.Since(start).Milliseconds()
+		if resultHasError(result) {
+			hasErrors = true
+		}
+		results = append(results, result)
 	}
-	wg.Wait()
 
 	// Record metrics
 	if h.Metrics != nil {

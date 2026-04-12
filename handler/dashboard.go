@@ -1086,6 +1086,7 @@ const dashboardHTML = `<!DOCTYPE html>
     border-top: 1px solid rgba(255,168,0,0.2);
     margin-top: 10px;
     justify-content: center;
+    flex-shrink: 0;
   }
   .svc-status-btn {
     font-family: 'Okuda', 'Antonio', sans-serif;
@@ -1116,14 +1117,26 @@ const dashboardHTML = `<!DOCTYPE html>
 
   /* ── Service Freeze Controls ── */
   .svc-freeze-controls {
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
-    padding: 10px 0 4px 0;
+    padding: 10px 12px 8px 12px;
     border-top: 1px solid rgba(100,180,255,0.2);
     margin-top: 4px;
+    flex-shrink: 0;
+  }
+  .svc-freeze-row-top {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 8px;
     align-items: center;
-    flex-wrap: wrap;
     justify-content: center;
+  }
+  .svc-freeze-row-bottom {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: center;
+    padding-bottom: 2px;
   }
   .svc-freeze-btn {
     font-family: 'Okuda', 'Antonio', sans-serif;
@@ -3386,20 +3399,24 @@ function showServiceHistory(service, host) {
       '</div><div class="svc-status-result" id="svc-status-result"></div>';
     freezeControls =
       '<div class="svc-freeze-controls" id="svc-freeze-controls">' +
-        '<select class="svc-freeze-select" id="svc-freeze-duration">' +
-          '<option value="0">Permanent</option>' +
-          '<option value="600">10 min</option>' +
-          '<option value="900">15 min</option>' +
-          '<option value="1800">30 min</option>' +
-          '<option value="3600">60 min</option>' +
-          '<option value="7200">2 h</option>' +
-          '<option value="86400">1 day</option>' +
-          '<option value="604800">7 days</option>' +
-        '</select>' +
-        '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">&#10052; Freeze</button>' +
-        '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">&#9728; Unfreeze</button>' +
+        '<div class="svc-freeze-row-top">' +
+          '<select class="svc-freeze-select" id="svc-freeze-duration">' +
+            '<option value="0">Permanent</option>' +
+            '<option value="600">10 min</option>' +
+            '<option value="900">15 min</option>' +
+            '<option value="1800">30 min</option>' +
+            '<option value="3600">60 min</option>' +
+            '<option value="7200">2 h</option>' +
+            '<option value="86400">1 day</option>' +
+            '<option value="604800">7 days</option>' +
+          '</select>' +
+          '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
+        '</div>' +
+        '<div class="svc-freeze-row-bottom">' +
+          '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" style="width:100%;max-width:220px;" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
+        '</div>' +
       '</div>' +
-      '<div class="svc-freeze-result" id="svc-freeze-result"></div>';
+      '<div class="svc-freeze-result" id="svc-freeze-result" style="text-align:center;font-size:12px;min-height:16px;padding:4px 12px;"></div>';
   }
   panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
     '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +

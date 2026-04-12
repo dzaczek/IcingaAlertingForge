@@ -37,3 +37,7 @@
 ## 2024-05-31 - Sequential synchronous webhook alert processing bottleneck
 **Learning:** `handler.WebhookHandler.ServeHTTP` previously processed incoming alerts sequentially in a loop. For large webhook payloads, the linear O(N) waiting time for HTTP API calls to Icinga2 resulted in severe throughput bottlenecks and potential timeouts from the sending service (like Grafana).
 **Action:** When processing batches of external requests mapped to independent endpoints, utilize bounded concurrent execution (using a semaphore channel like `sem := make(chan struct{}, limit)` alongside `sync.WaitGroup`). This parallelizes network delays and significantly improves response time without overwhelming the downstream API. To preserve order without contention, pre-allocate the results slice and write using indices concurrently.
+
+## 2024-06-05 - Avoid slice append contention with bounded concurrency
+**Learning:** Appending to a single shared slice inside a concurrent loop (e.g., fetching services across many Icinga2 targets) introduces severe mutex lock contention, degrading parallelization benefits.
+**Action:** When executing batch fan-out operations, use a bounded concurrency pattern (`sem := make(chan struct{}, limit)`) and eliminate mutexes entirely by pre-allocating a result slice-of-slices scaled to the target count. Have goroutines write directly to their assigned index (`results[index] = data`), and flatten the array only after all routines finish (`wg.Wait()`).

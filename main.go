@@ -22,6 +22,7 @@ import (
 	"icinga-webhook-bridge/configstore"
 	"icinga-webhook-bridge/handler"
 	"icinga-webhook-bridge/health"
+	"icinga-webhook-bridge/httputil"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
@@ -304,13 +305,13 @@ func main() {
 	requireAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if cfg.AdminPass == "" {
-				http.Error(w, `{"error":"admin access not configured"}`, http.StatusForbidden)
+				httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "admin access not configured"})
 				return
 			}
 			user, pass, ok := r.BasicAuth()
 			if !ok {
 				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
 			// Check primary admin
@@ -326,7 +327,7 @@ func main() {
 					metricsCollector.RecordAuthFailure(r.RemoteAddr, user)
 				}
 				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
 			next(w, r)
@@ -398,7 +399,7 @@ func main() {
 		case http.MethodPost:
 			adminHandler.HandleCreateUser(w, r)
 		default:
-			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		}
 	})
 	mux.HandleFunc("/admin/history/clear", adminHandler.HandleClearHistory)
@@ -459,7 +460,7 @@ func main() {
 			case http.MethodPatch:
 				settingsHandler.HandlePatchSettings(w, r)
 			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+				httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 			}
 		})
 	}

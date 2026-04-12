@@ -6,9 +6,6 @@
 package rbac
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"crypto/subtle"
 	"fmt"
 	"log/slog"
@@ -137,18 +134,7 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 		return User{}, false
 	}
 
-	// Check if password is in "salt:hash" format
-	// The salt is 16 bytes (32 hex chars), hash is 32 bytes (64 hex chars), plus ':' = 97 chars
-	if len(user.Password) == 97 && user.Password[32] == ':' {
-		saltHex := user.Password[:32]
-		hashHex := user.Password[33:]
-
-		expectedHash := hashPasswordWithSalt(password, saltHex)
-		if subtle.ConstantTimeCompare([]byte(expectedHash), []byte(hashHex)) != 1 {
-			return User{}, false
-		}
-	} else if subtle.ConstantTimeCompare([]byte(password), []byte(user.Password)) != 1 {
-		// Fallback for plaintext (e.g. from env)
+	if subtle.ConstantTimeCompare([]byte(password), []byte(user.Password)) != 1 {
 		return User{}, false
 	}
 
@@ -207,11 +193,6 @@ func (m *Manager) ListUsers() []User {
 // AddUser adds or updates a user and persists the change.
 func (m *Manager) AddUser(user User) error {
 	m.mu.Lock()
-	// Hash password if not already hashed
-	if !(len(user.Password) == 97 && user.Password[32] == ':') {
-		user.Password = hashPassword(user.Password)
-	}
-
 	m.users[user.Username] = user
 	onSave := m.onSave
 	m.mu.Unlock()
@@ -256,18 +237,4 @@ func ParseRole(s string) Role {
 	default:
 		return RoleViewer
 	}
-}
-
-func hashPassword(password string) string {
-	salt := make([]byte, 16)
-	rand.Read(salt)
-	saltHex := hex.EncodeToString(salt)
-	hashHex := hashPasswordWithSalt(password, saltHex)
-	return saltHex + ":" + hashHex
-}
-
-func hashPasswordWithSalt(password, saltHex string) string {
-	h := sha256.New()
-	h.Write([]byte(saltHex + password))
-	return hex.EncodeToString(h.Sum(nil))
 }

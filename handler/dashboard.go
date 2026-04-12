@@ -3834,7 +3834,7 @@ function switchIPTab(source, tab, btn) {
   // ── Live refresh: Recent Transmissions table ──
   var _alertsRefreshTimer = null;
   function refreshAlertsTable() {
-    fetch('/history?limit=20', { credentials: 'include' }).then(function(r) {
+    fetch('/history?limit=100', { credentials: 'include' }).then(function(r) {
       if (!r.ok) return;
       return r.json();
     }).then(function(resp) {

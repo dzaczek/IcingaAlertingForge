@@ -367,7 +367,7 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 	// We want newest recent entries/errors, but we are reading oldest to newest.
 	// So we keep ring buffers to avoid O(N) slice shifting, and unroll/reverse at the end.
-	recentEntriesBuf := make([]models.HistoryEntry, 20)
+	recentEntriesBuf := make([]models.HistoryEntry, 100)
 	recentEntriesPos := 0
 	recentEntriesTotal := 0
 

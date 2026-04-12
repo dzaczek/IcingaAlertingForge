@@ -3536,27 +3536,20 @@ function applyFrozenHighlight() {
         tr.querySelectorAll('.frozen-inline-badge').forEach(function(b) { b.remove(); });
         tr.querySelectorAll('.frozen-unfreeze-btn').forEach(function(b) { b.remove(); });
       });
-      // Apply to all table rows that carry data-service
+      // Apply frozen highlight to all table rows — ❄ badge only, no inline button
+      // (Unfreeze is available in the service detail panel)
       document.querySelectorAll('tr[data-service]').forEach(function(tr) {
         var svc  = tr.dataset.service || '';
         var host = tr.dataset.host   || '';
         if (!frozenSet[host + '\x1f' + svc]) return;
         tr.classList.add('frozen-row');
-        // Put ❄ badge + Unfreeze button in the same <td> as the service <strong>
         var nameEl = tr.querySelector('strong');
-        var nameTd = nameEl ? nameEl.closest('td') : null;
-        if (nameTd && !nameTd.querySelector('.frozen-unfreeze-btn')) {
+        if (nameEl && !nameEl.querySelector('.frozen-inline-badge')) {
           var badge = document.createElement('span');
           badge.className = 'frozen-inline-badge';
+          badge.title = 'Service is frozen — alerts suppressed';
           badge.textContent = ' ❄';
           nameEl.appendChild(badge);
-          var btn = document.createElement('button');
-          btn.className = 'frozen-unfreeze-btn';
-          btn.textContent = 'Unfreeze';
-          (function(h, s) {
-            btn.onclick = function(ev) { ev.stopPropagation(); unfreezeFromList(h, s, btn); };
-          })(host, svc);
-          nameTd.appendChild(btn);
         }
       });
       // Update sidebar badge

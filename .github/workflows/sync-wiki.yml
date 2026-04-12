@@ -1,0 +1,46 @@
+name: Sync Wiki
+
+on:
+  push:
+    branches:
+      - main  # Zmień na 'master', jeśli to jest Twoja główna gałąź
+    paths:
+      - 'wiki/**' # Workflow uruchomi się tylko, gdy zmienisz coś w katalogu wiki/
+
+jobs:
+  update-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Pobranie głównego repozytorium
+        uses: actions/checkout@v4
+
+      - name: Synchronizacja katalogu z GitHub Wiki
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. Konfiguracja tożsamości bota Git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 2. Sklonowanie repozytorium Wiki do tymczasowego folderu (/tmp/wiki)
+          git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.wiki.git" /tmp/wiki
+
+          # 3. Skopiowanie plików z repo do Wiki
+          # Używamy rsync, aby nadpisać pliki i usunąć te, które skasowałeś w repo
+          rsync -av --delete ./wiki/ /tmp/wiki/ --exclude .git
+
+          # 4. Przejście do Wiki, dodanie zmian i wypchnięcie (push)
+          cd /tmp/wiki
+          git add .
+          
+          # Sprawdzenie, czy są jakieś zmiany do zacommitowania
+          if git diff-index --quiet HEAD --; then
+            echo "Brak zmian do wypchnięcia."
+          else
+            git commit -m "Automatyczna synchronizacja z katalogiem wiki (commit ${{ github.sha }})"
+            # Repozytoria Wiki domyślnie zawsze używają gałęzi master
+            git push origin master 
+          fi

@@ -33,3 +33,7 @@
 ## 2024-04-11 - Concurrent service fetching to avoid N+1 API bottlenecks
 **Learning:** Sequential loops for querying multiple targets (like Icinga2 hosts) introduce N+1 API call bottlenecks, significantly degrading performance as the number of targets grows.
 **Action:** When fetching independent data from multiple remote targets or services, use concurrency structures (e.g., `sync.WaitGroup` and `sync.Mutex`) instead of sequential loops. This reduces wait times to O(1) relative to the target count, bounded by the slowest individual request.
+
+## 2024-05-31 - Sequential synchronous webhook alert processing bottleneck
+**Learning:** `handler.WebhookHandler.ServeHTTP` previously processed incoming alerts sequentially in a loop. For large webhook payloads, the linear O(N) waiting time for HTTP API calls to Icinga2 resulted in severe throughput bottlenecks and potential timeouts from the sending service (like Grafana).
+**Action:** When processing batches of external requests mapped to independent endpoints, utilize bounded concurrent execution (using a semaphore channel like `sem := make(chan struct{}, limit)` alongside `sync.WaitGroup`). This parallelizes network delays and significantly improves response time without overwhelming the downstream API. To preserve order without contention, pre-allocate the results slice and write using indices concurrently.

@@ -760,9 +760,23 @@ func (h *AdminHandler) HandleFreezeService(w http.ResponseWriter, r *http.Reques
 		host = target.HostName
 	}
 
+	adminUser, _, _ := r.BasicAuth()
+
 	if r.Method == http.MethodDelete {
 		h.Cache.Unfreeze(host, serviceName)
-		slog.Info("Service unfrozen", "host", host, "service", serviceName)
+		slog.Info("Service unfrozen", "host", host, "service", serviceName, "user", adminUser)
+		if h.History != nil {
+			_ = h.History.Append(models.HistoryEntry{
+				Timestamp:   time.Now(),
+				SourceKey:   "admin:" + adminUser,
+				HostName:    host,
+				Mode:        "manual",
+				Action:      "unfreeze",
+				ServiceName: serviceName,
+				IcingaOK:    true,
+				RemoteAddr:  r.RemoteAddr,
+			})
+		}
 		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"status":  "unfrozen",
 			"host":    host,
@@ -784,11 +798,55 @@ func (h *AdminHandler) HandleFreezeService(w http.ResponseWriter, r *http.Reques
 		"host":    host,
 		"service": serviceName,
 	}
+	msg := "Frozen permanently"
 	if until != nil {
 		resp["frozen_until"] = until.Format(time.RFC3339)
+		msg = "Frozen until " + until.Format(time.RFC3339)
 	} else {
 		resp["frozen_until"] = nil
 	}
-	slog.Info("Service frozen", "host", host, "service", serviceName, "until", until)
+	slog.Info("Service frozen", "host", host, "service", serviceName, "until", until, "user", adminUser)
+	if h.History != nil {
+		_ = h.History.Append(models.HistoryEntry{
+			Timestamp:   time.Now(),
+			SourceKey:   "admin:" + adminUser,
+			HostName:    host,
+			Mode:        "manual",
+			Action:      "freeze",
+			ServiceName: serviceName,
+			Message:     msg,
+			IcingaOK:    true,
+			RemoteAddr:  r.RemoteAddr,
+		})
+	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
+}
+
+// HandleListFrozen returns all currently frozen services.
+// GET /admin/services/frozen
+func (h *AdminHandler) HandleListFrozen(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+
+	entries := h.Cache.AllFrozen()
+	type frozenItem struct {
+		Host        string  `json:"host"`
+		Service     string  `json:"service"`
+		FrozenUntil *string `json:"frozen_until"` // nil = permanent
+	}
+	items := make([]frozenItem, len(entries))
+	for i, e := range entries {
+		var fu *string
+		if e.FrozenUntil != nil {
+			s := e.FrozenUntil.Format(time.RFC3339)
+			fu = &s
+		}
+		items[i] = frozenItem{Host: e.Host, Service: e.Service, FrozenUntil: fu}
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{"frozen": items})
 }

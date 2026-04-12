@@ -2043,6 +2043,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <button class="sidebar-btn tan" data-section="alerts" onclick="showSection('alerts', this, true)">Alerts <span class="info-trigger" data-info="alerts">?</span></button>
     <button class="sidebar-btn purple" data-section="errors" onclick="showSection('errors', this, true)">Errors <span class="info-trigger" data-info="errors">?</span></button>
     <button class="sidebar-btn blue" data-section="services" onclick="showSection('services', this, true)">Services <span class="info-trigger" data-info="services">?</span></button>
+    <button class="sidebar-btn" style="background:var(--lcars-blue);color:#000;" data-section="frozen" onclick="showSection('frozen', this, true)">Frozen <span id="frozen-count-badge" style="display:none;background:#000;color:var(--lcars-blue);border-radius:10px;padding:1px 6px;font-size:11px;margin-left:4px;"></span></button>
     <div class="sidebar-decoration"></div>
     <button class="sidebar-btn peach" data-section="security" onclick="showSection('security', this, true)">Security <span class="info-trigger" data-info="diagnostics">?</span></button>
     <button class="sidebar-btn" data-section="icinga" onclick="showSection('icinga', this, true)">Icinga Mgmt <span class="info-trigger" data-info="management">?</span></button>
@@ -2783,6 +2784,25 @@ const dashboardHTML = `<!DOCTYPE html>
       </div>
     </div><!-- /icinga -->
 
+    <!-- ── FROZEN SECTION ── -->
+    <div class="nav-section" id="sec-frozen">
+      <div class="lcars-panel blue">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow blue"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill"></div>
+            <span class="title-text blue">Frozen Services</span>
+            <button class="btn btn-sm" onclick="loadFrozenList()" style="margin-left:12px;">Refresh</button>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div id="frozen-list-container">
+            <div class="empty-state">Loading...</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /frozen -->
+
     <!-- ── DEV PANEL SECTION ── -->
     <div class="nav-section" id="sec-devpanel">
       <div class="lcars-panel purple">
@@ -2936,6 +2956,9 @@ function showSection(name, _btn, updateHash) {
     window._settingsLoaded = true;
     loadSettings();
     rbacLoadUsers();
+  }
+  if (activeName === 'frozen') {
+    loadFrozenList();
   }
 }
 
@@ -3465,6 +3488,65 @@ function unfreezeService(host, service, btn) {
     btn.disabled = false;
     if (resultEl) { resultEl.style.color = 'var(--lcars-critical)'; resultEl.textContent = 'Connection failed'; }
   });
+}
+
+function loadFrozenList() {
+  var container = document.getElementById('frozen-list-container');
+  if (!container) return;
+  container.innerHTML = '<div class="empty-state">Loading...</div>';
+  fetch('/admin/services/frozen', { credentials: 'include' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var items = data.frozen || [];
+      // Update badge
+      var badge = document.getElementById('frozen-count-badge');
+      if (badge) {
+        if (items.length > 0) { badge.textContent = items.length; badge.style.display = ''; }
+        else { badge.style.display = 'none'; }
+      }
+      if (items.length === 0) {
+        container.innerHTML = '<div class="empty-state">No frozen services</div>';
+        return;
+      }
+      var html = '<table style="width:100%;border-collapse:collapse;">';
+      html += '<thead><tr style="color:var(--lcars-text-light);font-size:11px;letter-spacing:1px;text-transform:uppercase;">';
+      html += '<th style="text-align:left;padding:6px 8px;">Host</th>';
+      html += '<th style="text-align:left;padding:6px 8px;">Service</th>';
+      html += '<th style="text-align:left;padding:6px 8px;">Frozen Until</th>';
+      html += '<th style="padding:6px 8px;"></th>';
+      html += '</tr></thead><tbody>';
+      for (var i = 0; i < items.length; i++) {
+        var e = items[i];
+        var until = e.frozen_until
+          ? new Date(e.frozen_until).toLocaleString('en-GB', {hour12:false})
+          : '<span style="color:var(--lcars-blue)">Permanent</span>';
+        html += '<tr style="border-top:1px solid rgba(255,255,255,0.05);">';
+        html += '<td class="mono" style="padding:7px 8px;">' + escHtml(e.host) + '</td>';
+        html += '<td style="padding:7px 8px;"><strong class="svc-link js-service-history-trigger" data-service="' + escHtml(e.service) + '" data-host="' + escHtml(e.host) + '">' + escHtml(e.service) + '</strong></td>';
+        html += '<td style="padding:7px 8px;font-size:12px;">' + until + '</td>';
+        html += '<td style="padding:7px 8px;text-align:right;">';
+        html += '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" style="padding:5px 14px;font-size:11px;" ';
+        html += 'onclick="unfreezeFromList(\'' + escHtml(e.host) + '\',\'' + escHtml(e.service) + '\',this)">Unfreeze</button>';
+        html += '</td></tr>';
+      }
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    })
+    .catch(function() {
+      container.innerHTML = '<div class="empty-state">Failed to load frozen list</div>';
+    });
+}
+
+function unfreezeFromList(host, service, btn) {
+  btn.disabled = true;
+  fetch('/admin/services/' + encodeURIComponent(service) + '/freeze', {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ host: host })
+  }).then(function(r) { return r.json(); })
+  .then(function() { loadFrozenList(); })
+  .catch(function() { btn.disabled = false; });
 }
 
 // ── Settings Panel ──

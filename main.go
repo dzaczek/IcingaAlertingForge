@@ -390,6 +390,7 @@ func main() {
 	mux.HandleFunc("/history/export", requireAuth(historyHandler.HandleExport))
 
 	// Admin endpoints (password protected)
+	mux.HandleFunc("/admin/services/frozen", adminHandler.HandleListFrozen)
 	mux.HandleFunc("/admin/services/bulk-delete", adminHandler.HandleBulkDelete)
 	mux.HandleFunc("/admin/services/", func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/status") {

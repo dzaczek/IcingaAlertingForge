@@ -188,6 +188,36 @@ func (c *ServiceCache) GetFreezeInfo(host, name string) (frozen bool, until *tim
 	return true, t
 }
 
+// FrozenEntry is a view of one frozen host/service pair.
+type FrozenEntry struct {
+	Host        string
+	Service     string
+	FrozenUntil *time.Time // nil = permanent
+}
+
+// AllFrozen returns all currently frozen services (unexpired).
+func (c *ServiceCache) AllFrozen() []FrozenEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	now := time.Now()
+	out := make([]FrozenEntry, 0, len(c.frozenUntil))
+	for key, t := range c.frozenUntil {
+		if t != nil && now.After(*t) {
+			continue // expired
+		}
+		host, service := SplitServiceKey(key)
+		out = append(out, FrozenEntry{Host: host, Service: service, FrozenUntil: t})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Host != out[j].Host {
+			return out[i].Host < out[j].Host
+		}
+		return out[i].Service < out[j].Service
+	})
+	return out
+}
+
 // AllEntries returns a sorted snapshot of all non-expired cache entries.
 func (c *ServiceCache) AllEntries() []CacheEntry {
 	c.mu.RLock()

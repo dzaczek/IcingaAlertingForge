@@ -1012,6 +1012,13 @@ const dashboardHTML = `<!DOCTYPE html>
     color: var(--lcars-purple);
     font-weight: 700;
   }
+  .svc-link {
+    cursor: pointer;
+    color: var(--lcars-blue);
+    text-decoration: underline dotted;
+    transition: color 0.15s;
+  }
+  .svc-link:hover { color: var(--lcars-yellow); }
   .svc-history-msg {
     color: var(--lcars-text-light);
     font-size: 12px;
@@ -2207,13 +2214,13 @@ const dashboardHTML = `<!DOCTYPE html>
             </thead>
             <tbody>
               {{range .RecentAlerts}}
-              <tr>
+              <tr data-service="{{.ServiceName}}" data-host="{{.HostName}}">
                 <td class="mono">{{.Timestamp}}</td>
                 <td><span class="badge {{.StatusClass}}">{{.StatusLabel}}</span></td>
                 <td>{{.Mode}}{{if eq .Mode "manual"}} <span class="alerts-manual-tag">ADMIN</span>{{end}}</td>
                 <td>{{.Action}}</td>
                 <td class="mono">{{if .HostName}}{{.HostName}}{{else}}-{{end}}</td>
-                <td><strong>{{.ServiceName}}</strong></td>
+                <td><strong class="svc-link js-service-history-trigger">{{.ServiceName}}</strong></td>
                 <td class="mono">{{.Source}}</td>
                 <td>{{if .IcingaOK}}<span class="icinga-ok">OK</span>{{else}}<span class="icinga-fail">FAIL</span>{{end}}</td>
                 <td class="duration">{{.DurationMs}}ms</td>
@@ -3869,13 +3876,13 @@ function switchIPTab(source, tab, btn) {
           var ts = e.timestamp ? new Date(e.timestamp).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC') : '';
           var mode = escHtml(e.mode || '');
           var manualTag = (e.mode === 'manual') ? ' <span class="alerts-manual-tag">ADMIN</span>' : '';
-          html += '<tr>';
+          html += '<tr data-service="' + escHtml(e.service_name || '') + '" data-host="' + escHtml(e.host_name || '') + '">';
           html += '<td class="mono">' + ts + '</td>';
           html += '<td><span class="badge ' + statusClass + '">' + escHtml(statusLabel) + '</span></td>';
           html += '<td>' + mode + manualTag + '</td>';
           html += '<td>' + escHtml(e.action || '') + '</td>';
           html += '<td class="mono">' + (e.host_name ? escHtml(e.host_name) : '-') + '</td>';
-          html += '<td><strong>' + escHtml(e.service_name || '') + '</strong></td>';
+          html += '<td><strong class="svc-link js-service-history-trigger">' + escHtml(e.service_name || '') + '</strong></td>';
           html += '<td class="mono">' + escHtml(e.source_key || '') + '</td>';
           html += '<td>' + (e.icinga_ok ? '<span class="icinga-ok">OK</span>' : '<span class="icinga-fail">FAIL</span>') + '</td>';
           html += '<td class="duration">' + (e.duration_ms || 0) + 'ms</td>';

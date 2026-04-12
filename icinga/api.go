@@ -13,15 +13,35 @@ import (
 	"time"
 )
 
+// ConflictPolicy defines how to handle existing objects not managed by the bridge.
+type ConflictPolicy string
+
+const (
+	ConflictPolicySkip ConflictPolicy = "skip" // Skip the operation and log a warning
+	ConflictPolicyWarn ConflictPolicy = "warn" // Proceed with the operation but log a warning
+	ConflictPolicyFail ConflictPolicy = "fail" // Fail the operation and return an error
+)
+
+// ErrConflict is returned when an operation is refused due to a conflict policy.
+type ErrConflict struct {
+	Message string
+}
+
+func (e *ErrConflict) Error() string {
+	return e.Message
+}
+
 // APIClient communicates with the Icinga2 REST API (port 5665)
 // to submit passive check results.
 type APIClient struct {
-	mu         sync.RWMutex
-	BaseURL    string
-	User       string
-	Pass       string
-	HTTPClient *http.Client
-	Debug      *DebugRing // optional: captures request/response pairs for dev panel
+	mu             sync.RWMutex
+	BaseURL        string
+	User           string
+	Pass           string
+	HTTPClient     *http.Client
+	Debug          *DebugRing // optional: captures request/response pairs for dev panel
+	ConflictPolicy ConflictPolicy
+	Force          bool
 }
 
 const (
@@ -191,11 +211,251 @@ func (h HostInfo) IsDummy() bool {
 	return h.CheckCommand == "dummy"
 }
 
+// GetServiceInfo retrieves detailed service information from Icinga2.
+func (c *APIClient) GetServiceInfo(host, service string) (ServiceInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.getServiceInfo(host, service)
+}
+
+// GetServiceInfo retrieves detailed service information from Icinga2.
+func (c *APIClient) GetServiceInfo(host, service string) (ServiceInfo, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.getServiceInfo(host, service)
+}
+
 // GetHostInfo retrieves detailed host information from Icinga2.
 func (c *APIClient) GetHostInfo(host string) (HostInfo, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.getHostInfo(host)
+}
+
+func (c *APIClient) getServiceInfo(host, service string) (ServiceInfo, error) {
+	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s", c.BaseURL, url.PathEscape(host), url.PathEscape(service))
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return ServiceInfo{}, fmt.Errorf("icinga api: create request: %w", err)
+	}
+	req.SetBasicAuth(c.User, c.Pass)
+	req.Header.Set("Accept", "application/json")
+
+	start := time.Now()
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		c.recordDebug(http.MethodGet, reqURL, nil, 0, nil, time.Since(start), err)
+		return ServiceInfo{}, fmt.Errorf("icinga api: send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodGet, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ServiceInfo{Exists: false, HostName: host, Name: service}, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return ServiceInfo{}, fmt.Errorf("icinga api: check service %q on host %q: status %d: %s", service, host, resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Results []struct {
+			Attrs struct {
+				Name            string         `json:"name"`
+				DisplayName     string         `json:"display_name"`
+				CheckCommand    string         `json:"check_command"`
+				State           float64        `json:"state"`
+				Notes           string         `json:"notes"`
+				Vars            map[string]any `json:"vars"`
+				LastCheckResult *struct {
+					State        float64 `json:"state"`
+					Output       string  `json:"output"`
+					ExecutionEnd float64 `json:"execution_end"`
+				} `json:"last_check_result"`
+			} `json:"attrs"`
+		} `json:"results"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return ServiceInfo{}, fmt.Errorf("icinga api: decode service response: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return ServiceInfo{Exists: false, HostName: host, Name: service}, nil
+	}
+
+	r := result.Results[0].Attrs
+	info := ServiceInfo{
+		Exists:       true,
+		HostName:     host,
+		Name:         r.Name,
+		DisplayName:  r.DisplayName,
+		Notes:        r.Notes,
+		CheckCommand: r.CheckCommand,
+	}
+
+	if r.Vars != nil {
+		if mb, ok := r.Vars["managed_by"].(string); ok {
+			info.ManagedBy = mb
+		}
+		if createdAt, ok := r.Vars["iaf_created_at"].(string); ok {
+			info.BridgeCreatedAt = createdAt
+		} else if createdAt, ok := r.Vars["bridge_created_at"].(string); ok {
+			info.BridgeCreatedAt = createdAt
+		}
+	}
+
+	info.ExitStatus = int(r.State)
+	if r.LastCheckResult != nil {
+		info.ExitStatus = int(r.LastCheckResult.State)
+		info.Output = r.LastCheckResult.Output
+		info.LastCheck = time.Unix(int64(r.LastCheckResult.ExecutionEnd), 0)
+		info.HasCheckResult = true
+	}
+
+	return info, nil
+}
+
+func (c *APIClient) checkHostConflict(host string) (bool, error) {
+	info, err := c.getHostInfo(host)
+	if err != nil {
+		return false, err
+	}
+	if !info.Exists {
+		return false, nil
+	}
+	if info.IsManagedByUs() || info.IsDummy() || c.Force {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c *APIClient) checkServiceConflict(host, service string) (bool, error) {
+	info, err := c.getServiceInfo(host, service)
+	if err != nil {
+		return false, err
+	}
+	if !info.Exists {
+		return false, nil
+	}
+	if info.IsManagedByUs() || info.CheckCommand == "dummy" || c.Force {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c *APIClient) getServiceInfo(host, service string) (ServiceInfo, error) {
+	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s", c.BaseURL, url.PathEscape(host), url.PathEscape(service))
+	req, err := http.NewRequest(http.MethodGet, reqURL, nil)
+	if err != nil {
+		return ServiceInfo{}, fmt.Errorf("icinga api: create request: %w", err)
+	}
+	req.SetBasicAuth(c.User, c.Pass)
+	req.Header.Set("Accept", "application/json")
+
+	start := time.Now()
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		c.recordDebug(http.MethodGet, reqURL, nil, 0, nil, time.Since(start), err)
+		return ServiceInfo{}, fmt.Errorf("icinga api: send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	c.recordDebug(http.MethodGet, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ServiceInfo{Exists: false, HostName: host, Name: service}, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return ServiceInfo{}, fmt.Errorf("icinga api: check service %q on host %q: status %d: %s", service, host, resp.StatusCode, string(respBody))
+	}
+
+	var result struct {
+		Results []struct {
+			Attrs struct {
+				Name            string         `json:"name"`
+				DisplayName     string         `json:"display_name"`
+				CheckCommand    string         `json:"check_command"`
+				State           float64        `json:"state"`
+				Notes           string         `json:"notes"`
+				Vars            map[string]any `json:"vars"`
+				LastCheckResult *struct {
+					State        float64 `json:"state"`
+					Output       string  `json:"output"`
+					ExecutionEnd float64 `json:"execution_end"`
+				} `json:"last_check_result"`
+			} `json:"attrs"`
+		} `json:"results"`
+	}
+
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return ServiceInfo{}, fmt.Errorf("icinga api: decode service response: %w", err)
+	}
+
+	if len(result.Results) == 0 {
+		return ServiceInfo{Exists: false, HostName: host, Name: service}, nil
+	}
+
+	r := result.Results[0].Attrs
+	info := ServiceInfo{
+		Exists:       true,
+		HostName:     host,
+		Name:         r.Name,
+		DisplayName:  r.DisplayName,
+		Notes:        r.Notes,
+		CheckCommand: r.CheckCommand,
+	}
+
+	if r.Vars != nil {
+		if mb, ok := r.Vars["managed_by"].(string); ok {
+			info.ManagedBy = mb
+		}
+		if createdAt, ok := r.Vars["iaf_created_at"].(string); ok {
+			info.BridgeCreatedAt = createdAt
+		} else if createdAt, ok := r.Vars["bridge_created_at"].(string); ok {
+			info.BridgeCreatedAt = createdAt
+		}
+	}
+
+	info.ExitStatus = int(r.State)
+	if r.LastCheckResult != nil {
+		info.ExitStatus = int(r.LastCheckResult.State)
+		info.Output = r.LastCheckResult.Output
+		info.LastCheck = time.Unix(int64(r.LastCheckResult.ExecutionEnd), 0)
+		info.HasCheckResult = true
+	}
+
+	return info, nil
+}
+
+func (c *APIClient) checkHostConflict(host string) (bool, error) {
+	info, err := c.getHostInfo(host)
+	if err != nil {
+		return false, err
+	}
+	if !info.Exists {
+		return false, nil
+	}
+	if info.IsManagedByUs() || info.IsDummy() || c.Force {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (c *APIClient) checkServiceConflict(host, service string) (bool, error) {
+	info, err := c.getServiceInfo(host, service)
+	if err != nil {
+		return false, err
+	}
+	if !info.Exists {
+		return false, nil
+	}
+	if info.IsManagedByUs() || info.CheckCommand == "dummy" || c.Force {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *APIClient) getHostInfo(host string) (HostInfo, error) {
@@ -276,6 +536,19 @@ func (c *APIClient) HostExists(host string) (bool, error) {
 func (c *APIClient) CreateHost(spec HostSpec) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	conflict, err := c.checkHostConflict(spec.Name)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		msg := fmt.Sprintf("host %q already exists and is not managed by the bridge (policy: %s)", spec.Name, c.ConflictPolicy)
+		if c.ConflictPolicy == ConflictPolicyFail || c.ConflictPolicy == ConflictPolicySkip {
+			return &ErrConflict{Message: msg}
+		}
+		// ConflictPolicyWarn falls through to proceed with creation
+	}
+
 	if spec.DisplayName == "" {
 		spec.DisplayName = spec.Name
 	}
@@ -459,6 +732,7 @@ func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
 
 // ServiceInfo holds basic service information from Icinga2.
 type ServiceInfo struct {
+	Exists          bool      `json:"-"`
 	HostName        string    `json:"host"`
 	Name            string    `json:"name"`
 	DisplayName     string    `json:"display_name"`
@@ -469,6 +743,7 @@ type ServiceInfo struct {
 	Output          string    `json:"output"`
 	LastCheck       time.Time `json:"last_check"`
 	HasCheckResult  bool      `json:"has_check_result"`
+	CheckCommand    string    `json:"-"`
 }
 
 // IsManagedByUs returns true if the service is managed by IAF or by the legacy
@@ -489,6 +764,19 @@ func (s ServiceInfo) IsLegacyManagedByUs() bool {
 func (c *APIClient) CreateService(host, name string, labels, annotations map[string]string) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	conflict, err := c.checkServiceConflict(host, name)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		msg := fmt.Sprintf("service %q on host %q already exists and is not managed by the bridge (policy: %s)", name, host, c.ConflictPolicy)
+		if c.ConflictPolicy == ConflictPolicyFail || c.ConflictPolicy == ConflictPolicySkip {
+			return &ErrConflict{Message: msg}
+		}
+		// ConflictPolicyWarn falls through to proceed with creation
+	}
+
 	// Build notes from annotations (summary + description)
 	notes := "Managed by IcingaAlertingForge | auto-created"
 	if s := annotations["summary"]; s != "" {
@@ -588,6 +876,18 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 func (c *APIClient) DeleteService(host, name string) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
+	conflict, err := c.checkServiceConflict(host, name)
+	if err != nil {
+		return err
+	}
+	if conflict {
+		// For deletion, if it's a conflict (not managed by us), we only proceed if Force is true.
+		// Since checkServiceConflict already accounts for Force, if it returns true,
+		// it means Force is false AND it's not managed by us.
+		return &ErrConflict{Message: fmt.Sprintf("refusing to delete service %q on host %q: not managed by the bridge", name, host)}
+	}
+
 	reqURL := fmt.Sprintf("%s/v1/objects/services/%s!%s?cascade=1", c.BaseURL, url.PathEscape(host), url.PathEscape(name))
 	req, err := http.NewRequest(http.MethodDelete, reqURL, nil)
 	if err != nil {

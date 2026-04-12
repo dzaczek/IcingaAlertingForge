@@ -55,6 +55,8 @@ type Config struct {
 	Icinga2HostAddress    string
 	Icinga2HostAutoCreate bool
 	Icinga2TLSSkipVerify  bool
+	Icinga2ConflictPolicy string
+	Icinga2Force          bool
 
 	// History
 	HistoryFile       string
@@ -162,6 +164,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.Icinga2TLSSkipVerify, err = optBool("ICINGA2_TLS_SKIP_VERIFY", false); err != nil {
+		return nil, err
+	}
+	cfg.Icinga2ConflictPolicy = getEnvOrDefault("ICINGA2_CONFLICT_POLICY", "warn")
+	if cfg.Icinga2Force, err = optBool("ICINGA2_FORCE", false); err != nil {
 		return nil, err
 	}
 

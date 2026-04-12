@@ -35,10 +35,11 @@ func testAdminHandler(t *testing.T, icingaHandler http.HandlerFunc) (*AdminHandl
 		History: histLogger,
 		Cache:   cache.NewServiceCache(60),
 		API: &icinga.APIClient{
-			BaseURL:    icingaServer.URL,
-			User:       "test",
-			Pass:       "test",
-			HTTPClient: icingaServer.Client(),
+			BaseURL:        icingaServer.URL,
+			User:           "test",
+			Pass:           "test",
+			HTTPClient:     icingaServer.Client(),
+			ConflictPolicy: icinga.ConflictPolicyWarn,
 		},
 		Targets: map[string]config.TargetConfig{
 			"team-a": {ID: "team-a", HostName: "host-a"},
@@ -111,6 +112,11 @@ func TestAdmin_Auth(t *testing.T) {
 func TestAdmin_HandleDeleteService(t *testing.T) {
 	deleteCalled := false
 	h, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/objects/services/host-a!svc-1" {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"},"check_command":"dummy"}}]}`))
+			return
+		}
 		if r.Method == http.MethodDelete && r.URL.Path == "/v1/objects/services/host-a!svc-1" {
 			deleteCalled = true
 			w.WriteHeader(http.StatusOK)
@@ -147,6 +153,11 @@ func TestAdmin_HandleDeleteService(t *testing.T) {
 func TestAdmin_HandleBulkDelete(t *testing.T) {
 	deleteCount := 0
 	h, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"},"check_command":"dummy"}}]}`))
+			return
+		}
 		if r.Method == http.MethodDelete {
 			deleteCount++
 			w.WriteHeader(http.StatusOK)

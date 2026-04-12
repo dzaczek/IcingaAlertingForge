@@ -42,10 +42,11 @@ func testWebhookHandler(t *testing.T, icingaHandler http.HandlerFunc) *WebhookHa
 		}),
 		Cache: cache.NewServiceCache(60),
 		API: &icinga.APIClient{
-			BaseURL:    icingaServer.URL,
-			User:       "test",
-			Pass:       "test",
-			HTTPClient: icingaServer.Client(),
+			BaseURL:        icingaServer.URL,
+			User:           "test",
+			Pass:           "test",
+			HTTPClient:     icingaServer.Client(),
+			ConflictPolicy: icinga.ConflictPolicyWarn,
 		},
 		History: histLogger,
 		Targets: map[string]config.TargetConfig{
@@ -274,6 +275,11 @@ func TestWebhook_TestModeCreate(t *testing.T) {
 
 func TestWebhook_TestModeDelete(t *testing.T) {
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"}}}]}`))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"results":[{"code":200}]}`))
 	})
@@ -450,6 +456,15 @@ func TestWebhook_ReturnsBadGatewayAndLogsForwardingError(t *testing.T) {
 func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 	createCallCount := 0
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Path == "/v1/objects/services/team-a-host!Create Retry" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"}}}]}`))
+			return
+		}
 		if r.Method == http.MethodPut {
 			createCallCount++
 		}
@@ -466,7 +481,7 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 		}]
 	}`
 
-	for range 2 {
+	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-API-Key", "valid-key")

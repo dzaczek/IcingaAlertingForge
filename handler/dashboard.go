@@ -2465,6 +2465,14 @@ const dashboardHTML = `<!DOCTYPE html>
               <input type="checkbox" class="settings-input" id="cfg-icinga2-tls-skip">
               <span class="settings-label">Auto-Create Hosts</span>
               <input type="checkbox" class="settings-input" id="cfg-icinga2-auto-create">
+              <span class="settings-label">Conflict Policy</span>
+              <select class="settings-select settings-input" id="cfg-icinga2-conflict-policy">
+                <option value="skip">skip</option>
+                <option value="warn">warn</option>
+                <option value="fail">fail</option>
+              </select>
+              <span class="settings-label">Force Mode</span>
+              <input type="checkbox" class="settings-input" id="cfg-icinga2-force">
             </div>
             <div style="margin-top:10px;">
               <button class="settings-btn blue settings-btn-sm" onclick="testIcingaConnection()">Test Connection</button>
@@ -3305,6 +3313,8 @@ function loadSettings() {
       document.getElementById('cfg-icinga2-pass').placeholder = (cfg.icinga2_pass === '***') ? '(set)' : '(not set)';
       document.getElementById('cfg-icinga2-tls-skip').checked = !!cfg.icinga2_tls_skip_verify;
       document.getElementById('cfg-icinga2-auto-create').checked = !!cfg.icinga2_host_auto_create;
+      document.getElementById('cfg-icinga2-conflict-policy').value = cfg.icinga2_conflict_policy || 'warn';
+      document.getElementById('cfg-icinga2-force').checked = !!cfg.icinga2_force;
 
       document.getElementById('cfg-history-file').value = cfg.history_file || '';
       document.getElementById('cfg-history-max').value = cfg.history_max_entries || '';
@@ -3334,6 +3344,8 @@ function saveSettings() {
     icinga2_user: document.getElementById('cfg-icinga2-user').value,
     icinga2_tls_skip_verify: document.getElementById('cfg-icinga2-tls-skip').checked,
     icinga2_host_auto_create: document.getElementById('cfg-icinga2-auto-create').checked,
+    icinga2_conflict_policy: document.getElementById('cfg-icinga2-conflict-policy').value,
+    icinga2_force: document.getElementById('cfg-icinga2-force').checked,
     history_file: document.getElementById('cfg-history-file').value,
     history_max_entries: parseInt(document.getElementById('cfg-history-max').value) || 0,
     cache_ttl_minutes: parseInt(document.getElementById('cfg-cache-ttl').value) || 0,

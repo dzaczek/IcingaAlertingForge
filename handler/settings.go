@@ -41,7 +41,7 @@ func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool
 	}
 	user, pass, ok := r.BasicAuth()
 	if !ok {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return false
 	}
@@ -68,7 +68,7 @@ func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool
 		h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
 	}
 	slog.Warn("Settings auth failed", "remote_addr", r.RemoteAddr, "user", user)
-	w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+	w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 	httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 	return false
 }

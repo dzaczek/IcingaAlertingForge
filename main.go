@@ -321,7 +321,7 @@ func main() {
 			}
 			user, pass, ok := r.BasicAuth()
 			if !ok {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
@@ -337,7 +337,7 @@ func main() {
 				if metricsCollector != nil && user != "" {
 					metricsCollector.RecordAuthFailure(r.RemoteAddr, user)
 				}
-				w.Header().Set("WWW-Authenticate", `Basic realm="Admin"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 				return
 			}
@@ -376,7 +376,7 @@ func main() {
 	mux.Handle("/status/beauty/events", sseBroker)
 	mux.Handle("/status/beauty", dashboardHandler)
 	mux.HandleFunc("/status/beauty/logout", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+		w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, `<html><head><meta http-equiv="refresh" content="1;url=/status/beauty"></head><body>Logged out. Redirecting...</body></html>`)

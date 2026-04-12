@@ -225,7 +225,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				HttpOnly: true,
 				Secure:   true,
 			})
-			w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusUnauthorized)
 			fmt.Fprint(w, `<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Enter credentials</h2><p>Authenticate to access command panel.</p></body></html>`)
@@ -238,7 +238,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.Metrics != nil && user != "" {
 				h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
 			}
-			w.Header().Set("WWW-Authenticate", `Basic realm="Dashboard Admin"`)
+			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}

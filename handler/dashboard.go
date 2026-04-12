@@ -3398,8 +3398,8 @@ function showServiceHistory(service, host) {
       '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
       '</div><div class="svc-status-result" id="svc-status-result"></div>';
     freezeControls =
-      '<div class="svc-freeze-controls" id="svc-freeze-controls">' +
-        '<div class="svc-freeze-row-top">' +
+      '<div style="padding:8px 12px 0 12px;border-top:1px solid rgba(100,180,255,0.2);margin-top:4px;flex-shrink:0;">' +
+        '<div style="display:flex;gap:8px;align-items:center;justify-content:center;margin-bottom:8px;">' +
           '<select class="svc-freeze-select" id="svc-freeze-duration">' +
             '<option value="0">Permanent</option>' +
             '<option value="600">10 min</option>' +
@@ -3412,11 +3412,13 @@ function showServiceHistory(service, host) {
           '</select>' +
           '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
         '</div>' +
-        '<div class="svc-freeze-row-bottom">' +
-          '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" id="svc-unfreeze-btn" style="width:100%;max-width:220px;" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Unfreeze</button>' +
+        '<div style="display:flex;justify-content:center;margin-bottom:8px;">' +
+          '<button id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)" ' +
+          'style="background:#ffcc00;color:#000;border:none;border-radius:20px;padding:8px 32px;font-family:inherit;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;width:100%;max-width:280px;">' +
+          'Unfreeze</button>' +
         '</div>' +
-      '</div>' +
-      '<div class="svc-freeze-result" id="svc-freeze-result" style="text-align:center;font-size:12px;min-height:16px;padding:4px 12px;"></div>';
+        '<div id="svc-freeze-result" style="text-align:center;font-size:12px;min-height:16px;padding:2px 0 6px;"></div>' +
+      '</div>';
   }
   panel.innerHTML = '<div class="svc-history-header"><span class="svc-history-title">' + escHtml(title) + '</span><button class="svc-history-close" onclick="this.closest(\'.svc-history-overlay\').remove()">Close</button></div>' +
     '<div class="svc-detail-block" id="svc-detail-block"><div class="svc-detail-loading">Querying sensor data...</div></div>' +

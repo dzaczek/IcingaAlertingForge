@@ -1,4 +1,4 @@
-# Main Lifecycle (`main.go`)
+# Main Lifecycle (`main.go`)!
 
 This document explains the lifecycle of the IcingaAlertForge application starting from the entry point in `main.go`.
 

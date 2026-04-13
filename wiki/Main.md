@@ -1,4 +1,4 @@
-# Main Lifecycle (`main.go`)!
+# Main Lifecycle (`main.go`)
 
 This document explains the lifecycle of the IcingaAlertForge application starting from the entry point in `main.go`.
 
@@ -47,16 +47,40 @@ sequenceDiagram
 
 ### `restoreManagedServicesFromIcinga(apiClient, serviceCache, host)`
 *   **Fast Track:** Scans Icinga2 on startup to rebuild the internal cache of known services.
-*   **Deep Dive:** Fetches all services attached to a given dummy host. It checks for the `managed_by: IcingaAlertForge` (or legacy) marker. This prevents the application from issuing a "Create Service" HTTP call to Icinga every time a webhook arrives for a known alert.
+*   **Deep Dive:**
+    *   **Parameters:** `apiClient` (*icinga.APIClient), `serviceCache` (*cache.ServiceCache), `host` (string).
+    *   **Behavior:** Fetches all services attached to a given dummy host. It checks for the `managed_by: IcingaAlertForge` (or legacy) marker. This prevents the application from issuing a "Create Service" HTTP call to Icinga every time a webhook arrives for a known alert.
+    *   **Side Effects:** Populates the `serviceCache` with found services.
 
 ### `ensureConfiguredHosts(apiClient, targets, autoCreate)`
 *   **Fast Track:** Checks if the target hosts exist in Icinga2, and creates them if they don't (and `autoCreate` is true).
-*   **Deep Dive:** Iterates through all targets mapped in the configuration. For each, it queries Icinga2. If the host is missing and `ICINGA2_HOST_AUTO_CREATE=true`, it pushes a host creation payload using `toIcingaHostSpec`. It logs a conflict warning if the host exists but lacks the `managed_by: IcingaAlertForge` label, meaning it might have been provisioned by Icinga Director or manually.
+*   **Deep Dive:**
+    *   **Parameters:** `apiClient` (*icinga.APIClient), `targets` (map[string]config.TargetConfig), `autoCreate` (bool).
+    *   **Behavior:** Iterates through all targets mapped in the configuration. For each, it queries Icinga2. If the host is missing and `ICINGA2_HOST_AUTO_CREATE=true`, it pushes a host creation payload using `toIcingaHostSpec`. It logs a conflict warning if the host exists but lacks the `managed_by: IcingaAlertForge` label, meaning it might have been provisioned by Icinga Director or manually.
+    *   **Returns:** Returns an error if a host is missing and `autoCreate` is false, or if creation fails.
+
+### `toIcingaHostSpec(target)`
+*   **Fast Track:** Converts a `config.TargetConfig` into an `icinga.HostSpec`.
+*   **Deep Dive:**
+    *   **Parameters:** `target` (config.TargetConfig).
+    *   **Returns:** `icinga.HostSpec`.
+    *   **Behavior:** Maps the target ID, host name, address, and notification settings (users, groups, states) from the internal configuration format to the format expected by the Icinga2 API client.
+
+### `sortedTargets(targets)`
+*   **Fast Track:** Returns a deterministic, sorted slice of target configurations.
+*   **Deep Dive:**
+    *   **Parameters:** `targets` (map[string]config.TargetConfig).
+    *   **Returns:** `[]config.TargetConfig`.
+    *   **Behavior:** Converts the targets map into a slice and sorts it primarily by `HostName` and secondarily by `ID`. This ensures that initialization logs and concurrent startup processes (like host validation) follow a consistent order.
 
 ### `setupLogging(level, format)`
 *   **Fast Track:** Configures the global `slog` logger.
-*   **Deep Dive:** Parses the configured log level (`debug`, `warn`, `error`, `info`) and format (`text` or `json`). Sets the default logger for the entire application.
+*   **Deep Dive:**
+    *   **Parameters:** `level` (string), `format` (string).
+    *   **Behavior:** Parses the configured log level (`debug`, `warn`, `error`, `info`) and format (`text` or `json`). Sets the default logger for the entire application using `slog.SetDefault`.
 
 ### `icingaHealthAdapter`
 *   **Fast Track:** An adapter bridging the Icinga2 API Client with the reverse Health Checker module.
-*   **Deep Dive:** Implements `health.IcingaProber` to allow the internal health checking routine to create and update a self-monitoring service in Icinga without importing `icinga` packages directly into `health`.
+*   **Deep Dive:**
+    *   **Methods:** `GetHostInfo`, `SendCheckResult`, `CreateService`.
+    *   **Behavior:** Implements the `health.IcingaProber` interface. This allows the internal health checking routine (located in the `health` package) to interact with Icinga2 without having a direct dependency on the `icinga` package, maintaining a clean architectural separation.

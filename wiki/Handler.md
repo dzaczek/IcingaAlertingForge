@@ -15,34 +15,51 @@ graph TD
     Adm --> |Modify| Config[configstore]
 ```
 
-## `DashboardHandler` (`dashboard.go`)
-
-### `ServeHTTP(w, r)`
-*   **Fast Track:** Serves the HTML, CSS, and JS for the "Beauty Panel" dashboard.
+## `handler.WebhookHandler` (Struct)
+*   **Endpoints:** `POST /webhook`
+*   **Fast Track:** Ingests alerts from Grafana, Alertmanager, or custom scripts and routes them to Icinga2.
 *   **Deep Dive:**
-    *   **Authentication Flow:** The dashboard uses HTTP Basic Auth. The handler checks the `?admin=1` query parameter to toggle between public read-only mode and authenticated command mode. It supports a clever logout mechanism via the `_logged_out` cookie, forcing the browser to clear cached Basic Auth credentials by returning a 401 Unauthorized response.
-    *   **Data Aggregation:** It aggregates `SysStats`, `HistoryStats` (including complex groupings like Top IPs and Last IPs), `QueueStats`, and `HealthStatus` into a massive `dashboardData` struct.
-    *   **Template Rendering:** The HTML, CSS, and JS are embedded directly in the Go binary as a string literal. It uses `html/template`.
-    *   **Security (CSP):** Because the HTML file uses embedded `<style>` and `<script>` blocks, the `Content-Security-Policy` header configured in `main.go` *must* include `'unsafe-inline'` for `script-src` and `style-src`.
-    *   **Secure JS Utility:** Contains the `escHtml(s)` JavaScript function which performs regex-based escaping of HTML entities (`&`, `<`, `>`, `"`, `'`) to prevent DOM-based XSS when rendering dynamic JSON/AJAX responses from the backend.
+    - **Authentication:** Validates the `X-API-Key` header against the `KeyStore`.
+    - **Payload Detection:** Inspects JSON keys to determine if the payload is from Grafana, Alertmanager, or a Universal format.
+    - **Processing:** Normalizes alerts into `models.GrafanaPayload`. For each alert, it checks the `ServiceCache`; if it's a miss, it calls `icinga.CreateService`. Then it calls `icinga.SendCheckResult`.
+    - **Rate Limiting:** Uses `icinga.RateLimiter` to prevent overwhelming the Icinga2 API.
+    - **Side Effects:** Logs to `history.Logger`, updates `metrics.Collector`, publishes to `SSEBroker`, and records to `audit.Logger`.
 
-## `WebhookHandler` (`webhook.go`)
-
-### `ServeHTTP(w, r)`
-*   **Fast Track:** The primary ingestion point for all monitoring alerts.
+## `handler.DashboardHandler` (Struct)
+*   **Endpoints:** `GET /status/beauty`, `GET /status/beauty/logout`
+*   **Fast Track:** Serves the LCARS-themed "Beauty Panel" dashboard.
 *   **Deep Dive:**
-    *   Authenticates via `X-API-Key` header against `auth.KeyStore`.
-    *   Detects the payload format (Grafana, Alertmanager, or Universal) by inspecting JSON keys.
-    *   Normalizes everything into `models.GrafanaPayload`.
-    *   Iterates through each alert. If an alert is "firing", it creates the service in Icinga (if missing from `Cache`) and sends a CRITICAL/WARNING passive check result. If "resolved", it sends an OK result.
-    *   Handles Rate Limiting using `icinga.RateLimiter`.
-    *   Pushes events to the `HistoryLogger` and the `SSEBroker` for real-time UI updates.
+    - **Authentication:** Uses HTTP Basic Auth. It checks for `?admin=1` to toggle administrative features.
+    - **Data Aggregation:** Aggregates system stats, history stats, queue status, and health info into a `dashboardData` struct.
+    - **Rendering:** Uses `html/template` to render the embedded HTML/JS/CSS.
+    - **Logout:** Provides a `/logout` endpoint that clears Basic Auth by returning a `401 Unauthorized`.
 
-## `SSEBroker` (`sse.go`)
+## `handler.AdminHandler` (Struct)
+*   **Endpoints:** `/admin/services`, `/admin/ratelimit`, `/admin/queue`, `/admin/users`, `/admin/history/clear`, `/admin/debug/toggle`
+*   **Fast Track:** Provides a REST API for administrative operations.
+*   **Deep Dive:**
+    - **Service Management:** `HandleListServices`, `HandleDeleteService`, `HandleBulkDelete`, `HandleSetServiceStatus`.
+    - **RBAC:** `HandleListUsers`, `HandleCreateUser`, `HandleDeleteUser`.
+    - **Maintenance:** `HandleClearHistory`, `HandleQueueFlush`.
+    - **Debug:** `HandleDebugToggle` enables/disables the outbound Icinga2 API capture.
 
-*   **Fast Track:** Manages Server-Sent Events (SSE) connections for the real-time dashboard.
-*   **Deep Dive:** Maintains a thread-safe map of active client channels. Exposes `Publish(event)` which pushes JSON strings to all connected dashboard clients. This powers the visual "Webhook Flow Line" and real-time alert table updates without requiring page reloads.
+## `handler.SettingsHandler` (Struct)
+*   **Endpoints:** `/admin/settings`, `/admin/settings/targets`, `/admin/settings/test-icinga`, `/admin/settings/export`, `/admin/settings/import`
+*   **Fast Track:** Manages the runtime configuration (active only when `CONFIG_IN_DASHBOARD=true`).
+*   **Deep Dive:**
+    - **Hot Reload:** When configuration is updated via `PATCH /admin/settings`, it triggers the `OnReload` callback to update the runtime state of other components (like `KeyStore` and `APIClient`) without a restart.
+    - **Target Management:** Allows adding/deleting targets and generating API keys.
+    - **Verification:** `HandleTestIcinga` verifies connectivity to Icinga2 using the current settings.
 
-## `SettingsHandler` (`settings.go`)
-*   **Fast Track:** Powers the in-dashboard configuration UI.
-*   **Deep Dive:** Only active when `CONFIG_IN_DASHBOARD=true`. Allows patching the `StoredConfig`, adding targets, generating API keys, and triggering a hot-reload via the `OnReload` callback without restarting the Go process.
+## `handler.StatusHandler` (Struct)
+*   **Endpoints:** `GET /status/{service_name}`
+*   **Fast Track:** Queries the current status of a specific service from both the cache and Icinga2.
+*   **Deep Dive:** Returns a JSON response containing `cache_state`, `exists_in_icinga`, and `last_check_result` for triage.
+
+## `handler.SSEBroker` (Struct)
+*   **Endpoints:** `GET /status/beauty/events`
+*   **Fast Track:** Manages Server-Sent Events (SSE) for real-time dashboard updates.
+*   **Deep Dive:**
+    - Maintains a thread-safe registry of connected clients.
+    - `Publish(event)`: Pushes a JSON event (alert arrival, service creation) to all connected browsers.
+    - `PublishRaw(event, data)`: Pushes pre-marshaled JSON data (e.g., from the `DebugRing`).

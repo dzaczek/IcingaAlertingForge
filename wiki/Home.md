@@ -2,6 +2,10 @@
 
 Welcome to the **IcingaAlertForge** developer wiki! This documentation provides a deep, function-by-function breakdown of the codebase's main logic and exported APIs. It is designed to supplement the high-level user guides in `docs/` with technical implementation details.
 
+## Quick Links
+- [🚀 Installation Guide](Installation.md)
+- [📊 Grafana Integration Setup](Grafana-Setup.md)
+
 ## Architecture Overview
 
 IcingaAlertForge is a webhook-to-Icinga2 bridge that securely receives alerts from tools like Grafana and Alertmanager, and translates them into passive check results in Icinga2.
@@ -31,16 +35,15 @@ Across this wiki, all functions and endpoints are documented with two specific s
 
 ## Module Index
 
-*   **Core Foundation:**
-    *   [Main Lifecycle (`main.go`)](Main.md)
-    *   [Configuration (`config`, `configstore`)](Config.md)
-    *   [Data Models (`models`)](Models.md)
-*   **Integration and Processing:**
-    *   [Icinga Integration (`icinga`)](Icinga.md)
-    *   [Retry Queue (`queue`)](Queue.md)
-    *   [Alert History (`history`)](History.md)
-    *   [Audit Logging (`audit`)](Audit.md)
-*   **Web and Security:**
-    *   [HTTP Handlers & Dashboard (`handler`)](Handler.md)
-    *   [Security & Auth (`auth`, `rbac`)](Security.md)
-    *   [Observability (`health`, `metrics`, `cache`)](Observability.md)
+| Module | Scope | Status |
+|---|---|---|
+| [Main Lifecycle](Main.md) | `main.go` — startup, shutdown, signal handling | ✅ Completed |
+| [Configuration](Config.md) | `config/`, `configstore/` — loading, encryption, persistence | ✅ Completed |
+| [Data Models](Models.md) | `models/` — webhook payloads, history entries | ✅ Completed |
+| [Icinga Integration](Icinga.md) | `icinga/` — API client, passive checks, object creation | ✅ Completed |
+| [Retry Queue](Queue.md) | `queue/` — durable retry logic, exponential backoff | ✅ Completed |
+| [Alert History](History.md) | `history/` — JSONL logging, query engine, stats | ✅ Completed |
+| [Audit Logging](Audit.md) | `audit/` — security auditing, CEF format | ✅ Completed |
+| [HTTP Handlers](Handler.md) | `handler/` — webhooks, beauty panel, admin API, SSE | ✅ Completed |
+| [Security & Auth](Security.md) | `auth/`, `rbac/` — API keys, RBAC, constant-time auth | ✅ Completed |
+| [Observability](Observability.md) | `health/`, `metrics/`, `cache/` — telemetry, cache, health check | ✅ Completed |

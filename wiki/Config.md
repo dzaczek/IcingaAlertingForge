@@ -22,36 +22,70 @@ graph TD
 
 ## The `config` Package
 
+The `config` package handles the initial loading of settings from the environment.
+
+### `config.Config` (Struct)
+*   **Fast Track:** The central configuration object used by the application.
+*   **Deep Dive:** Holds all settings including server details, Icinga2 credentials, target definitions, history settings, and feature flags (retry queue, health check, audit log). It also tracks whether the application is in `ConfigInDashboard` mode.
+
 ### `config.Load()`
 *   **Fast Track:** Reads environment variables (and optionally a local `.env` file) and parses them into a `*Config` struct.
-*   **Deep Dive:** Uses `godotenv.Load()` as a fallback. It parses complex multi-target variables (e.g., `IAF_TARGET_*`) and legacy single-target ones (`WEBHOOK_KEY_*`). It enforces required fields like `ICINGA2_HOST` and panics if validation fails.
+*   **Deep Dive:**
+    - **Returns:** `(*Config, error)`.
+    - **Behavior:** Uses `godotenv.Load()` as a fallback. It parses complex multi-target variables (e.g., `IAF_TARGET_*`) and legacy single-target ones (`WEBHOOK_KEY_*`). It enforces required fields like `ICINGA2_HOST`, `ICINGA2_USER`, and `ICINGA2_PASS`. It also provides sensible defaults for optional settings.
 
-### `loadTargetsAndRoutes()`
-*   **Fast Track:** Parses the complex `IAF_TARGET_*` environment variables to build the internal mapping of Webhook API Keys to Icinga Hosts.
-*   **Deep Dive:** Iterates through `os.Environ()`. It maps keys to sources and targets. If no `IAF_TARGET_*` variables are found, it falls back to `loadLegacyTargetAndRoutes()` for backward compatibility. It handles deduplication of API keys across multiple targets (fatal error if duplicated).
+### `config.TargetConfig` (Struct)
+*   **Fast Track:** Describes a single managed dummy host and its webhook routing.
+*   **Deep Dive:** Contains `ID`, `Source`, `HostName`, `HostDisplay`, `HostAddress`, and a `NotificationConfig`. Each target represents a logical destination for alerts, usually mapping to a specific team or environment.
+
+### `config.NotificationConfig` (Struct)
+*   **Fast Track:** Holds per-target Icinga notification customization.
+*   **Deep Dive:** Fields: `Users`, `Groups`, `ServiceStates`, `HostStates`. These are injected into the Icinga2 host object's custom variables, allowing for granular notification routing within Icinga2.
 
 ---
 
 ## The `configstore` Package
 
-When the "Beauty Panel" config management is enabled, `configstore` takes over. It persists the `config.Config` into a structured JSON file. Crucially, it encrypts sensitive data (Icinga2 passwords, webhook API keys) at rest using AES-256-GCM.
+When the "Beauty Panel" config management is enabled, `configstore` takes over. It persists the configuration into a structured JSON file with AES encryption for secrets.
+
+### `configstore.Store` (Struct)
+*   **Fast Track:** Provides thread-safe persistent configuration storage.
+*   **Deep Dive:** Manages the lifecycle of the `config.json` file. It handles encryption/decryption of sensitive fields and provides methods for RBAC user persistence.
 
 ### `configstore.New(configPath, encryptionKey)`
 *   **Fast Track:** Initializes a new configuration store.
-*   **Deep Dive:** Creates the directory for the config file if it doesn't exist. If an `encryptionKey` is provided, it derives a 256-bit AES key. If empty, it calls `loadOrCreateKey()` which generates a secure random 32-byte key and stores it in a hidden `.config.key` file alongside `config.json`.
+*   **Deep Dive:**
+    - **Parameters:** `configPath` (string), `encryptionKey` (string).
+    - **Returns:** `(*Store, error)`.
+    - **Behavior:** Creates the directory for the config file if it doesn't exist. If an `encryptionKey` is provided via environment, it derives a 256-bit AES key. If empty, it generates a secure random 32-byte key and stores it in a hidden `.config.key` file alongside `config.json`.
+
+### `(s *Store).Load()`
+*   **Fast Track:** Reads the config from disk and decrypts secrets.
+*   **Deep Dive:**
+    - **Behavior:** Unmarshals the JSON file into a `StoredConfig` struct. It then iterates through the Icinga2 password, target API keys, and RBAC user passwords, calling `decrypt()` on each.
+
+### `(s *Store).Save()`
+*   **Fast Track:** Writes the current config to disk with secrets encrypted.
+*   **Deep Dive:**
+    - **Behavior:** Deep-copies the in-memory config to avoid mutating runtime state during encryption. Encrypts all sensitive fields. Performs an **atomic write** by writing to a `.tmp` file and then renaming it, ensuring the configuration isn't corrupted if the process is interrupted.
 
 ### `(s *Store).MigrateFromEnv(cfg *config.Config)`
 *   **Fast Track:** Bootstraps the JSON config file using the environment variables.
-*   **Deep Dive:** Called on the very first startup when `CONFIG_IN_DASHBOARD=true` but `config.json` doesn't exist. It serializes the in-memory config to JSON and encrypts secrets, ensuring a seamless upgrade path from environment-only deployments.
-
-### `(s *Store).Load() / (s *Store).Save()`
-*   **Fast Track:** Reads from or writes to the persistent JSON file.
-*   **Deep Dive:** `Load()` unmarshals the JSON and calls the internal `decrypt()` method on all secrets. `Save()` deep-copies the current in-memory config, calls `encrypt()` on the secrets, and performs an atomic write (writes to a `.tmp` file, then renames it) to prevent corruption if the server crashes during save.
+*   **Deep Dive:**
+    - **Parameters:** `cfg` (*config.Config).
+    - **Behavior:** Called on the very first startup when `CONFIG_IN_DASHBOARD=true` but `config.json` doesn't exist. It serializes the provided env-based config to JSON and saves it, ensuring a seamless transition for existing deployments.
 
 ### `(s *Store).ToConfig(serverPort, serverHost)`
 *   **Fast Track:** Converts the stored JSON configuration back into a `*config.Config` object usable by the rest of the application.
-*   **Deep Dive:** Reconstructs the `Targets` map and `WebhookRoutes` map from the serialized arrays. It injects infrastructure-level overrides (like `serverPort` and `serverHost`) since these cannot be changed via the dashboard and must always come from the environment.
+*   **Deep Dive:**
+    - **Parameters:** `serverPort` (string), `serverHost` (string).
+    - **Returns:** `*config.Config`.
+    - **Behavior:** Reconstructs the `Targets` map and `WebhookRoutes` map from the serialized arrays. It injects infrastructure-level overrides (`serverPort`, `serverHost`) since these must remain controlled by the environment/orchestrator.
 
-### `(s *Store).encrypt(plaintext)` / `(s *Store).decrypt(ciphertext)`
-*   **Fast Track:** Secures sensitive data at rest.
-*   **Deep Dive:** Uses `crypto/aes` and `crypto/cipher` with GCM mode. Encrypted strings are prefixed with `enc:` and then hex-encoded. The `decrypt` function is backwards-compatible; if a string doesn't start with `enc:`, it returns it as plaintext (useful for manual migration or initial imports).
+### `(s *Store).SetUsers(users) / (s *Store).GetUsers()`
+*   **Fast Track:** Manages persistence for RBAC users.
+*   **Deep Dive:** Allows the RBAC manager to store and retrieve non-primary users. Passwords are encrypted before being saved to the JSON file.
+
+### `(s *Store).Export()`
+*   **Fast Track:** Returns a JSON export suitable for backup.
+*   **Deep Dive:** Returns the full configuration, including secrets in a format that can be re-imported. Used by the "Export Config" button in the admin dashboard.

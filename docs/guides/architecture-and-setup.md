@@ -138,8 +138,8 @@ If host auto creation is enabled, `objects/query/Host` and `objects/create/Host`
 ### From Source
 
 ```bash
-git clone https://github.com/dzaczek/IcingaAlertForge.git
-cd IcingaAlertForge
+git clone https://github.com/dzaczek/IcingaAlertingForge.git
+cd IcingaAlertingForge
 
 cp .env.example .env
 # edit .env

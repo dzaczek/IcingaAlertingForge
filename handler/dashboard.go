@@ -265,26 +265,33 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// If admin, fetch live services from Icinga2
 	var icingaServices []icinga.ServiceInfo
 	if isAdmin {
-		var mu sync.Mutex
 		var wg sync.WaitGroup
+		sem := make(chan struct{}, 10) // Bounded concurrency limit
 
-		for _, target := range sortedTargets(h.Targets) {
+		targetsList := sortedTargets(h.Targets)
+		results := make([][]icinga.ServiceInfo, len(targetsList))
+
+		for i, target := range targetsList {
 			wg.Add(1)
-			go func(targetHostName string) {
+			sem <- struct{}{}
+			go func(index int, targetHostName string) {
 				defer wg.Done()
+				defer func() { <-sem }()
+
 				svcs, err := h.API.ListServices(targetHostName)
-
-				mu.Lock()
-				defer mu.Unlock()
-
 				if err != nil {
 					slog.Error("Dashboard: failed to list Icinga2 services", "host", targetHostName, "error", err)
 					return
 				}
-				icingaServices = append(icingaServices, svcs...)
-			}(target.HostName)
+				results[index] = svcs
+			}(i, target.HostName)
 		}
 		wg.Wait()
+
+		// Flatten results
+		for _, res := range results {
+			icingaServices = append(icingaServices, res...)
+		}
 
 		sort.Slice(icingaServices, func(i, j int) bool {
 			if icingaServices[i].HostName == icingaServices[j].HostName {

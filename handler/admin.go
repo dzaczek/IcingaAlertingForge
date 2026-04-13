@@ -115,29 +115,41 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	services := make([]icinga.ServiceInfo, 0)
 	var fetchErrors []string
-	var mu sync.Mutex
+	var mu sync.Mutex // Protects fetchErrors
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10) // Bounded concurrency limit
 
+	// Pre-allocate slice to avoid mutex contention during append
+	results := make([][]icinga.ServiceInfo, len(targets))
+
+	i := 0
 	for _, target := range targets {
 		wg.Add(1)
-		go func(targetHostName string) {
+		sem <- struct{}{}
+		go func(index int, targetHostName string) {
 			defer wg.Done()
+			defer func() { <-sem }()
+
 			hostServices, err := h.API.ListServices(targetHostName)
-
-			mu.Lock()
-			defer mu.Unlock()
-
 			if err != nil {
 				slog.Error("Failed to list services from Icinga2", "host", targetHostName, "error", err)
+				mu.Lock()
 				fetchErrors = append(fetchErrors, targetHostName+": "+err.Error())
+				mu.Unlock()
 				return
 			}
-			services = append(services, hostServices...)
-		}(target.HostName)
+			results[index] = hostServices
+		}(i, target.HostName)
+		i++
 	}
 	wg.Wait()
+
+	// Flatten results
+	services := make([]icinga.ServiceInfo, 0)
+	for _, res := range results {
+		services = append(services, res...)
+	}
 
 	sort.Slice(services, func(i, j int) bool {
 		if services[i].HostName == services[j].HostName {

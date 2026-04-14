@@ -41,3 +41,7 @@
 ## 2024-06-05 - Avoid slice append contention with bounded concurrency
 **Learning:** Appending to a single shared slice inside a concurrent loop (e.g., fetching services across many Icinga2 targets) introduces severe mutex lock contention, degrading parallelization benefits.
 **Action:** When executing batch fan-out operations, use a bounded concurrency pattern (`sem := make(chan struct{}, limit)`) and eliminate mutexes entirely by pre-allocating a result slice-of-slices scaled to the target count. Have goroutines write directly to their assigned index (`results[index] = data`), and flatten the array only after all routines finish (`wg.Wait()`).
+
+## 2024-06-10 - Fast path for splitting host/port in hot loops
+**Learning:** Functions like `net.SplitHostPort` can introduce high overhead from allocations and complex IPv6 parsing when called frequently in hot loops (e.g., stripping ports from IP addresses for logging or metrics).
+**Action:** Implement a fast path for IPv4 using simple string manipulation (e.g., checking `strings.Count(addr, ":") == 1` and slicing with `strings.LastIndexByte(addr, ':')`), while retaining `net.SplitHostPort` as a fallback for IPv6 brackets and edge cases to maintain both performance and correctness.

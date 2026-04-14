@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"icinga-webhook-bridge/httputil"
 	"crypto/rand"
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"icinga-webhook-bridge/httputil"
 	"io"
 	"log/slog"
 	"net/http"

@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -468,6 +469,13 @@ type HistoryStats struct {
 
 // stripPort removes the port from a host:port address, returning just the IP.
 func stripPort(addr string) string {
+	// Fast path for IPv4
+	if strings.Count(addr, ":") == 1 {
+		idx := strings.LastIndexByte(addr, ':')
+		return addr[:idx]
+	}
+
+	// Fallback to net.SplitHostPort for IPv6 and edge cases
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return addr

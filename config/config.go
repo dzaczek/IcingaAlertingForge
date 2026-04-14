@@ -140,7 +140,7 @@ func Load() (*Config, error) {
 		AdminUser: getEnvOrDefault("ADMIN_USER", "admin"),
 		AdminPass: getEnvOrDefault("ADMIN_PASS", ""),
 
-		RetryQueueFilePath:      getEnvOrDefault("RETRY_QUEUE_FILE", "/var/log/webhook-bridge/retry-queue.json"),
+		RetryQueueFilePath:     getEnvOrDefault("RETRY_QUEUE_FILE", "/var/log/webhook-bridge/retry-queue.json"),
 		HealthCheckServiceName: getEnvOrDefault("HEALTH_CHECK_SERVICE_NAME", "IcingaAlertForge-Health"),
 		HealthCheckTargetHost:  getEnvOrDefault("HEALTH_CHECK_TARGET_HOST", ""),
 

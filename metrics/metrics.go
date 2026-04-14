@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -90,7 +91,10 @@ func (c *Collector) RecordAuthFailure(remoteAddr, keyUsed string) {
 
 	// Strip port from remote address (e.g. "172.20.0.1:54321" → "172.20.0.1")
 	ip := remoteAddr
-	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
+	if strings.Count(remoteAddr, ":") == 1 {
+		idx := strings.LastIndexByte(remoteAddr, ':')
+		ip = remoteAddr[:idx]
+	} else if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
 		ip = host
 	}
 

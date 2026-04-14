@@ -13,7 +13,6 @@ import (
 
 const maxHistoryLimit = 10000
 
-
 // Handler provides HTTP handlers for querying and exporting webhook history.
 type Handler struct {
 	logger *Logger

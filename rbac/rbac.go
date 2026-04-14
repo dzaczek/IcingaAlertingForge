@@ -8,8 +8,8 @@ package rbac
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"crypto/subtle"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"

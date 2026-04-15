@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"icinga-webhook-bridge/cache"
-	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/config"
+	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
 )

@@ -292,6 +292,47 @@ The older string array form still works if exactly one host is configured:
 {"services": ["HighCPU", "DiskFull"]}
 ```
 
+#### `POST` / `DELETE` `/admin/services/{name}/freeze`
+
+**Fast Track:** Freezes (POST) or unfreezes (DELETE) a specific service to prevent it from auto-resolving.
+
+**Deep Dive:** A frozen service will ignore subsequent OK check results (e.g., from an auto-resolving alert). The POST request accepts a JSON body with the `host` and an optional `duration_seconds`. If `duration_seconds` is provided, the freeze will automatically expire after the duration. DELETE removes the freeze.
+
+Request body example (POST):
+
+```json
+{
+  "host": "a-dummy-dev",
+  "duration_seconds": 3600
+}
+```
+
+Response example:
+
+```json
+{"status": "frozen"}
+```
+
+#### `GET /admin/services/frozen`
+
+**Fast Track:** Lists all currently frozen services.
+
+**Deep Dive:** Returns a list of all frozen services across all hosts. Each item contains the host, the service name, and optionally the timestamp until which the service is frozen.
+
+Response example:
+
+```json
+{
+  "frozen": [
+    {
+      "host": "a-dummy-dev",
+      "service": "HighCPU",
+      "frozen_until": "2026-03-21T10:24:00Z"
+    }
+  ]
+}
+```
+
 #### `GET /admin/ratelimit`
 
 Returns the current mutate and status slot usage, plus queue depth.

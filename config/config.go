@@ -102,6 +102,10 @@ type Config struct {
 	ConfigInDashboard   bool   // if true, config is managed via admin panel
 	ConfigEncryptionKey string // AES key for encrypting secrets (auto-generated if empty)
 	ConfigFilePath      string // path to JSON config file
+
+	// Prometheus metrics
+	MetricsEnabled bool
+	MetricsToken   string
 }
 
 // Load reads the .env file and populates the Config struct.
@@ -220,6 +224,11 @@ func Load() (*Config, error) {
 	if cfg.ConfigInDashboard, err = optBool("CONFIG_IN_DASHBOARD", false); err != nil {
 		return nil, err
 	}
+
+	if cfg.MetricsEnabled, err = optBool("METRICS_ENABLED", true); err != nil {
+		return nil, err
+	}
+	cfg.MetricsToken = os.Getenv("METRICS_TOKEN")
 
 	if len(cfg.WebhookRoutes) == 0 {
 		return nil, fmt.Errorf("config: at least one webhook route is required")

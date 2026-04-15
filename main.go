@@ -13,6 +13,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"syscall"
 	"time"
 
@@ -145,6 +148,15 @@ func main() {
 
 	// ── Metrics Collector ────────────────────────────────────────────
 	metricsCollector := metrics.NewCollector()
+	perKeyCollector := metrics.NewPerKeyCollector()
+	prometheusCollector := metrics.NewPrometheusCollector(
+		metricsCollector,
+		historyLogger,
+		nil, // queue not yet initialized
+		nil, // rateLimiter not yet initialized
+		nil, // healthChecker not yet initialized
+		perKeyCollector,
+	)
 
 	// ── Rate Limiter ────────────────────────────────────────────────
 	rateLimiter := icinga.NewRateLimiter(
@@ -264,6 +276,7 @@ func main() {
 		Targets:    cfg.Targets,
 		Limiter:    rateLimiter,
 		Metrics:    metricsCollector,
+		PerKey:     perKeyCollector,
 		SSE:        sseBroker,
 		DebugRing:  debugRing,
 		RetryQueue: retryQueue,
@@ -285,6 +298,7 @@ func main() {
 		History:           historyLogger,
 		API:               apiClient,
 		Metrics:           metricsCollector,
+		PromCollector:     prometheusCollector,
 		Targets:           cfg.Targets,
 		AdminUser:         cfg.AdminUser,
 		AdminPass:         cfg.AdminPass,
@@ -347,6 +361,59 @@ func main() {
 
 	// ── Register Routes ─────────────────────────────────────────────
 	mux := http.NewServeMux()
+
+	// ── Prometheus Metrics ─────────────────────────────────────────
+	// Update collector with fully initialized components
+	prometheusCollector.UpdateComponents(retryQueue, rateLimiter, healthChecker)
+
+	if cfg.MetricsEnabled {
+		reg := prometheus.NewRegistry()
+		reg.MustRegister(prometheusCollector)
+
+		metricsHandler := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+
+		// Metrics Auth Middleware
+		metricsAuth := func(next http.Handler) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				// 1. Try Token Auth if configured
+				if cfg.MetricsToken != "" {
+					authHeader := r.Header.Get("Authorization")
+					if strings.HasPrefix(authHeader, "Bearer ") {
+						token := strings.TrimPrefix(authHeader, "Bearer ")
+						if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.MetricsToken)) == 1 {
+							next.ServeHTTP(w, r)
+							return
+						}
+					}
+				}
+
+				// 2. Fall back to Admin Basic Auth
+				user, pass, ok := r.BasicAuth()
+				if !ok {
+					w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
+					httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+					return
+				}
+				primaryOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) == 1 &&
+					subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) == 1
+
+				rbacOK := false
+				if !primaryOK && rbacManager != nil {
+					_, rbacOK = rbacManager.Authenticate(user, pass)
+				}
+
+				if primaryOK || rbacOK {
+					next.ServeHTTP(w, r)
+					return
+				}
+
+				w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
+				httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			}
+		}
+
+		mux.Handle("/metrics", metricsAuth(metricsHandler))
+	}
 
 	// Health check (enhanced with Icinga2 connectivity status)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {

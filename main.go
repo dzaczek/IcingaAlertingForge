@@ -417,7 +417,6 @@ func main() {
 
 	// Health check (enhanced with Icinga2 connectivity status)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
 		resp := map[string]any{
 			"status":  "ok",
 			"version": version,
@@ -435,7 +434,7 @@ func main() {
 		if retryQueue != nil {
 			resp["queue_depth"] = retryQueue.Depth()
 		}
-		json.NewEncoder(w).Encode(resp)
+		httputil.WriteJSON(w, http.StatusOK, resp)
 	})
 
 	// Core endpoints

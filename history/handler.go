@@ -1,7 +1,6 @@
 package history
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"strconv"
@@ -76,8 +75,7 @@ func (h *Handler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 		entries = make([]models.HistoryEntry, 0)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"entries": entries,
 		"count":   len(entries),
 		"filters": map[string]any{

@@ -31,6 +31,7 @@ type DashboardHandler struct {
 	History           *history.Logger
 	API               *icinga.APIClient
 	Metrics           *metrics.Collector
+	PromCollector     *metrics.PrometheusCollector
 	Targets           map[string]config.TargetConfig
 	AdminUser         string
 	AdminPass         string
@@ -78,6 +79,9 @@ type dashboardData struct {
 	HealthStatus      *health.Status
 	AuditEnabled      bool
 	UserRole          string
+	MetricsEnabled    bool
+	MetricsScrapes    int64
+	MetricsLastScrape string
 }
 
 type dashboardAlert struct {
@@ -327,6 +331,20 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	canChangeStatus := userRole == rbac.RoleAdmin || userRole == rbac.RoleOperator
 	canManageUsers := userRole == rbac.RoleAdmin
 
+	metricsEnabled := false
+	var scrapes int64
+	var lastScrapeStr string
+	if h.PromCollector != nil {
+		metricsEnabled = true
+		var lastScrape time.Time
+		scrapes, lastScrape = h.PromCollector.ScrapeStats()
+		if !lastScrape.IsZero() && lastScrape.Unix() > 0 {
+			lastScrapeStr = lastScrape.UTC().Format("2006-01-02 15:04:05 UTC")
+		} else {
+			lastScrapeStr = "Never"
+		}
+	}
+
 	data := dashboardData{
 		GeneratedAt:       time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		Uptime:            uptime.String(),
@@ -350,6 +368,9 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HostLabel:         firstHostName(targetHostNames(h.Targets)),
 		SysStats:          sysStats,
 		UserRole:          string(userRole),
+		MetricsEnabled:    metricsEnabled,
+		MetricsScrapes:    scrapes,
+		MetricsLastScrape: lastScrapeStr,
 	}
 
 	if h.RetryQueue != nil {
@@ -2101,6 +2122,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-decoration blue"></div>
     <button class="sidebar-btn" data-section="about" onclick="showSection('about', this, true)">About</button>
+    {{if .MetricsEnabled}}<button class="sidebar-btn blue" data-section="prometheus" onclick="showSection('prometheus', this, true)">Prometheus</button>{{end}}
     <button class="sidebar-btn tan" style="font-size:11px;padding:8px 10px;">Auto-Refresh 30s</button>
   </div>
 
@@ -2960,6 +2982,52 @@ ICINGA2_PASS=your-secure-password</pre>
         </div>
       </div>
     </div><!-- /about -->
+
+    <!-- ── PROMETHEUS SECTION ── -->
+    {{if .MetricsEnabled}}
+    <div class="nav-section" id="sec-prometheus">
+      <div class="lcars-panel blue">
+        <div class="lcars-panel-header">
+          <div class="lcars-panel-elbow blue"></div>
+          <div class="lcars-panel-title-bar">
+            <div class="bar-fill"></div>
+            <span class="title-text blue">Prometheus Integration</span>
+          </div>
+        </div>
+        <div class="lcars-panel-body">
+          <div class="stat-grid">
+            <div class="stat-cell">
+              <div class="stat-label">Endpoint Status</div>
+              <div class="stat-value ok">ACTIVE</div>
+            </div>
+            <div class="stat-cell">
+              <div class="stat-label">Total Scrapes</div>
+              <div class="stat-value">{{.MetricsScrapes}}</div>
+            </div>
+            <div class="stat-cell blue">
+              <div class="stat-label">Last Scrape</div>
+              <div class="stat-value blue" style="font-size:16px;">{{.MetricsLastScrape}}</div>
+            </div>
+          </div>
+          <div class="scanner-line"></div>
+          <div class="about-section">
+            <p>The Prometheus metrics endpoint is available at <code>/metrics</code>. It provides real-time telemetry including request rates, latency distribution, and per-API-key statistics.</p>
+            <h3 style="color:var(--lcars-blue);">Configuration</h3>
+            <p>To scrape this instance, add the following to your <code>prometheus.yml</code>:</p>
+            <pre>scrape_configs:
+  - job_name: 'icinga-alertforge'
+    static_configs:
+      - targets: ['{{.HostLabel}}:8080']
+    metrics_path: '/metrics'
+    # Use Basic Auth or Bearer Token as configured
+    basic_auth:
+      username: 'admin'
+      password: 'your-password'</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+    {{end}}
 
   </div><!-- /lcars-content -->
 

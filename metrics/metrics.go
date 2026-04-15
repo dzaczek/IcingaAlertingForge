@@ -9,6 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Collector gathers system and application metrics.
@@ -16,9 +18,10 @@ type Collector struct {
 	startedAt time.Time
 
 	// Request counters
-	totalRequests  atomic.Int64
-	totalErrors    atomic.Int64
-	totalLatencyMs atomic.Int64 // sum of all request latencies for avg calculation
+	totalRequests    atomic.Int64
+	totalErrors      atomic.Int64
+	totalLatencyMs   atomic.Int64 // sum of all request latencies for avg calculation
+	latencyHistogram *prometheus.HistogramVec
 
 	// Auth security
 	mu              sync.RWMutex
@@ -71,6 +74,11 @@ type BruteForceIP struct {
 func NewCollector() *Collector {
 	return &Collector{
 		startedAt: time.Now(),
+		latencyHistogram: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "iaf_request_latency_milliseconds",
+			Help:    "Request latency distribution in milliseconds",
+			Buckets: []float64{10, 50, 100, 250, 500, 1000, 2500, 5000},
+		}, []string{}),
 	}
 }
 
@@ -78,6 +86,7 @@ func NewCollector() *Collector {
 func (c *Collector) RecordRequest(latencyMs int64) {
 	c.totalRequests.Add(1)
 	c.totalLatencyMs.Add(latencyMs)
+	c.latencyHistogram.WithLabelValues().Observe(float64(latencyMs))
 }
 
 // RecordError records an error.

@@ -592,6 +592,33 @@ Forces the browser to clear cached HTTP Basic Auth credentials. Returns `401` wi
 {"status":"ok","version":"1.0.0"}
 ```
 
+### Metrics Endpoint
+
+#### `GET /metrics`
+
+Exposes application and system metrics in Prometheus text format (version 0.0.4).
+
+**Authentication:**
+- If `METRICS_TOKEN` is configured, it can be accessed via `Authorization: Bearer <token>`.
+- Otherwise, it requires the same Basic Auth as other admin endpoints.
+
+**Available Metrics:**
+- `iaf_uptime_seconds`: Seconds since server start.
+- `iaf_requests_total`: Total webhook requests received.
+- `iaf_request_latency_milliseconds`: Request latency distribution.
+- `iaf_source_requests_total{source="..."}`: Real-time per-API-key request counter.
+- `iaf_history_by_severity{severity="..."}`: Entry count per alert severity from history.
+- `iaf_queue_depth`: Current retry queue depth.
+- `iaf_ratelimiter_slots_in_use{type="..."}`: Currently occupied concurrency slots.
+- `iaf_health_icinga_up`: 1 if Icinga2 is reachable, 0 otherwise.
+
+Example scrape:
+```text
+# HELP iaf_requests_total Total webhook requests received
+# TYPE iaf_requests_total counter
+iaf_requests_total 4821
+```
+
 ## Next Step
 
 Continue with [Icinga Integration](icinga-integration.md).

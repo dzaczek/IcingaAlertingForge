@@ -35,6 +35,7 @@ type WebhookHandler struct {
 	Targets    map[string]config.TargetConfig
 	Limiter    *icinga.RateLimiter
 	Metrics    *metrics.Collector
+	PerKey     *metrics.PerKeyCollector
 	SSE        *SSEBroker
 	DebugRing  *icinga.DebugRing
 	RetryQueue *queue.Queue
@@ -174,6 +175,9 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if hasErrors {
 			h.Metrics.RecordError()
 		}
+	}
+	if h.PerKey != nil {
+		h.PerKey.Record(route.Source, hasErrors)
 	}
 
 	// Audit log

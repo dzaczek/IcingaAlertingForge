@@ -4184,8 +4184,14 @@ function applySectionFromHash() {
 window.addEventListener('hashchange', applySectionFromHash);
 applySectionFromHash();
 
-// ── Auto-refresh (preserves URL hash unlike meta refresh) ──
-setTimeout(function() { window.location.reload(); }, 30000);
+// ── Auto-refresh (soft — no page reload, preserves filters and view state) ──
+function softRefresh() {
+  var active = (window.location.hash || '').replace('#', '') || 'overview';
+  refreshAlertsTable();
+  if (active === 'frozen') loadFrozenList();
+  setTimeout(softRefresh, 30000);
+}
+setTimeout(softRefresh, 30000);
 
 // ── Signal Sources toggle ──
 function toggleSourceDetail(source) {
@@ -4270,6 +4276,7 @@ function switchIPTab(source, tab, btn) {
           return;
         }
 
+        var prevFilter = (document.getElementById('filterAlerts') || {}).value || '';
         var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
         html += '<table id="alertsTable"><thead><tr>';
         html += '<th onclick="sortTable(0,\'date\',this.closest(\'table\'))">Stardate <span class="sort-arrow"></span></th>';
@@ -4310,6 +4317,10 @@ function switchIPTab(source, tab, btn) {
         }
         html += '</tbody></table>';
         container.innerHTML = html;
+        if (prevFilter) {
+          var fi = document.getElementById('filterAlerts');
+          if (fi) { fi.value = prevFilter; filterTable('alertsTable', prevFilter, 'filterAlertsCount'); }
+        }
         applyFrozenHighlight();
       } catch(err) {}
     }).catch(function() {});

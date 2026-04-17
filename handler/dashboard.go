@@ -4118,19 +4118,21 @@ function rbacLoadUsers() {
       }
       var roleColors = { admin: 'var(--lcars-critical)', operator: 'var(--lcars-warning)', viewer: 'var(--lcars-blue)' };
       tbody.innerHTML = users.map(function(u) {
+        var safeUsername = escHtml(u.username);
+        var safeRole = escHtml(u.role);
         var color = roleColors[u.role] || 'var(--lcars-tan)';
         var delBtn = (u.username === _primaryAdmin)
           ? '<span style="font-size:11px;color:var(--lcars-tan);opacity:0.5;">(env)</span>'
-          : '<button class="settings-btn settings-btn-sm" style="background:var(--lcars-critical);color:#000;padding:2px 8px;font-size:11px;" onclick="rbacDeleteUser(\'' + u.username + '\')">Delete</button>';
+          : '<button class="settings-btn settings-btn-sm" style="background:var(--lcars-critical);color:#000;padding:2px 8px;font-size:11px;" data-user="' + safeUsername + '" onclick="rbacDeleteUser(this.getAttribute(\'data-user\'))">Delete</button>';
         return '<tr style="border-bottom:1px solid rgba(204,153,204,0.15);">' +
-          '<td style="padding:6px;color:var(--lcars-peach);font-size:13px;">' + u.username + (u.username === _primaryAdmin ? ' <span style="font-size:10px;color:var(--lcars-tan);">★ primary</span>' : '') + '</td>' +
-          '<td style="padding:6px;"><span style="padding:2px 8px;border-radius:4px;background:' + color + ';color:#000;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + u.role + '</span></td>' +
+          '<td style="padding:6px;color:var(--lcars-peach);font-size:13px;">' + safeUsername + (u.username === _primaryAdmin ? ' <span style="font-size:10px;color:var(--lcars-tan);">★ primary</span>' : '') + '</td>' +
+          '<td style="padding:6px;"><span style="padding:2px 8px;border-radius:4px;background:' + color + ';color:#000;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">' + safeRole + '</span></td>' +
           '<td style="padding:6px;">' + delBtn + '</td></tr>';
       }).join('');
     })
     .catch(function(err) {
       var tbody = document.getElementById('rbacUsersBody');
-      if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="padding:10px;color:var(--lcars-critical);font-size:12px;">Failed to load users: ' + err.message + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="3" style="padding:10px;color:var(--lcars-critical);font-size:12px;">Failed to load users: ' + escHtml(err.message) + '</td></tr>';
     });
 }
 

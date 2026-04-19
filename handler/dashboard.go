@@ -3468,9 +3468,9 @@ function showServiceHistory(service, host) {
   var freezeControls = '';
   if (_canChangeStatus) {
     statusBtns = '<div class="svc-status-buttons">' +
-      '<button class="svc-status-btn svc-status-btn-ok" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',0,this)">OK</button>' +
-      '<button class="svc-status-btn svc-status-btn-warning" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',1,this)">Warning</button>' +
-      '<button class="svc-status-btn svc-status-btn-critical" onclick="setServiceStatus(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',2,this)">Critical</button>' +
+      '<button class="svc-status-btn svc-status-btn-ok" data-host="' + escHtml(host) + '" data-service="' + escHtml(service) + '" onclick="setServiceStatus(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), 0, this)">OK</button>' +
+      '<button class="svc-status-btn svc-status-btn-warning" data-host="' + escHtml(host) + '" data-service="' + escHtml(service) + '" onclick="setServiceStatus(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), 1, this)">Warning</button>' +
+      '<button class="svc-status-btn svc-status-btn-critical" data-host="' + escHtml(host) + '" data-service="' + escHtml(service) + '" onclick="setServiceStatus(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), 2, this)">Critical</button>' +
       '</div><div class="svc-status-result" id="svc-status-result"></div>';
     freezeControls =
       '<div style="padding:8px 12px 0 12px;border-top:1px solid rgba(100,180,255,0.2);margin-top:4px;flex-shrink:0;">' +
@@ -3485,10 +3485,10 @@ function showServiceHistory(service, host) {
             '<option value="86400">1 day</option>' +
             '<option value="604800">7 days</option>' +
           '</select>' +
-          '<button class="svc-freeze-btn" id="svc-freeze-btn" onclick="freezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)">Freeze</button>' +
+          '<button class="svc-freeze-btn" id="svc-freeze-btn" data-host="' + escHtml(host) + '" data-service="' + escHtml(service) + '" onclick="freezeService(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), this)">Freeze</button>' +
         '</div>' +
         '<div style="display:flex;justify-content:center;margin-bottom:8px;">' +
-          '<button id="svc-unfreeze-btn" onclick="unfreezeService(\'' + escHtml(host) + '\',\'' + escHtml(service) + '\',this)" ' +
+          '<button id="svc-unfreeze-btn" data-host="' + escHtml(host) + '" data-service="' + escHtml(service) + '" onclick="unfreezeService(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), this)" ' +
           'style="background:#ffcc00;color:#000;border:none;border-radius:20px;padding:8px 32px;font-family:inherit;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;width:100%;max-width:280px;">' +
           'Unfreeze</button>' +
         '</div>' +
@@ -3697,7 +3697,7 @@ function loadFrozenList() {
         html += '<td style="padding:7px 8px;font-size:12px;">' + until + '</td>';
         html += '<td style="padding:7px 8px;text-align:right;">';
         html += '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" style="padding:5px 14px;font-size:11px;" ';
-        html += 'onclick="unfreezeFromList(\'' + escHtml(e.host) + '\',\'' + escHtml(e.service) + '\',this)">Unfreeze</button>';
+        html += 'data-host="' + escHtml(e.host) + '" data-service="' + escHtml(e.service) + '" onclick="unfreezeFromList(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), this)">Unfreeze</button>';
         html += '</td></tr>';
       }
       html += '</tbody></table>';
@@ -3811,8 +3811,8 @@ function renderTargetCards(targets) {
     html += '<div class="settings-target-card">';
     html += '<div class="settings-target-header">';
     html += '<span class="settings-target-title">' + safeId + '</span>';
-    html += '<div><button class="settings-btn blue settings-btn-sm" onclick="generateKey(\'' + encodeURIComponent(t.id) + '\')">Generate Key</button> ';
-    html += '<button class="settings-btn danger settings-btn-sm" onclick="deleteTarget(\'' + encodeURIComponent(t.id) + '\')">Delete</button></div>';
+    html += '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ';
+    html += '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>';
     html += '</div>';
     html += '<div class="settings-grid" style="margin-bottom:8px;">';
     html += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
@@ -3822,10 +3822,10 @@ function renderTargetCards(targets) {
       t.api_keys.forEach(function(k, idx) {
         html += '<div class="settings-key-item">';
         html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
-        html += '<button class="settings-key-copy" title="Copy key" onclick="copyRevealedKey(\'' + encodeURIComponent(t.id) + '\',' + idx + ')">&#x1F4CB;</button>';
+        html += '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>';
         html += '</div>';
       });
-      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" onclick="toggleKeys(\'' + encodeURIComponent(t.id) + '\')">Reveal Keys</button>';
+      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
     } else {
       html += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
     }

@@ -6,11 +6,27 @@ This guide walks you through connecting Grafana Unified Alerting to IcingaAlertF
 - IcingaAlertForge is installed and reachable from your Grafana server.
 - You have administrator access to the IcingaAlertForge Beauty Panel.
 
-## Step 1: Create an API Key
-Every source (like a Grafana instance or a specific team) needs an API key to authenticate against the bridge.
+## Step 1: Get an API Key
 
-1.  Log in to the **IcingaAlertForge Beauty Panel** (e.g., `http://iaf-server:8080/status/beauty?admin=1`).
-2.  Go to the **Settings** tab (if `CONFIG_IN_DASHBOARD=true` is enabled).
+Every source (like a Grafana instance or a specific team) needs an API key to authenticate against the bridge. There are two ways to get one depending on how you configured the bridge.
+
+### Option A: Environment variable mode (default)
+
+The API key is the value you set in `IAF_TARGET_<ID>_API_KEYS` in your `.env` or `docker-compose.yml`. Use any of those values directly in Grafana.
+
+Example:
+```env
+IAF_TARGET_TEAM_A_API_KEYS=my-long-random-key-here
+```
+
+The key `my-long-random-key-here` is what you put in the Grafana contact point.
+
+If you need to add or rotate keys, edit the env file and restart the bridge.
+
+### Option B: Dashboard config mode (`CONFIG_IN_DASHBOARD=true`)
+
+1.  Log in to the **IcingaAlertForge Beauty Panel** (`http://iaf-server:8080/status/beauty?admin=1`).
+2.  Go to the **Settings** tab.
 3.  Under **Target Configuration**, either use an existing target or click "Add Target".
 4.  Find your target and click **Generate Key**.
 5.  **Copy the key immediately.** For security, it will only be shown in cleartext once.

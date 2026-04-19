@@ -144,21 +144,21 @@ cd IcingaAlertingForge
 cp .env.example .env
 # edit .env
 
-go build -o webhook-bridge .
-./webhook-bridge
+go build -o icinga-alert-forge .
+./icinga-alert-forge
 ```
 
 ### Docker
 
 ```bash
-docker build -t webhook-bridge .
+docker build -t icinga-alert-forge .
 
 docker run -d \
-  --name webhook-bridge \
+  --name icinga-alert-forge \
   -p 8080:8080 \
   --env-file .env \
   -v webhook-logs:/var/log/webhook-bridge \
-  webhook-bridge
+  icinga-alert-forge
 ```
 
 ### Docker Compose

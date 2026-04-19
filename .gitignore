@@ -1,6 +1,7 @@
 # Binaries
 icinga-webhook-bridge
 webhook-bridge
+icinga-alert-forge
 *.exe
 *.dll
 *.so

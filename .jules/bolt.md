@@ -49,3 +49,7 @@
 ## 2024-05-31 - Fast path hex encoding
 **Learning:** Using `fmt.Sprintf("%x", hash)[:12]` to generate a hex string and slice it to the first 12 characters introduces unnecessary allocations and overhead due to Go's expensive reflection-based `fmt` package.
 **Action:** Replace `fmt.Sprintf` implementation with `encoding/hex` to directly encode the first 6 bytes of the hash into a string using `hex.EncodeToString(hash[:6])` to avoid allocation overhead while maintaining correctness.
+
+## 2026-04-20 - Lexicographical sorting optimization for FrozenEntry
+**Learning:** Similar to `AllEntries()`, `cache.ServiceCache.AllFrozen()` sorted entries using a multi-field comparison (`Host` then `Service`). Since objects share a stable composite string key with a low-byte separator (`host + "\x1f" + service`), single-string lexicographical sorting over multi-field comparisons is faster.
+**Action:** Always prefer single-string lexicographical sorting on composite keys using stable separators when returning sorted slices, as it avoids multiple branches and string comparisons. Added the `Key` field to `FrozenEntry` to leverage this.

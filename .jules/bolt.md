@@ -45,3 +45,7 @@
 ## 2024-06-10 - Fast path for splitting host/port in hot loops
 **Learning:** Functions like `net.SplitHostPort` can introduce high overhead from allocations and complex IPv6 parsing when called frequently in hot loops (e.g., stripping ports from IP addresses for logging or metrics).
 **Action:** Implement a fast path for IPv4 using simple string manipulation (e.g., checking `strings.Count(addr, ":") == 1` and slicing with `strings.LastIndexByte(addr, ':')`), while retaining `net.SplitHostPort` as a fallback for IPv6 brackets and edge cases to maintain both performance and correctness.
+
+## 2026-04-20 - Lexicographical sorting optimization for FrozenEntry
+**Learning:** Similar to `AllEntries()`, `cache.ServiceCache.AllFrozen()` sorted entries using a multi-field comparison (`Host` then `Service`). Since objects share a stable composite string key with a low-byte separator (`host + "\x1f" + service`), single-string lexicographical sorting over multi-field comparisons is faster.
+**Action:** Always prefer single-string lexicographical sorting on composite keys using stable separators when returning sorted slices, as it avoids multiple branches and string comparisons. Added the `Key` field to `FrozenEntry` to leverage this.

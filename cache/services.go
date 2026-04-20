@@ -190,6 +190,7 @@ func (c *ServiceCache) GetFreezeInfo(host, name string) (frozen bool, until *tim
 
 // FrozenEntry is a view of one frozen host/service pair.
 type FrozenEntry struct {
+	Key         string
 	Host        string
 	Service     string
 	FrozenUntil *time.Time // nil = permanent
@@ -207,13 +208,14 @@ func (c *ServiceCache) AllFrozen() []FrozenEntry {
 			continue // expired
 		}
 		host, service := SplitServiceKey(key)
-		out = append(out, FrozenEntry{Host: host, Service: service, FrozenUntil: t})
+		out = append(out, FrozenEntry{Key: key, Host: host, Service: service, FrozenUntil: t})
 	}
+
+	// Lexicographical sorting on the composite Key is faster than multi-field
+	// comparisons (Host then Service) because it avoids branching and relies
+	// directly on the stable `\x1f` separator built into the key.
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].Host != out[j].Host {
-			return out[i].Host < out[j].Host
-		}
-		return out[i].Service < out[j].Service
+		return out[i].Key < out[j].Key
 	})
 	return out
 }

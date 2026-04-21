@@ -79,7 +79,7 @@ func (l *Logger) Append(entry models.HistoryEntry) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(l.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("history: open file: %w", err)
 	}
@@ -288,7 +288,7 @@ func (l *Logger) rotateLockedInline() {
 	}
 
 	tempPath := l.filePath + ".tmp"
-	out, err := os.Create(tempPath)
+	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)

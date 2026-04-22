@@ -3273,17 +3273,19 @@ function devUpdateButtons() {
 function colorizeJSON(str) {
   var obj;
   try { obj = JSON.parse(str); } catch(e) { return escHtml(str); }
-  var pretty = JSON.stringify(obj, null, 2);
-  return pretty.replace(/("(?:\\.|[^"\\])*")\s*:/g, function(m, key) {
-    return '<span class="j-key">' + escHtml(key) + '</span>:';
-  }).replace(/:\s*("(?:\\.|[^"\\])*")/g, function(m, val) {
-    return ': <span class="j-str">' + escHtml(val) + '</span>';
-  }).replace(/:\s*(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g, function(m, val) {
-    return ': <span class="j-num">' + val + '</span>';
-  }).replace(/:\s*(true|false)/g, function(m, val) {
-    return ': <span class="j-bool">' + val + '</span>';
-  }).replace(/:\s*(null)/g, function(m, val) {
-    return ': <span class="j-null">' + val + '</span>';
+  var pretty = escHtml(JSON.stringify(obj, null, 2));
+  return pretty.replace(/^( *)(&quot;.*?&quot;):/gm, function(m, indent, key) {
+    return indent + '<span class="j-key">' + key + '</span>:';
+  }).replace(/^( *)((?:&quot;.*?&quot;)|-?\d+\.?\d*(?:[eE][+-]?\d+)?|true|false|null)(,?)$/gm, function(m, indent, val, comma) {
+    if (val.startsWith('&quot;')) return indent + '<span class="j-str">' + val + '</span>' + comma;
+    if (val === 'true' || val === 'false') return indent + '<span class="j-bool">' + val + '</span>' + comma;
+    if (val === 'null') return indent + '<span class="j-null">' + val + '</span>' + comma;
+    return indent + '<span class="j-num">' + val + '</span>' + comma;
+  }).replace(/(: )((?:&quot;.*?&quot;)|-?\d+\.?\d*(?:[eE][+-]?\d+)?|true|false|null)(,?)$/gm, function(m, colon, val, comma) {
+    if (val.startsWith('&quot;')) return colon + '<span class="j-str">' + val + '</span>' + comma;
+    if (val === 'true' || val === 'false') return colon + '<span class="j-bool">' + val + '</span>' + comma;
+    if (val === 'null') return colon + '<span class="j-null">' + val + '</span>' + comma;
+    return colon + '<span class="j-num">' + val + '</span>' + comma;
   }).replace(/([{}\[\]])/g, '<span class="j-brace">$1</span>');
 }
 

@@ -287,7 +287,7 @@ func (q *Queue) saveToDisk() error {
 	if err != nil {
 		return fmt.Errorf("marshal queue: %w", err)
 	}
-	return os.WriteFile(q.config.FilePath, data, 0o644)
+	return os.WriteFile(q.config.FilePath, data, 0o600)
 }
 
 func (q *Queue) loadFromDisk() {

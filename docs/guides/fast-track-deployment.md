@@ -80,30 +80,42 @@ Example:
 - `/webhook` + first key → `home-critical`
 - `/webhook` + second key → `home-warning`
 
-## Run It With Docker
+## Run It With Docker Compose (Recommended)
+
+```bash
+docker compose up -d --build
+```
+
+Check logs:
+
+```bash
+docker compose logs -f webhook-bridge
+```
+
+## Run It With Docker (without Compose)
 
 Build the image:
 
 ```bash
-docker build -t icinga-alert-forge .
+docker build -t webhook-bridge .
 ```
 
 Run it:
 
 ```bash
 docker run -d \
-  --name icinga-alert-forge \
+  --name webhook-bridge \
   --restart unless-stopped \
   -p 8080:8080 \
   --env-file .env \
   -v iaf-logs:/var/log/webhook-bridge \
-  icinga-alert-forge
+  webhook-bridge
 ```
 
 Check logs:
 
 ```bash
-docker logs -f icinga-alert-forge
+docker logs -f webhook-bridge
 ```
 
 What you want to see:

@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/hex"
 	"net"
 	"runtime"
 	"strings"
@@ -109,7 +109,9 @@ func (c *Collector) RecordAuthFailure(remoteAddr, keyUsed string) {
 
 	keyHash := "(empty)"
 	if keyUsed != "" {
-		keyHash = fmt.Sprintf("%x", sha256.Sum256([]byte(keyUsed)))[:12]
+		// ⚡ Bolt: Fast-path hex encoding instead of fmt.Sprintf to reduce allocation overhead
+		hash := sha256.Sum256([]byte(keyUsed))
+		keyHash = hex.EncodeToString(hash[:6])
 	}
 
 	failure := AuthFailure{

@@ -45,3 +45,7 @@
 ## 2024-06-10 - Fast path for splitting host/port in hot loops
 **Learning:** Functions like `net.SplitHostPort` can introduce high overhead from allocations and complex IPv6 parsing when called frequently in hot loops (e.g., stripping ports from IP addresses for logging or metrics).
 **Action:** Implement a fast path for IPv4 using simple string manipulation (e.g., checking `strings.Count(addr, ":") == 1` and slicing with `strings.LastIndexByte(addr, ':')`), while retaining `net.SplitHostPort` as a fallback for IPv6 brackets and edge cases to maintain both performance and correctness.
+
+## 2024-05-31 - Fast path hex encoding
+**Learning:** Using `fmt.Sprintf("%x", hash)[:12]` to generate a hex string and slice it to the first 12 characters introduces unnecessary allocations and overhead due to Go's expensive reflection-based `fmt` package.
+**Action:** Replace `fmt.Sprintf` implementation with `encoding/hex` to directly encode the first 6 bytes of the hash into a string using `hex.EncodeToString(hash[:6])` to avoid allocation overhead while maintaining correctness.

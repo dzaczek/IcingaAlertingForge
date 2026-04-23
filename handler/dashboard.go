@@ -3274,10 +3274,11 @@ function colorizeJSON(str) {
   var obj;
   try { obj = JSON.parse(str); } catch(e) { return escHtml(str); }
   var pretty = JSON.stringify(obj, null, 2);
-  return pretty.replace(/("(?:\\.|[^"\\])*")\s*:/g, function(m, key) {
-    return '<span class="j-key">' + escHtml(key) + '</span>:';
-  }).replace(/:\s*("(?:\\.|[^"\\])*")/g, function(m, val) {
-    return ': <span class="j-str">' + escHtml(val) + '</span>';
+  var escaped = escHtml(pretty);
+  return escaped.replace(/(&quot;(?:\\.|[^&]|&amp;|&lt;|&gt;|&#39;)*?&quot;)\s*:/g, function(m, key) {
+    return '<span class="j-key">' + key + '</span>:';
+  }).replace(/:\s*(&quot;(?:\\.|[^&]|&amp;|&lt;|&gt;|&#39;)*?&quot;)/g, function(m, val) {
+    return ': <span class="j-str">' + val + '</span>';
   }).replace(/:\s*(-?\d+\.?\d*(?:[eE][+-]?\d+)?)/g, function(m, val) {
     return ': <span class="j-num">' + val + '</span>';
   }).replace(/:\s*(true|false)/g, function(m, val) {
@@ -3309,7 +3310,7 @@ function appendDevEntry(d) {
 
   var isInbound = d.direction === 'inbound';
   var statusOk = d.status_code >= 200 && d.status_code < 300;
-  var method = d.method || '?';
+  var method = escHtml(d.method || '?');
   var ts = '';
   if (d.timestamp) {
     var dt = new Date(d.timestamp);
@@ -3318,7 +3319,7 @@ function appendDevEntry(d) {
 
   var html = '<div class="dev-entry">';
   html += '<div class="dev-entry-header">';
-  html += '<span class="dev-dir dev-dir-' + (d.direction||'outbound') + '">' + (isInbound ? 'IN' : 'OUT') + '</span>';
+  html += '<span class="dev-dir dev-dir-' + escHtml(d.direction||'outbound') + '">' + (isInbound ? 'IN' : 'OUT') + '</span>';
   html += '<span class="dev-method dev-method-' + method + '">' + method + '</span>';
   html += '<span class="dev-url">' + escHtml(d.url||'') + '</span>';
   if (d.source) html += '<span class="dev-source">' + escHtml(d.source) + '</span>';

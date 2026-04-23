@@ -4172,7 +4172,7 @@ function rbacDeleteUser(username) {
 
 function doLogout() {
   // Set logout cookie so server forces fresh 401 on next admin login
-  document.cookie = '_logged_out=1;path=/';
+  document.cookie = '_logged_out=1;path=/;secure;samesite=strict';
   window.location.href = '/status/beauty';
 }
 
@@ -4500,7 +4500,7 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    document.cookie = '_logged_out=1;path=/';
+    document.cookie = '_logged_out=1;path=/;secure;samesite=strict';
     window.location.href = '/status/beauty';
   }
 

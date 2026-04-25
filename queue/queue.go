@@ -155,13 +155,15 @@ func (q *Queue) Flush() int {
 		items[i].NextRetry = time.Time{} // force immediate
 	}
 
+	toRemove := make(map[string]struct{})
 	for _, item := range items {
 		if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
-			q.removeByID(item.ID)
+			toRemove[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			processed++
 		}
 	}
+	q.removeByIDs(toRemove)
 	return processed
 }
 
@@ -224,10 +226,11 @@ func (q *Queue) processReady() {
 
 	slog.Info("Retry queue processing", "ready", len(ready))
 
+	toRemove := make(map[string]struct{})
 	for _, item := range ready {
 		err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
 		if err == nil {
-			q.removeByID(item.ID)
+			toRemove[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			slog.Info("Retry succeeded",
 				"host", item.Host, "service", item.Service,
@@ -240,6 +243,7 @@ func (q *Queue) processReady() {
 				"attempts", item.Attempts+1, "error", err)
 		}
 	}
+	q.removeByIDs(toRemove)
 
 	// Persist after processing
 	if q.config.FilePath != "" {
@@ -249,16 +253,29 @@ func (q *Queue) processReady() {
 	}
 }
 
-func (q *Queue) removeByID(id string) {
+// removeByIDs removes multiple items in a single pass to optimize performance.
+// This replaces repeated O(N) shifts (resulting in O(N^2) complexity) with a single O(N)
+// filtering pass, while only acquiring the lock once.
+func (q *Queue) removeByIDs(toRemove map[string]struct{}) {
+	if len(toRemove) == 0 {
+		return
+	}
+
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	n := 0
 	for i, item := range q.items {
-		if item.ID == id {
-			q.items = append(q.items[:i], q.items[i+1:]...)
-			return
+		if _, exists := toRemove[item.ID]; !exists {
+			q.items[n] = q.items[i]
+			n++
 		}
 	}
+	// Zero out trailing elements to prevent memory leaks
+	for i := n; i < len(q.items); i++ {
+		q.items[i] = Item{}
+	}
+	q.items = q.items[:n]
 }
 
 func (q *Queue) incrementAttempt(id string) {

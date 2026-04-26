@@ -155,13 +155,19 @@ func (q *Queue) Flush() int {
 		items[i].NextRetry = time.Time{} // force immediate
 	}
 
+	toRemove := make(map[string]struct{})
 	for _, item := range items {
 		if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
-			q.removeByID(item.ID)
+			toRemove[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			processed++
 		}
 	}
+
+	if len(toRemove) > 0 {
+		q.bulkRemove(toRemove)
+	}
+
 	return processed
 }
 
@@ -224,10 +230,11 @@ func (q *Queue) processReady() {
 
 	slog.Info("Retry queue processing", "ready", len(ready))
 
+	toRemove := make(map[string]struct{})
 	for _, item := range ready {
 		err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
 		if err == nil {
-			q.removeByID(item.ID)
+			toRemove[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			slog.Info("Retry succeeded",
 				"host", item.Host, "service", item.Service,
@@ -241,6 +248,10 @@ func (q *Queue) processReady() {
 		}
 	}
 
+	if len(toRemove) > 0 {
+		q.bulkRemove(toRemove)
+	}
+
 	// Persist after processing
 	if q.config.FilePath != "" {
 		q.mu.Lock()
@@ -249,16 +260,24 @@ func (q *Queue) processReady() {
 	}
 }
 
-func (q *Queue) removeByID(id string) {
+// bulkRemove performs an O(N) in-place filtering to remove items by ID
+func (q *Queue) bulkRemove(toRemove map[string]struct{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	for i, item := range q.items {
-		if item.ID == id {
-			q.items = append(q.items[:i], q.items[i+1:]...)
-			return
+	n := 0
+	for _, item := range q.items {
+		if _, remove := toRemove[item.ID]; !remove {
+			q.items[n] = item
+			n++
 		}
 	}
+
+	// Zero out the remaining elements to prevent memory leaks
+	for i := n; i < len(q.items); i++ {
+		q.items[i] = Item{}
+	}
+	q.items = q.items[:n]
 }
 
 func (q *Queue) incrementAttempt(id string) {

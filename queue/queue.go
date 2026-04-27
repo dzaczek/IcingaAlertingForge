@@ -155,13 +155,19 @@ func (q *Queue) Flush() int {
 		items[i].NextRetry = time.Time{} // force immediate
 	}
 
+	successIDs := make(map[string]struct{})
 	for _, item := range items {
 		if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
-			q.removeByID(item.ID)
+			successIDs[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			processed++
 		}
 	}
+
+	if len(successIDs) > 0 {
+		q.applyResults(successIDs, nil)
+	}
+
 	return processed
 }
 
@@ -224,21 +230,28 @@ func (q *Queue) processReady() {
 
 	slog.Info("Retry queue processing", "ready", len(ready))
 
+	successIDs := make(map[string]struct{})
+	failIDs := make(map[string]struct{})
+
 	for _, item := range ready {
 		err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
 		if err == nil {
-			q.removeByID(item.ID)
+			successIDs[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			slog.Info("Retry succeeded",
 				"host", item.Host, "service", item.Service,
 				"attempts", item.Attempts+1, "request_id", item.RequestID)
 		} else {
-			q.incrementAttempt(item.ID)
+			failIDs[item.ID] = struct{}{}
 			q.totalFailed.Add(1)
 			slog.Warn("Retry failed",
 				"host", item.Host, "service", item.Service,
 				"attempts", item.Attempts+1, "error", err)
 		}
+	}
+
+	if len(successIDs) > 0 || len(failIDs) > 0 {
+		q.applyResults(successIDs, failIDs)
 	}
 
 	// Persist after processing
@@ -249,29 +262,38 @@ func (q *Queue) processReady() {
 	}
 }
 
-func (q *Queue) removeByID(id string) {
+// applyResults performs a single O(N) pass to filter successful items
+// and update attempts for failed items, avoiding O(N^2) slice shifting.
+func (q *Queue) applyResults(successIDs, failIDs map[string]struct{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	for i, item := range q.items {
-		if item.ID == id {
-			q.items = append(q.items[:i], q.items[i+1:]...)
-			return
-		}
-	}
-}
+	n := 0
+	for i := 0; i < len(q.items); i++ {
+		item := q.items[i]
 
-func (q *Queue) incrementAttempt(id string) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	for i, item := range q.items {
-		if item.ID == id {
-			q.items[i].Attempts++
-			q.items[i].NextRetry = time.Now().Add(backoff(q.items[i].Attempts, q.config.RetryBase, q.config.RetryMax))
-			return
+		// Drop successful items
+		if _, ok := successIDs[item.ID]; ok {
+			continue
 		}
+
+		// Update failed items
+		if _, ok := failIDs[item.ID]; ok {
+			item.Attempts++
+			item.NextRetry = time.Now().Add(backoff(item.Attempts, q.config.RetryBase, q.config.RetryMax))
+		}
+
+		// Keep item
+		q.items[n] = item
+		n++
 	}
+
+	// Zero out the remaining slots to prevent memory leaks
+	for i := n; i < len(q.items); i++ {
+		q.items[i] = Item{}
+	}
+
+	q.items = q.items[:n]
 }
 
 func backoff(attempts int, base, max time.Duration) time.Duration {

@@ -49,3 +49,7 @@
 ## 2024-05-31 - Fast path hex encoding
 **Learning:** Using `fmt.Sprintf("%x", hash)[:12]` to generate a hex string and slice it to the first 12 characters introduces unnecessary allocations and overhead due to Go's expensive reflection-based `fmt` package.
 **Action:** Replace `fmt.Sprintf` implementation with `encoding/hex` to directly encode the first 6 bytes of the hash into a string using `hex.EncodeToString(hash[:6])` to avoid allocation overhead while maintaining correctness.
+
+## 2026-04-27 - [Queue removal bottleneck]
+**Learning:** In `queue/queue.go`, processing retries for the queue involved iterating over ready items and conditionally calling `q.removeByID(item.ID)`. The `removeByID` function used `append(q.items[:i], q.items[i+1:]...)` for removal, which is an O(N) operation. Since this was called inside a loop over M processed items, it created an O(N*M) or worst-case O(N^2) bottleneck for large queues.
+**Action:** Replaced iterative slice shifting with a bulk update strategy: tracked successful and failed item IDs in zero-allocation maps (`map[string]struct{}`) and filtered the underlying queue slice in a single O(N) pass, making sure to zero out trailing slice elements to prevent memory leaks.

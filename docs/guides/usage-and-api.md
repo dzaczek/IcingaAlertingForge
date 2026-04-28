@@ -200,7 +200,9 @@ All admin endpoints use HTTP Basic Auth with `ADMIN_USER` and `ADMIN_PASS`.
 
 #### `GET /admin/services`
 
-Returns services across all configured hosts.
+**Fast Track:** Lists all services across all configured target hosts.
+
+**Deep Dive:** Concurrently queries Icinga2 for all services attached to the configured hosts. You can optionally filter by a specific host using the `host` query parameter.
 
 Optional filter:
 
@@ -232,6 +234,10 @@ Response example:
 ```
 
 #### `DELETE /admin/services/{name}`
+
+**Fast Track:** Deletes a specific service from Icinga2.
+
+**Deep Dive:** Removes the specified service object from Icinga2 via its API. In a multi-host setup, you must provide the `host` query parameter to disambiguate which service to delete.
 
 Single host example:
 

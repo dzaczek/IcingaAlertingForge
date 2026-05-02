@@ -228,6 +228,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				MaxAge:   -1,
 				HttpOnly: true,
 				Secure:   true,
+				SameSite: http.SameSiteStrictMode,
 			})
 			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -4172,7 +4173,8 @@ function rbacDeleteUser(username) {
 
 function doLogout() {
   // Set logout cookie so server forces fresh 401 on next admin login
-  document.cookie = '_logged_out=1;path=/';
+  var sec = window.location.protocol === 'https:' ? ';secure' : '';
+  document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
   window.location.href = '/status/beauty';
 }
 
@@ -4500,7 +4502,8 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    document.cookie = '_logged_out=1;path=/';
+    var sec = window.location.protocol === 'https:' ? ';secure' : '';
+    document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
     window.location.href = '/status/beauty';
   }
 

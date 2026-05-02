@@ -49,3 +49,7 @@
 ## 2024-05-31 - Fast path hex encoding
 **Learning:** Using `fmt.Sprintf("%x", hash)[:12]` to generate a hex string and slice it to the first 12 characters introduces unnecessary allocations and overhead due to Go's expensive reflection-based `fmt` package.
 **Action:** Replace `fmt.Sprintf` implementation with `encoding/hex` to directly encode the first 6 bytes of the hash into a string using `hex.EncodeToString(hash[:6])` to avoid allocation overhead while maintaining correctness.
+
+## 2024-05-31 - Audit CEF Logging Optimization
+**Learning:** `formatCEF` in `audit/audit.go` previously used multiple `fmt.Sprintf` calls to build the CEF log string. Because `fmt.Sprintf` relies on Go's expensive reflection, this caused unnecessary memory allocations and increased latency.
+**Action:** Use `strings.Builder` with a pre-allocated buffer (`.Grow()`) and direct `b.WriteString()` and `strconv.Itoa()` for string building instead of `fmt.Sprintf` in hot paths or frequent string concatenations, as it can reduce formatting time significantly.

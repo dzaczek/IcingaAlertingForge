@@ -24,3 +24,8 @@
 **Vulnerability:** Inline JS event handlers (e.g. `onclick`) in `handler/dashboard.go` were directly interpolating dynamically generated variables (like `host`, `service`, `t.id`) via string concatenation (e.g. `onclick="setServiceStatus(' + escHtml(host) + ')"`). Using `escHtml` and `encodeURIComponent` does not prevent escaping the string context within the `onclick` attribute itself if attackers supply payloads like `')-alert(1)-('`, enabling Cross-Site Scripting (XSS).
 **Learning:** Browsers unescape HTML attributes before evaluating their content. Placing variables directly into JavaScript execution contexts within an HTML attribute via string concatenation bypasses regular string escaping/encoding boundaries.
 **Prevention:** Always delegate dynamic data meant for JS execution to `data-*` attributes (e.g., `data-host="safeValue"`) and retrieve it using `this.getAttribute('data-host')` inside the inline handler, keeping the JavaScript context entirely separate from the templated variables.
+
+## 2024-05-15 - Cookie Security Best Practices
+**Vulnerability:** Missing SameSite attribute and conditional Secure flag in cookies.
+**Learning:** Both client-side and server-side cookies need to explicitly define SameSite=Strict and Secure properties to prevent CSRF vulnerabilities and ensure defense-in-depth.
+**Prevention:** Enforce strict cookie security settings across both Go HTTP handlers and JavaScript assignment logic.

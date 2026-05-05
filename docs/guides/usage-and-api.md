@@ -200,7 +200,9 @@ All admin endpoints use HTTP Basic Auth with `ADMIN_USER` and `ADMIN_PASS`.
 
 #### `GET /admin/services`
 
-Returns services across all configured hosts.
+**Fast Track:** Lists all managed services across configured target hosts.
+
+**Deep Dive:** Queries the cache and Icinga2 to return a combined list of all passive check services managed by the bridge. Accepts an optional `host` query parameter to filter by a specific target host.
 
 Optional filter:
 
@@ -232,6 +234,10 @@ Response example:
 ```
 
 #### `DELETE /admin/services/{name}`
+
+**Fast Track:** Deletes a specific service from Icinga2.
+
+**Deep Dive:** Removes the specified service object from Icinga2 via its API and evicts it from the local bridge cache. If multiple hosts are configured, the `host` query parameter is mandatory to prevent ambiguous deletions.
 
 Single host example:
 

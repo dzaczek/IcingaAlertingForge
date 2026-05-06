@@ -155,12 +155,16 @@ func (q *Queue) Flush() int {
 		items[i].NextRetry = time.Time{} // force immediate
 	}
 
+	successfulIDs := make(map[string]struct{})
 	for _, item := range items {
 		if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
-			q.removeByID(item.ID)
+			successfulIDs[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			processed++
 		}
+	}
+	if len(successfulIDs) > 0 {
+		q.removeByIDs(successfulIDs)
 	}
 	return processed
 }
@@ -224,10 +228,11 @@ func (q *Queue) processReady() {
 
 	slog.Info("Retry queue processing", "ready", len(ready))
 
+	successfulIDs := make(map[string]struct{})
 	for _, item := range ready {
 		err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
 		if err == nil {
-			q.removeByID(item.ID)
+			successfulIDs[item.ID] = struct{}{}
 			q.totalRetried.Add(1)
 			slog.Info("Retry succeeded",
 				"host", item.Host, "service", item.Service,
@@ -240,6 +245,9 @@ func (q *Queue) processReady() {
 				"attempts", item.Attempts+1, "error", err)
 		}
 	}
+	if len(successfulIDs) > 0 {
+		q.removeByIDs(successfulIDs)
+	}
 
 	// Persist after processing
 	if q.config.FilePath != "" {
@@ -249,16 +257,21 @@ func (q *Queue) processReady() {
 	}
 }
 
-func (q *Queue) removeByID(id string) {
+func (q *Queue) removeByIDs(ids map[string]struct{}) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	for i, item := range q.items {
-		if item.ID == id {
-			q.items = append(q.items[:i], q.items[i+1:]...)
-			return
+	n := 0
+	for _, item := range q.items {
+		if _, ok := ids[item.ID]; !ok {
+			q.items[n] = item
+			n++
 		}
 	}
+	for i := n; i < len(q.items); i++ {
+		q.items[i] = Item{} // Prevent memory leak
+	}
+	q.items = q.items[:n]
 }
 
 func (q *Queue) incrementAttempt(id string) {

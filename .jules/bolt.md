@@ -53,3 +53,7 @@
 ## 2024-05-31 - Optimize string allocations in logging formats
 **Learning:** Using `fmt.Sprintf` and string concatenation (`+=`) heavily inside a high-throughput logging function (`formatCEF`) causes significant memory allocations and GC pressure due to reflection and repeated creation of temporary strings.
 **Action:** When constructing complex log strings (like CEF) programmatically, use `strings.Builder` with `.Grow(expected_size)`, `.WriteString()`, and `strconv.Itoa()` to construct the strings directly with zero extraneous allocations.
+
+## 2024-05-06 - Queue Bulk Slice Removal Bottleneck
+**Learning:** In `queue/queue.go`, sequentially removing successfully retried items from the queue slice by calling `removeByID(item.ID)` inside a loop resulted in O(N^2) complexity, because each removal requires slice manipulation (`append(q.items[:i], q.items[i+1:]...)`).
+**Action:** When bulk-removing items from a slice (e.g., during queue processing), avoid O(N^2) complexity by tracking items to remove in a zero-allocation set (e.g., `map[string]struct{}`) and performing a single O(N) filtering pass, ensuring trailing slice elements are zeroed out to prevent memory leaks.

@@ -94,7 +94,7 @@ type Store struct {
 // New creates a new Store. If encryptionKey is empty, a key is auto-generated.
 func New(configPath, encryptionKey string) (*Store, error) {
 	dir := filepath.Dir(configPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, fmt.Errorf("configstore: create dir: %w", err)
 	}
 

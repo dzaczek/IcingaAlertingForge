@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -137,25 +139,52 @@ func (l *Logger) Enabled() bool {
 // formatCEF renders an event in Common Event Format (ArcSight/SIEM standard).
 // CEF:Version|Device Vendor|Device Product|Device Version|Signature ID|Name|Severity|Extension
 func formatCEF(e Event) string {
-	ext := fmt.Sprintf("rt=%s src=%s act=%s outcome=%s",
-		e.Timestamp.Format(time.RFC3339), e.RemoteAddr, e.Action, e.Outcome)
+	var b strings.Builder
+	// Base size + typical length of time and other fixed fields
+	b.Grow(256)
+
+	b.WriteString("CEF:0|IcingaAlertForge|WebhookBridge|1.0|")
+	b.WriteString(string(e.EventType))
+	b.WriteString("|")
+	b.WriteString(e.Action)
+	b.WriteString("|")
+	b.WriteString(strconv.Itoa(int(e.Severity)))
+	b.WriteString("|")
+
+	b.WriteString("rt=")
+	b.WriteString(e.Timestamp.Format(time.RFC3339))
+	b.WriteString(" src=")
+	b.WriteString(e.RemoteAddr)
+	b.WriteString(" act=")
+	b.WriteString(e.Action)
+	b.WriteString(" outcome=")
+	b.WriteString(e.Outcome)
 
 	if e.Actor != "" {
-		ext += fmt.Sprintf(" suser=%s", e.Actor)
+		b.WriteString(" suser=")
+		b.WriteString(e.Actor)
 	}
 	if e.Resource != "" {
-		ext += fmt.Sprintf(" cs1=%s cs1Label=resource", e.Resource)
+		b.WriteString(" cs1=")
+		b.WriteString(e.Resource)
+		b.WriteString(" cs1Label=resource")
 	}
 	if e.RequestID != "" {
-		ext += fmt.Sprintf(" cs2=%s cs2Label=request_id", e.RequestID)
+		b.WriteString(" cs2=")
+		b.WriteString(e.RequestID)
+		b.WriteString(" cs2Label=request_id")
 	}
 	if e.Source != "" {
-		ext += fmt.Sprintf(" cs3=%s cs3Label=source", e.Source)
+		b.WriteString(" cs3=")
+		b.WriteString(e.Source)
+		b.WriteString(" cs3Label=source")
 	}
 	for k, v := range e.Details {
-		ext += fmt.Sprintf(" cs4=%s cs4Label=%s", v, k)
+		b.WriteString(" cs4=")
+		b.WriteString(v)
+		b.WriteString(" cs4Label=")
+		b.WriteString(k)
 	}
 
-	return fmt.Sprintf("CEF:0|IcingaAlertForge|WebhookBridge|1.0|%s|%s|%d|%s",
-		e.EventType, e.Action, e.Severity, ext)
+	return b.String()
 }

@@ -82,7 +82,7 @@ func New(cfg Config) (*Logger, error) {
 		return l, nil
 	}
 
-	f, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+	f, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("audit: open file %s: %w", cfg.File, err)
 	}

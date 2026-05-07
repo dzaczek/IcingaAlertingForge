@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  := webhook-bridge
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build docker run version tag release clean
+.PHONY: build docker run version tag release clean test test-unit lint ci smoke
 
 ## build — compile binary with version from git tag
 build:
@@ -37,6 +37,39 @@ release:
 	$(MAKE) docker VERSION=v$(v)
 	@echo "Released v$(v)"
 
+## test — run unit tests with verbose output
+test:
+	go test -v -count=1 -timeout=120s ./...
+
+## test-unit — run unit tests (race detector enabled)
+test-unit:
+	go test -v -count=1 -race -timeout=120s ./...
+
+## lint — run go vet (requires golangci-lint for full lint)
+lint:
+	go vet ./...
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout=3m ./...; \
+	else \
+		echo "golangci-lint not installed — install: https://golangci-lint.run/usage/install/"; \
+	fi
+
+## smoke — run end-to-end smoke data flow test
+smoke:
+	@if [ ! -x scripts/smoke-data-flow.sh ]; then \
+		echo "scripts/smoke-data-flow.sh not found or not executable"; \
+		exit 1; \
+	fi
+	./scripts/smoke-data-flow.sh
+
+## ci — run full CI pipeline locally (same checks as GitHub Actions)
+ci:
+	@if [ ! -x scripts/run-ci-local.sh ]; then \
+		echo "scripts/run-ci-local.sh not found or not executable"; \
+		exit 1; \
+	fi
+	./scripts/run-ci-local.sh --full
+
 ## clean — remove binary
 clean:
-	rm -f $(BINARY)
+	rm -f $(BINARY) webhook-bridge coverage.out merge-report.md

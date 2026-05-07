@@ -1,0 +1,30 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - gosimple
+    - ineffassign
+    - staticcheck
+    - unused
+    - misspell
+    - unconvert
+    - gosec
+  disable-all: false
+
+linters-settings:
+  misspell:
+    locale: US
+  gosec:
+    excludes:
+      - G402  # TLS InsecureSkipVerify is config-controlled
+      - G104  # Intentional ignoring of some write errors (audit log, SSE)
+
+issues:
+  exclude-dirs:
+    - testenv
+    - wiki
+    - .github
+
+run:
+  timeout: 3m

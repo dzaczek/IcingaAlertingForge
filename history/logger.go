@@ -21,7 +21,7 @@ import (
 
 // Logger provides thread-safe JSONL history logging with rotation and filtering.
 type Logger struct {
-	mu          sync.Mutex
+	mu          sync.RWMutex
 	filePath    string
 	maxEntries  int
 	appendCount atomic.Int64 // tracks appends since last rotation check
@@ -129,8 +129,8 @@ type QueryFilter struct {
 
 // Query returns history entries matching the filter, ordered newest-first.
 func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	var matched []models.HistoryEntry
 	var matchedPos int

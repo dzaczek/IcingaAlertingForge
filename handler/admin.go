@@ -448,6 +448,7 @@ func (h *AdminHandler) HandleDebugToggle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var body struct {
 		Enabled bool `json:"enabled"`
 	}
@@ -645,6 +646,7 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`

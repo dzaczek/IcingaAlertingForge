@@ -153,6 +153,8 @@ func (c *Checker) runCheck() {
 
 	healthy := c.status.Healthy
 	consecutiveFails := c.status.ConsecutiveFails
+	totalChecks := c.status.TotalChecks
+	totalFailures := c.status.TotalFailures
 	c.mu.Unlock()
 
 	// Report to Icinga2 if self-registration is enabled
@@ -162,11 +164,11 @@ func (c *Checker) runCheck() {
 		if healthy {
 			exitStatus = 0
 			message = fmt.Sprintf("OK: Bridge healthy, Icinga2 API reachable | checks=%d failures=%d",
-				c.status.TotalChecks, c.status.TotalFailures)
+				totalChecks, totalFailures)
 		} else {
 			exitStatus = 2
 			message = fmt.Sprintf("CRITICAL: Icinga2 API unreachable for %d consecutive checks | checks=%d failures=%d",
-				consecutiveFails, c.status.TotalChecks, c.status.TotalFailures)
+				consecutiveFails, totalChecks, totalFailures)
 		}
 
 		if sendErr := c.api.SendCheckResult(c.cfg.TargetHost, c.cfg.ServiceName, exitStatus, message); sendErr != nil {

@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  := webhook-bridge
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build docker run version tag release clean test test-unit lint ci smoke
+.PHONY: build docker run version tag release clean test test-unit lint ci smoke outdated
 
 ## build — compile binary with version from git tag
 build:
@@ -69,6 +69,15 @@ ci:
 		exit 1; \
 	fi
 	./scripts/run-ci-local.sh --full
+
+## outdated — check for outdated direct dependencies
+outdated:
+	@echo "Direct dependencies:"
+	@go list -u -m -json all 2>/dev/null | \
+		jq -r 'select(.Indirect==false and .Update != null) | "  \(.Path): \(.Version) → \(.Update.Version)"' 2>/dev/null || \
+		go list -u -m all 2>/dev/null | grep '\[.*\]'
+	@echo ""
+	@echo "Run 'go get -u ./...' to update, then 'go mod tidy'."
 
 ## clean — remove binary
 clean:

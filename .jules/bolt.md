@@ -57,3 +57,7 @@
 ## 2024-05-06 - Queue Bulk Slice Removal Bottleneck
 **Learning:** In `queue/queue.go`, sequentially removing successfully retried items from the queue slice by calling `removeByID(item.ID)` inside a loop resulted in O(N^2) complexity, because each removal requires slice manipulation (`append(q.items[:i], q.items[i+1:]...)`).
 **Action:** When bulk-removing items from a slice (e.g., during queue processing), avoid O(N^2) complexity by tracking items to remove in a zero-allocation set (e.g., `map[string]struct{}`) and performing a single O(N) filtering pass, ensuring trailing slice elements are zeroed out to prevent memory leaks.
+
+## 2024-05-31 - Sequential synchronous queue retry bottleneck
+**Learning:** `queue.Queue.processReady()` and `queue.Queue.Flush()` processed retries sequentially in a loop. For large queues of failed checks (e.g., after an Icinga outage), the linear O(N) waiting time for HTTP API calls to Icinga2 resulted in severe bottlenecks and very slow recovery.
+**Action:** When processing batches of queued retries mapped to independent API calls, utilize bounded concurrent execution (using a semaphore channel like `sem := make(chan struct{}, limit)` alongside `sync.WaitGroup`). Protect shared map writes and increments inside the goroutines with a `sync.Mutex`. This parallelizes network delays and significantly improves queue flushing time without overwhelming the downstream API.

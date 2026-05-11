@@ -33,3 +33,7 @@
 **Vulnerability:** Directories for storing history logs (`history/logger.go`) and config secrets (`configstore/store.go`) were created with `0755` permissions, and audit logs (`audit/audit.go`) with `0640`. This could allow unauthorized users on the same system to access sensitive information.
 **Learning:** Even if data is written internally by the application, default directory and file creation permissions (modified by umask) may be too permissive.
 **Prevention:** Files and directories containing sensitive application data must be explicitly persisted with restricted permissions (`0600` for files and `0700` for directories) to prevent unauthorized access.
+## 2024-06-26 - [Unchecked Error on Cryptographic RNG]
+**Vulnerability:** The application was calling `rand.Read(salt)` from `crypto/rand` when hashing RBAC passwords without checking the returned error. If the underlying system's random number generator failed, `rand.Read` could fail silently, leaving the salt array filled with zeros, leading to highly predictable and weak password hashes.
+**Learning:** Cryptographic functions that generate random data can fail (e.g., if the OS entropy pool is exhausted or unavailable). Ignoring these errors compromises the security guarantees of the cryptographic operation.
+**Prevention:** Always check the error returned by `rand.Read()`. When generating cryptographic material like salts or nonces where a failure implies compromised security, the application should "fail closed" (e.g., by panicking) rather than silently proceeding with weak or zeroed data.

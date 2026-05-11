@@ -260,7 +260,9 @@ func ParseRole(s string) Role {
 
 func hashPassword(password string) string {
 	salt := make([]byte, 16)
-	rand.Read(salt)
+	if _, err := rand.Read(salt); err != nil {
+		panic(fmt.Sprintf("failed to generate random salt: %v", err))
+	}
 	saltHex := hex.EncodeToString(salt)
 	hashHex := hashPasswordWithSalt(password, saltHex)
 	return saltHex + ":" + hashHex

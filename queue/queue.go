@@ -156,13 +156,27 @@ func (q *Queue) Flush() int {
 	}
 
 	successfulIDs := make(map[string]struct{})
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, 10)
+
 	for _, item := range items {
-		if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
-			successfulIDs[item.ID] = struct{}{}
-			q.totalRetried.Add(1)
-			processed++
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(item Item) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message); err == nil {
+				mu.Lock()
+				successfulIDs[item.ID] = struct{}{}
+				processed++
+				mu.Unlock()
+				q.totalRetried.Add(1)
+			}
+		}(item)
 	}
+	wg.Wait()
+
 	if len(successfulIDs) > 0 {
 		q.removeByIDs(successfulIDs)
 	}
@@ -229,22 +243,36 @@ func (q *Queue) processReady() {
 	slog.Info("Retry queue processing", "ready", len(ready))
 
 	successfulIDs := make(map[string]struct{})
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, 10)
+
 	for _, item := range ready {
-		err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
-		if err == nil {
-			successfulIDs[item.ID] = struct{}{}
-			q.totalRetried.Add(1)
-			slog.Info("Retry succeeded",
-				"host", item.Host, "service", item.Service,
-				"attempts", item.Attempts+1, "request_id", item.RequestID)
-		} else {
-			q.incrementAttempt(item.ID)
-			q.totalFailed.Add(1)
-			slog.Warn("Retry failed",
-				"host", item.Host, "service", item.Service,
-				"attempts", item.Attempts+1, "error", err)
-		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(item Item) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			err := q.sender.SendCheckResult(item.Host, item.Service, item.ExitStatus, item.Message)
+			if err == nil {
+				mu.Lock()
+				successfulIDs[item.ID] = struct{}{}
+				mu.Unlock()
+				q.totalRetried.Add(1)
+				slog.Info("Retry succeeded",
+					"host", item.Host, "service", item.Service,
+					"attempts", item.Attempts+1, "request_id", item.RequestID)
+			} else {
+				q.incrementAttempt(item.ID)
+				q.totalFailed.Add(1)
+				slog.Warn("Retry failed",
+					"host", item.Host, "service", item.Service,
+					"attempts", item.Attempts+1, "error", err)
+			}
+		}(item)
 	}
+	wg.Wait()
+
 	if len(successfulIDs) > 0 {
 		q.removeByIDs(successfulIDs)
 	}

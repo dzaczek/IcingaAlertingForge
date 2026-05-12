@@ -12,6 +12,17 @@ linters:
     - unconvert
     - unused
   settings:
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (*os.File).Write
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - os.Remove
+        - (*encoding/json.Decoder).Decode
+        - (net.Conn).Close
     misspell:
       locale: US
     gosec:

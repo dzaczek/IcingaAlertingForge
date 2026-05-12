@@ -208,7 +208,7 @@ func (m *Manager) ListUsers() []User {
 func (m *Manager) AddUser(user User) error {
 	m.mu.Lock()
 	// Hash password if not already hashed
-	if !(len(user.Password) == 97 && user.Password[32] == ':') {
+	if len(user.Password) != 97 || user.Password[32] != ':' {
 		user.Password = hashPassword(user.Password)
 	}
 

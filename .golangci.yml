@@ -29,6 +29,7 @@ linters:
       excludes:
         - G402  # TLS InsecureSkipVerify is config-controlled
         - G104  # Intentional ignoring of some write errors (audit log, SSE)
+        - G304  # File paths are configuration-defined, not user input
   exclusions:
     paths:
       - testenv

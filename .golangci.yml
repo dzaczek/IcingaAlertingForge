@@ -1,38 +1,52 @@
+version: "2"
+
 linters:
+  default: none
+  enable:
+    - errcheck
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    errcheck:
+      exclude-functions:
+        - (*os.File).Close
+        - (*os.File).Write
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Closer).Close
+        - os.Remove
+        - (*encoding/json.Decoder).Decode
+        - (net.Conn).Close
+    misspell:
+      locale: US
+    gosec:
+      excludes:
+        - G402  # TLS InsecureSkipVerify is config-controlled
+        - G104  # Intentional ignoring of some write errors (audit log, SSE)
+        - G304  # File paths are configuration-defined, not user input
+  exclusions:
+    paths:
+      - testenv
+      - wiki
+      - .github
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+      - path: _benchmark_test\.go
+        linters:
+          - gosec
+
+formatters:
   enable:
     - gofmt
-    - govet
-    - errcheck
-    - gosimple
-    - ineffassign
-    - staticcheck
-    - unused
-    - misspell
-    - unconvert
-    - gosec
-  disable-all: false
-
-linters-settings:
-  misspell:
-    locale: US
-  gosec:
-    excludes:
-      - G402  # TLS InsecureSkipVerify is config-controlled
-      - G104  # Intentional ignoring of some write errors (audit log, SSE)
-
-issues:
-  exclude-dirs:
-    - testenv
-    - wiki
-    - .github
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-    - path: _benchmark_test\.go
-      linters:
-        - gosec
 
 run:
   timeout: 3m

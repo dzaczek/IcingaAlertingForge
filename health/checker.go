@@ -67,7 +67,7 @@ func New(cfg Config, api IcingaProber) *Checker {
 	}
 }
 
-// Start begins the periodic health check loop. It blocks until ctx is cancelled.
+// Start begins the periodic health check loop. It blocks until ctx is canceled.
 func (c *Checker) Start(ctx context.Context) {
 	if !c.cfg.Enabled {
 		return

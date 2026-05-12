@@ -38,5 +38,8 @@ Thumbs.db
 vendor/
 tmp/
 
+# Claude Code auto-generated
+ONBOARDING.md
+
 # Docker
 docker-compose.override.yml

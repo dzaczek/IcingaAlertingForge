@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  := webhook-bridge
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build docker run version tag release clean test test-unit lint ci smoke outdated
+.PHONY: build docker run version tag release clean test test-unit lint ci smoke outdated vulncheck coverage
 
 ## build — compile binary with version from git tag
 build:
@@ -37,15 +37,15 @@ release:
 	$(MAKE) docker VERSION=v$(v)
 	@echo "Released v$(v)"
 
-## test — run unit tests with verbose output
+## test — run unit tests with race detector and coverage
 test:
-	go test -v -count=1 -timeout=120s ./...
+	go test -v -count=1 -race -timeout=120s -coverprofile=coverage.out ./...
 
-## test-unit — run unit tests (race detector enabled)
+## test-unit — run unit tests with coverage only (no race, faster)
 test-unit:
-	go test -v -count=1 -race -timeout=120s ./...
+	go test -v -count=1 -timeout=120s -coverprofile=coverage.out ./...
 
-## lint — run go vet (requires golangci-lint for full lint)
+## lint — go vet + golangci-lint (same as CI)
 lint:
 	go vet ./...
 	@if command -v golangci-lint >/dev/null 2>&1; then \
@@ -53,6 +53,14 @@ lint:
 	else \
 		echo "golangci-lint not installed — install: https://golangci-lint.run/usage/install/"; \
 	fi
+
+## vulncheck — scan for known vulnerabilities in dependencies
+vulncheck:
+	go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+## coverage — show per-function coverage report
+coverage: test
+	go tool cover -func=coverage.out
 
 ## smoke — run end-to-end smoke data flow test
 smoke:

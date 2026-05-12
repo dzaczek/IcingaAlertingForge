@@ -227,16 +227,6 @@ func (l *Logger) processAll(cb func(models.HistoryEntry) error) error {
 	return scanner.Err()
 }
 
-// readAll reads all entries from the JSONL file.
-func (l *Logger) readAll() ([]models.HistoryEntry, error) {
-	var entries []models.HistoryEntry
-	err := l.processAll(func(e models.HistoryEntry) error {
-		entries = append(entries, e)
-		return nil
-	})
-	return entries, err
-}
-
 // countLines quickly counts the number of newline characters in the history file.
 func (l *Logger) countLines() (int, error) {
 	f, err := os.Open(l.filePath)
@@ -306,8 +296,8 @@ func (l *Logger) rotateLockedInline() {
 			skipped++
 			continue
 		}
-		writer.Write(scanner.Bytes())
-		writer.WriteByte('\n')
+		_, _ = writer.Write(scanner.Bytes())
+		_ = writer.WriteByte('\n')
 		kept++
 	}
 

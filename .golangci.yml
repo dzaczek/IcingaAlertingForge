@@ -25,6 +25,14 @@ issues:
     - testenv
     - wiki
     - .github
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    - path: _benchmark_test\.go
+      linters:
+        - gosec
 
 run:
   timeout: 3m

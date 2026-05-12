@@ -341,7 +341,9 @@ Response example:
 
 #### `GET /admin/ratelimit`
 
-Returns the current mutate and status slot usage, plus queue depth.
+**Fast Track:** Returns the current rate limiter statistics.
+
+**Deep Dive:** Returns the current mutate and status slot usage for bounded concurrency API calls to Icinga2, plus the queue depth.
 
 #### `GET /admin/queue`
 
@@ -391,7 +393,9 @@ DELETE /admin/users/jane.doe
 
 #### `POST /admin/history/clear`
 
-Clears all history entries.
+**Fast Track:** Clears all history entries.
+
+**Deep Dive:** Truncates the history log file and clears the in-memory history ring buffer. This action is irreversible.
 
 ```bash
 curl -u admin:secret -X POST http://localhost:8080/admin/history/clear
@@ -405,7 +409,9 @@ Response:
 
 #### `GET /admin/debug/toggle`
 
-Returns the current state of the API debug ring buffer.
+**Fast Track:** Returns the current state of the API debug ring buffer.
+
+**Deep Dive:** Returns a JSON object with an `enabled` boolean indicating whether API debug capture is currently active.
 
 ```bash
 curl -u admin:secret http://localhost:8080/admin/debug/toggle
@@ -419,7 +425,9 @@ Response:
 
 #### `POST /admin/debug/toggle`
 
-Enables or disables the API debug capture ring buffer.
+**Fast Track:** Enables or disables the API debug capture ring buffer.
+
+**Deep Dive:** Accepts a JSON body with an `enabled` boolean. When enabled, recent HTTP requests and responses to/from Icinga2 are captured in memory for dashboard inspection.
 
 ```bash
 curl -u admin:secret -X POST http://localhost:8080/admin/debug/toggle \

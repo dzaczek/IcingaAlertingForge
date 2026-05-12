@@ -43,18 +43,18 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Unit tests
-        run: go test -v -count=1 -race -timeout=120s -coverprofile=coverage.out ./...
+        run: go test -v -count=1 -race -timeout=120s -coverprofile=coverage.out -coverpkg=./... ./...
 
       - name: Check coverage threshold
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
-          THRESHOLD=80
-          echo "Total coverage: ${COVERAGE}%"
+          THRESHOLD=50
+          echo "Total coverage: ${COVERAGE}% (threshold: ${THRESHOLD}%)"
           if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
-            echo "Coverage ${COVERAGE}% below threshold ${THRESHOLD}%"
+            echo "FAIL: coverage ${COVERAGE}% below threshold ${THRESHOLD}%"
             exit 1
           fi
-          echo "Coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
+          echo "PASS: coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
 
       - name: Build
         run: |

@@ -29,7 +29,7 @@ func NewRateLimiter(maxMutate, maxStatus, maxQueue int) *RateLimiter {
 }
 
 // AcquireMutate blocks until a mutation slot is available.
-// Returns an error if the context is cancelled.
+// Returns an error if the context is canceled.
 func (rl *RateLimiter) AcquireMutate(ctx context.Context) error {
 	select {
 	case rl.mutateSem <- struct{}{}:

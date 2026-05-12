@@ -227,7 +227,6 @@ func (l *Logger) processAll(cb func(models.HistoryEntry) error) error {
 	return scanner.Err()
 }
 
-
 // countLines quickly counts the number of newline characters in the history file.
 func (l *Logger) countLines() (int, error) {
 	f, err := os.Open(l.filePath)

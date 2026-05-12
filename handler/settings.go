@@ -502,7 +502,7 @@ func (h *SettingsHandler) HandleExportConfig(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="icinga-alertforge-config-%s.json"`, time.Now().UTC().Format("2006-01-02")))
 	w.WriteHeader(http.StatusOK)
-	w.Write(data)
+	_, _ = w.Write(data)
 }
 
 // HandleImportConfig restores configuration from a previously exported backup.

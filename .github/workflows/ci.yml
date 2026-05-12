@@ -11,6 +11,7 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
+  security-events: write
 
 jobs:
   validate:
@@ -31,17 +32,52 @@ jobs:
       - name: Install dependencies
         run: go mod download
 
-      - name: Lint (go vet)
-        run: go vet ./...
+      - name: Lint (golangci-lint)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          args: --timeout=3m
+          skip-cache: false
+
+      - name: Vulnerability check (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       - name: Unit tests
-        run: go test -v -count=1 -timeout=120s -coverprofile=coverage.out ./...
+        run: go test -v -count=1 -race -timeout=120s -coverprofile=coverage.out ./...
+
+      - name: Check coverage threshold
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | sed 's/%//')
+          THRESHOLD=80
+          echo "Total coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% below threshold ${THRESHOLD}%"
+            exit 1
+          fi
+          echo "Coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
 
       - name: Build
         run: |
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
           CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o ./webhook-bridge .
           echo "Binary built: webhook-bridge (${VERSION})"
+
+      - name: Trivy vulnerability scan (fs)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+      - name: Upload Trivy results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
 
       - name: Smoke data flow test
         run: |
@@ -54,6 +90,14 @@ jobs:
           chmod +x scripts/run-ci-local.sh
           REPORT_FILE=merge-report.md ./scripts/run-ci-local.sh --full
           cat merge-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
 
       - name: Upload report artifact
         if: always()

@@ -63,9 +63,9 @@ func TestAllFrozen(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	past := time.Now().Add(-time.Second)
 
-	c.Freeze("h", "svc-a", nil)        // permanent
-	c.Freeze("h", "svc-b", &future)    // future expiry
-	c.Freeze("h", "svc-c", &past)      // expired — should not appear
+	c.Freeze("h", "svc-a", nil)     // permanent
+	c.Freeze("h", "svc-b", &future) // future expiry
+	c.Freeze("h", "svc-c", &past)   // expired — should not appear
 
 	entries := c.AllFrozen()
 	if len(entries) != 2 {

@@ -69,13 +69,13 @@ func TestMigrateFromEnv(t *testing.T) {
 	s, _ := New(configPath, "key")
 
 	cfg := &config.Config{
-		Icinga2Host:     "icinga.example.com",
-		Icinga2User:     "root",
-		Icinga2Pass:     "mysecret",
-		HistoryFile:     "/tmp/history.jsonl",
+		Icinga2Host:       "icinga.example.com",
+		Icinga2User:       "root",
+		Icinga2Pass:       "mysecret",
+		HistoryFile:       "/tmp/history.jsonl",
 		HistoryMaxEntries: 100,
-		CacheTTLMinutes: 30,
-		LogLevel:        "info",
+		CacheTTLMinutes:   30,
+		LogLevel:          "info",
 		Targets: map[string]config.TargetConfig{
 			"t1": {ID: "t1", HostName: "host-1", Source: "grafana"},
 		},

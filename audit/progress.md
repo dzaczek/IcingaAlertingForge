@@ -8,23 +8,25 @@
 
 | Phase | Name | Status | Started | Completed | PR | Coverage Δ |
 |-------|------|--------|---------|-----------|-----|------------|
-| 0 | Bootstrap & Baseline | completed | 2026-05-13 | 2026-05-13 | [#113](https://github.com/dzaczek/IcingaAlertingForge/pull/113) | 0.0% (no code delta) |
-| 1 | Security Foundation | completed | 2026-05-13 | 2026-05-13 | [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114) | 0.0% (no code changes) |
-| 2a | Tests: auth, rbac, audit | pending | - | - | - | - |
-| 2b | Tests: handler, httputil | pending | - | - | - | - |
-| 2c | Tests: icinga, queue | pending | - | - | - | - |
-| 2d | Tests: config, configstore, models, cache | pending | - | - | - | - |
-| 2e | Tests: health, history, metrics | pending | - | - | - | - |
-| 3 | Frontend Tests | pending | - | - | - | - |
-| 4 | CI Pipeline Overhaul | pending | - | - | - | - |
-| 5 | Pre-commit & Dev Experience | pending | - | - | - | - |
-| 6 | Webhook Payload Fixtures | pending | - | - | - | - |
-| 7 | Observability | pending | - | - | - | - |
-| 8 | Integration & Load Tests | pending | - | - | - | - |
-| 9 | Release Automation | pending | - | - | - | - |
-| 10 | Hardening & Production | pending | - | - | - | - |
-| 11 | Documentation & Polish | pending | - | - | - | - |
-| 12 | Final Report | pending | - | - | - | - |
+| 0 | Bootstrap & Baseline | completed | 2026-05-13 | 2026-05-13 | [#113](https://github.com/dzaczek/IcingaAlertingForge/pull/113) | 0.0% |
+| 1 | Security Foundation | completed | 2026-05-13 | 2026-05-13 | [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114) | 0.0% |
+| 2a | Tests: auth, rbac, audit | completed | 2026-05-13 | 2026-05-13 | [#117](https://github.com/dzaczek/IcingaAlertingForge/pull/117) | +20.9% |
+| 2b | Tests: handler, httputil | completed | 2026-05-13 | 2026-05-13 | [#118](https://github.com/dzaczek/IcingaAlertingForge/pull/118) | +12.6% |
+| 2c | Tests: icinga, queue | skipped | - | - | - | already ≥70% |
+| 2d | Tests: config, configstore, models, cache | skipped | - | - | - | already ≥70% |
+| 2e | Tests: health, history, metrics | skipped | - | - | - | already ≥70% |
+| 3 | Frontend Tests | skipped | - | - | - | no JS files |
+| 4 | CI Pipeline Overhaul | completed | 2026-05-13 | 2026-05-13 | [#119](https://github.com/dzaczek/IcingaAlertingForge/pull/119) | — |
+| 5 | Pre-commit & Dev Experience | completed | 2026-05-13 | 2026-05-13 | [#120](https://github.com/dzaczek/IcingaAlertingForge/pull/120) | — |
+| 6 | Webhook Payload Fixtures | completed | 2026-05-13 | 2026-05-13 | [#121](https://github.com/dzaczek/IcingaAlertingForge/pull/121) | — |
+| 7 | Observability | completed | 2026-05-13 | 2026-05-13 | [#122](https://github.com/dzaczek/IcingaAlertingForge/pull/122) | — |
+| 8 | Integration & Load Tests | completed | 2026-05-13 | 2026-05-13 | [#123](https://github.com/dzaczek/IcingaAlertingForge/pull/123) | — |
+| 9 | Release Automation | completed | 2026-05-13 | 2026-05-13 | [#124](https://github.com/dzaczek/IcingaAlertingForge/pull/124) | — |
+| 10 | Hardening & Production | completed | 2026-05-13 | 2026-05-13 | [#125](https://github.com/dzaczek/IcingaAlertingForge/pull/125) | — |
+| 11 | Documentation & Polish | completed | 2026-05-13 | 2026-05-13 | [#126](https://github.com/dzaczek/IcingaAlertingForge/pull/126) | — |
+| 12 | Final Report | ✅ | 2026-05-13 | 2026-05-13 | current | — |
+
+**Project complete.** See [final-report.md](final-report.md).
 
 ## Blockers
 

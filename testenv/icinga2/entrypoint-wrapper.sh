@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Run custom init scripts before handing off to the original entrypoint
 
 # Import IDO MySQL schema if not yet done
@@ -24,5 +24,5 @@ else
     echo "IDO schema already exists."
 fi
 
-# Hand off to the original entrypoint
-exec /entrypoint "$@"
+# Hand off to CMD args (icinga2 daemon)
+exec "$@"

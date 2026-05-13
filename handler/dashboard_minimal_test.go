@@ -15,11 +15,11 @@ import (
 func TestDashboard_ServeHTTP_Basic(t *testing.T) {
 	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
 	h := &DashboardHandler{
-		Cache:    cache.NewServiceCache(60),
-		History:  histLogger,
-		Metrics:  metrics.NewCollector(),
-		Targets:  map[string]config.TargetConfig{},
-		Version:  "test",
+		Cache:     cache.NewServiceCache(60),
+		History:   histLogger,
+		Metrics:   metrics.NewCollector(),
+		Targets:   map[string]config.TargetConfig{},
+		Version:   "test",
 		AdminPass: "test",
 	}
 

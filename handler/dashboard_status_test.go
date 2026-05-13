@@ -13,14 +13,14 @@ import (
 
 func TestToDashboardAlert(t *testing.T) {
 	base := models.HistoryEntry{
-		RequestID: "req-1",
-		SourceKey: "grafana",
-		HostName:  "host-a",
-		Mode:      "work",
-		Action:    "firing",
+		RequestID:  "req-1",
+		SourceKey:  "grafana",
+		HostName:   "host-a",
+		Mode:       "work",
+		Action:     "firing",
 		ExitStatus: 2,
-		IcingaOK:  true,
-		Error:     "",
+		IcingaOK:   true,
+		Error:      "",
 	}
 
 	t.Run("critical status", func(t *testing.T) {

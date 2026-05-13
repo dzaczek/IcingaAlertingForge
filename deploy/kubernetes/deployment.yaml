@@ -1,0 +1,84 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: icingaalertforge
+  labels:
+    app: icingaalertforge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: icingaalertforge
+  template:
+    metadata:
+      labels:
+        app: icingaalertforge
+    spec:
+      serviceAccountName: icingaalertforge
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+        - name: bridge
+          image: ghcr.io/dzaczek/icingaalertingforge:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: ICINGA2_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: icingaalertforge-secrets
+                  key: icinga2_host
+            - name: ICINGA2_USER
+              valueFrom:
+                secretKeyRef:
+                  name: icingaalertforge-secrets
+                  key: icinga2_user
+            - name: ICINGA2_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: icingaalertforge-secrets
+                  key: icinga2_pass
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: icingaalertforge-secrets
+                  key: api_key
+            - name: ADMIN_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: icingaalertforge-secrets
+                  key: admin_pass
+            - name: LISTEN_ADDR
+              value: ":8080"
+            - name: GOMEMLIMIT
+              value: "256MiB"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      terminationGracePeriodSeconds: 30

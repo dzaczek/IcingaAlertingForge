@@ -15,12 +15,11 @@ COPY conf.d/users.conf /data-init/etc/icinga2/conf.d/users.conf
 COPY conf.d/notifications.conf /data-init/etc/icinga2/conf.d/notifications.conf
 COPY conf.d/ido-mysql.conf /data-init/etc/icinga2/features-available/ido-mysql.conf
 
-# Enable API feature
-RUN ln -sf /data-init/etc/icinga2/features-available/api.conf \
-           /data-init/etc/icinga2/features-enabled/api.conf
-
-# Enable IDO MySQL feature
-RUN ln -sf /data-init/etc/icinga2/features-available/ido-mysql.conf \
+# Enable API and IDO MySQL features
+RUN mkdir -p /data-init/etc/icinga2/features-enabled && \
+    ln -sf /data-init/etc/icinga2/features-available/api.conf \
+           /data-init/etc/icinga2/features-enabled/api.conf && \
+    ln -sf /data-init/etc/icinga2/features-available/ido-mysql.conf \
            /data-init/etc/icinga2/features-enabled/ido-mysql.conf
 
 # Generate CA and node certificates manually for the API to work

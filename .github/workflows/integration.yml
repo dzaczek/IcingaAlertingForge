@@ -31,7 +31,7 @@ jobs:
       - name: Start test environment
         run: |
           cd testenv
-          docker compose up -d --wait --timeout=120
+          docker compose up -d --wait --timeout=420
           echo "Test environment started"
 
       - name: Run integration tests

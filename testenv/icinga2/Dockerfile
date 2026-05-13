@@ -16,11 +16,17 @@ COPY conf.d/users.conf /data-init/etc/icinga2/conf.d/users.conf
 COPY conf.d/notifications.conf /data-init/etc/icinga2/conf.d/notifications.conf
 COPY conf.d/ido-mysql.conf /data-init/etc/icinga2/features-available/ido-mysql.conf
 
-# Enable API and IDO MySQL features
+# Copy api.conf from the base image package into data-init so it's
+# available in /data after volume init (base image has it at /etc/icinga2/).
+RUN cp /etc/icinga2/features-available/api.conf \
+       /data-init/etc/icinga2/features-available/api.conf
+
+# Enable API and IDO MySQL features using relative symlinks so they
+# resolve correctly after /data-init is copied to /data on first start.
 RUN mkdir -p /data-init/etc/icinga2/features-enabled && \
-    ln -sf /data-init/etc/icinga2/features-available/api.conf \
+    ln -sf ../features-available/api.conf \
            /data-init/etc/icinga2/features-enabled/api.conf && \
-    ln -sf /data-init/etc/icinga2/features-available/ido-mysql.conf \
+    ln -sf ../features-available/ido-mysql.conf \
            /data-init/etc/icinga2/features-enabled/ido-mysql.conf
 
 # Generate CA and node certificates manually for the API to work

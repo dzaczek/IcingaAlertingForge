@@ -1,7 +1,9 @@
 # IcingaAlertForge
 
 [![CI](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/ci.yml/badge.svg)](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/ci.yml)
+[![Security](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml/badge.svg)](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/dzaczek/IcingaAlertingForge/branch/main/graph/badge.svg)](https://codecov.io/gh/dzaczek/IcingaAlertingForge)
+
 
 ![IcingaAlertForge header](docs/img/header.png)
 

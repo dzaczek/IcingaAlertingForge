@@ -9,7 +9,7 @@
 | Phase | Name | Status | Started | Completed | PR | Coverage Δ |
 |-------|------|--------|---------|-----------|-----|------------|
 | 0 | Bootstrap & Baseline | completed | 2026-05-13 | 2026-05-13 | [#113](https://github.com/dzaczek/IcingaAlertingForge/pull/113) | 0.0% (no code delta) |
-| 1 | Security Foundation | pending | - | - | - | - |
+| 1 | Security Foundation | completed | 2026-05-13 | 2026-05-13 | [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114) | 0.0% (no code changes) |
 | 2a | Tests: auth, rbac, audit | pending | - | - | - | - |
 | 2b | Tests: handler, httputil | pending | - | - | - | - |
 | 2c | Tests: icinga, queue | pending | - | - | - | - |
@@ -72,3 +72,35 @@ See [blockers.md](blockers.md).
 | Packages | 14 + main |
 | Test files | 20 |
 | Dependencies | 42 entries in go.sum |
+
+## Phase 1 — Security Foundation
+
+- **Start:** 2026-05-13
+- **End:** 2026-05-13
+- **PR:** [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114)
+- **Coverage delta:** 0.0% (no production code changes)
+- **Files changed:** 4 (security.yml, .gitleaks.toml, README badge, progress.md)
+- **Issues opened:** 0
+- **Blockers:** None
+
+### Deliverables
+
+- [x] `.github/workflows/security.yml` — gitleaks, govulncheck, gosec, trivy scanners
+- [x] `.gitleaks.toml` — allowlist for docs/test fixtures (32 findings → 0 after allowlist)
+- [x] Security badge on README
+- [x] Dependabot already configured (gomod, docker, github-actions)
+- [x] CodeQL already present (separate workflow)
+- [x] govulncheck: no vulnerabilities found
+- [x] gitleaks: all 32 findings verified as false positives (example credentials in docs/testenv)
+- [x] gosec/trivy: will run in CI (local install blocked by git auth)
+
+### Security Posture (after Phase 1)
+
+| Check | Before | After |
+|-------|--------|-------|
+| Dependabot | Configured | No change |
+| CodeQL | Enabled | No change |
+| Secret scanning (gitleaks) | Not configured | Configured + allowlist |
+| Vuln scanning (govulncheck) | Not in CI | Weekly CI job |
+| SAST (gosec) | Not configured | CI job with SARIF upload |
+| Docker scanning (trivy) | Not configured | CI job with SARIF upload |

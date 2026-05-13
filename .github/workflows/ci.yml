@@ -80,9 +80,14 @@ jobs:
           retention-days: 7
 
   build:
-    name: build
+    name: build (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, darwin]
+        arch: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -92,8 +97,8 @@ jobs:
       - name: Build
         run: |
           VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
-          CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o ./webhook-bridge .
-          echo "Binary built: webhook-bridge (${VERSION})"
+          CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -ldflags "-X main.version=${VERSION}" -o ./webhook-bridge-${{ matrix.os }}-${{ matrix.arch }} .
+          echo "Binary built: webhook-bridge-${{ matrix.os }}-${{ matrix.arch }} (${VERSION})"
 
       - name: Trivy vulnerability scan (fs)
         uses: aquasecurity/trivy-action@master

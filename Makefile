@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  := webhook-bridge
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build docker run version tag release clean test test-unit test-race test-coverage lint ci smoke outdated vulncheck coverage
+.PHONY: build docker run version tag release clean test test-unit test-race test-coverage lint ci smoke outdated vulncheck coverage fuzz
 
 ## build — compile binary with version from git tag
 build:
@@ -90,6 +90,10 @@ outdated:
 		go list -u -m all 2>/dev/null | grep '\[.*\]'
 	@echo ""
 	@echo "Run 'go get -u ./...' to update, then 'go mod tidy'."
+
+## fuzz — run webhook parser fuzz tests for 5 minutes
+fuzz:
+	go test -fuzz=FuzzWebhookParse -fuzztime=5m ./models/
 
 ## setup-dev — install development dependencies (pre-commit, golangci-lint)
 setup-dev:

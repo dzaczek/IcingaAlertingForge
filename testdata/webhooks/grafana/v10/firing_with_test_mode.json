@@ -1,0 +1,20 @@
+{
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "TestDiskSpace",
+        "severity": "critical",
+        "instance": "db-01",
+        "mode": "test",
+        "test_action": "create"
+      },
+      "annotations": {
+        "summary": "TEST: disk space check for db-01"
+      },
+      "startsAt": "2026-05-13T10:30:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

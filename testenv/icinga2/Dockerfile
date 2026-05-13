@@ -5,6 +5,7 @@ USER root
 # IDO MySQL module is already built into the base image (libmysql_shim.so)
 # We only need the mariadb client for the init script
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
     mariadb-client \
     && rm -rf /var/lib/apt/lists/*
 

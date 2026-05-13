@@ -91,6 +91,13 @@ outdated:
 	@echo ""
 	@echo "Run 'go get -u ./...' to update, then 'go mod tidy'."
 
+## setup-dev — install development dependencies (pre-commit, golangci-lint)
+setup-dev:
+	@command -v pre-commit >/dev/null 2>&1 || { echo "Installing pre-commit..."; brew install pre-commit || pip install pre-commit; }
+	pre-commit install
+	@command -v golangci-lint >/dev/null 2>&1 || go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+	@echo "Development environment ready."
+
 ## clean — remove binary
 clean:
 	rm -f $(BINARY) webhook-bridge coverage.out merge-report.md

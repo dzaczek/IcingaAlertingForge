@@ -9,7 +9,7 @@
 | Phase | Name | Status | Started | Completed | PR | Coverage Δ |
 |-------|------|--------|---------|-----------|-----|------------|
 | 0 | Bootstrap & Baseline | completed | 2026-05-13 | 2026-05-13 | [#113](https://github.com/dzaczek/IcingaAlertingForge/pull/113) | 0.0% (no code delta) |
-| 1 | Security Foundation | completed | 2026-05-13 | 2026-05-13 | TBD | 0.0% (no code changes) |
+| 1 | Security Foundation | completed | 2026-05-13 | 2026-05-13 | [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114) | 0.0% (no code changes) |
 | 2a | Tests: auth, rbac, audit | pending | - | - | - | - |
 | 2b | Tests: handler, httputil | pending | - | - | - | - |
 | 2c | Tests: icinga, queue | pending | - | - | - | - |
@@ -77,7 +77,7 @@ See [blockers.md](blockers.md).
 
 - **Start:** 2026-05-13
 - **End:** 2026-05-13
-- **PR:** TBD
+- **PR:** [#114](https://github.com/dzaczek/IcingaAlertingForge/pull/114)
 - **Coverage delta:** 0.0% (no production code changes)
 - **Files changed:** 4 (security.yml, .gitleaks.toml, README badge, progress.md)
 - **Issues opened:** 0

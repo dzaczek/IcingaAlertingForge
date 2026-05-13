@@ -1,5 +1,6 @@
 # IcingaAlertForge
 
+[![Security](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml/badge.svg)](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml)
 ![IcingaAlertForge header](docs/img/header.png)
 
 **A webhook-to-Icinga2 bridge** — receives alerts from Grafana, Alertmanager, or any HTTP source and forwards them to Icinga2 as passive check results.

@@ -17,6 +17,7 @@ cp .env.example .env  # edit with your Icinga2 credentials
 ### Quick Start
 
 ```bash
+make setup-dev  # install pre-commit hooks + dev tools
 make build      # compile the binary
 make test       # run unit tests
 make lint       # run golangci-lint
@@ -61,6 +62,18 @@ make vulncheck        # govulncheck
 ```
 
 Configuration is in `.golangci.yml`. Do not weaken lint rules — fix the code.
+
+## Pre-commit Hooks
+
+Pre-commit hooks run automatically before each commit:
+
+```bash
+make setup-dev     # installs pre-commit, hooks, and golangci-lint
+```
+
+Hooks: go-fmt, go-imports, go-vet, golangci-lint, gitleaks, trailing-whitespace, end-of-file-fixer, check-yaml, check-merge-conflict, detect-private-key.
+
+Skip hooks in an emergency: `git commit --no-verify`. Do not skip in normal workflow.
 
 ## Documentation
 

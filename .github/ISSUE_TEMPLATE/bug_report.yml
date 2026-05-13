@@ -1,0 +1,55 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the sections below.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Which version are you running? (`webhook-bridge --version` or Docker tag)
+      placeholder: "e.g., v1.2.3"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide a minimal set of steps to trigger the bug.
+      placeholder: |
+        1. Start bridge with ...
+        2. Send webhook payload ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Paste any relevant log output. This will be rendered as code.
+      render: shell
+  - type: dropdown
+    id: source
+    attributes:
+      label: Alert source
+      options:
+        - Grafana
+        - Alertmanager
+        - Both
+        - N/A
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration (redacted)
+      description: Paste your .env or equivalent config with secrets redacted.
+      render: shell

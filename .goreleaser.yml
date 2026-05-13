@@ -1,0 +1,70 @@
+version: 2
+
+builds:
+  - id: webhook-bridge
+    main: .
+    binary: webhook-bridge
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - format: tar.gz
+    name_template: "icingaalertforge_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+      - docs/guides/*
+
+checksum:
+  name_template: "checksums.txt"
+
+sboms:
+  - artifacts: archive
+    args: ["$artifact", "-o", "$document"]
+
+changelog:
+  sort: asc
+  groups:
+    - title: Breaking Changes
+      regexp: "^.*!?:.*"
+      order: 0
+    - title: Features
+      regexp: "^feat(\(.*\))?:.*"
+      order: 1
+    - title: Fixes
+      regexp: "^fix(\(.*\))?:.*"
+      order: 2
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: dzaczek
+    name: IcingaAlertingForge
+  draft: false
+  prerelease: auto
+
+signs:
+  - cmd: cosign
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --yes
+      - --output-certificate=${certificate}
+      - --output-signature=${signature}
+      - ${artifact}
+    artifacts: checksum
+    output: true

@@ -1,0 +1,38 @@
+{
+  "version": "4",
+  "groupKey": "{}:{alertname=\"InstanceDown\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "icinga-webhook",
+  "groupLabels": {
+    "alertname": "InstanceDown"
+  },
+  "commonLabels": {
+    "alertname": "InstanceDown",
+    "severity": "critical",
+    "job": "blackbox"
+  },
+  "commonAnnotations": {
+    "summary": "Instance monitoring-gw-01 is down"
+  },
+  "externalURL": "https://alertmanager.example.com",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "InstanceDown",
+        "severity": "critical",
+        "instance": "monitoring-gw-01",
+        "job": "blackbox"
+      },
+      "annotations": {
+        "summary": "Instance monitoring-gw-01 is down",
+        "description": "Blackbox probe failed: connection refused"
+      },
+      "startsAt": "2026-05-13T10:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://prometheus.example.com/graph?g0.expr=probe_success%3D%3D0",
+      "fingerprint": "abc123def456"
+    }
+  ]
+}

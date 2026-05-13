@@ -1,0 +1,38 @@
+{
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighCPUUsage",
+        "severity": "critical",
+        "instance": "web-01",
+        "job": "node",
+        "grafana_folder": "Production"
+      },
+      "annotations": {
+        "summary": "CPU usage above 90% on web-01",
+        "description": "CPU has been critical for 5 minutes",
+        "runbook_url": "https://wiki.example.com/runbooks/high-cpu"
+      },
+      "startsAt": "2026-05-13T10:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighMemoryUsage",
+        "severity": "warning",
+        "instance": "web-02",
+        "job": "node",
+        "grafana_folder": "Production"
+      },
+      "annotations": {
+        "summary": "Memory usage above 80% on web-02",
+        "description": "Memory has been warning for 10 minutes"
+      },
+      "startsAt": "2026-05-13T10:05:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

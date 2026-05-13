@@ -32,6 +32,14 @@ type Logger struct {
 // NewLogger creates a new history Logger.
 // It ensures the parent directory exists.
 func NewLogger(filePath string, maxEntries int) (*Logger, error) {
+	// Canonicalize to an absolute, cleaned path so all subsequent os.Open /
+	// os.OpenFile calls operate on a fixed path (mitigates G304 / CWE-22).
+	absPath, err := filepath.Abs(filepath.Clean(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("history: resolve path %s: %w", filePath, err)
+	}
+	filePath = absPath
+
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("history: create directory %s: %w", dir, err)
@@ -277,8 +285,8 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp"
-	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
+	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)

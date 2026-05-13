@@ -1,0 +1,38 @@
+name: Feature Request
+description: Propose a new feature or enhancement
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the feature suggestion. Please describe the use case and how you'd expect it to work.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem would this feature solve? Is there a workaround today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work? Include API examples, config snippets, or UI sketches if relevant.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any alternative approaches you've thought about.
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Webhook ingestion
+        - Icinga2 integration
+        - Dashboard / UI
+        - Configuration
+        - CI / Build
+        - Documentation
+        - Security
+        - Observability / Metrics

@@ -1,0 +1,24 @@
+{
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "ServiceDown",
+        "severity": "critical",
+        "instance": "api-01",
+        "namespace": "production",
+        "service": "api-gateway",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "API Gateway is unreachable",
+        "description": "Health check failing for 3 minutes",
+        "dashboard_url": "https://grafana.example.com/d/api-gateway",
+        "silence_url": "https://alertmanager.example.com/silence"
+      },
+      "startsAt": "2026-05-13T11:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z"
+    }
+  ]
+}

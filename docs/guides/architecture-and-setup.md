@@ -172,3 +172,57 @@ If your Docker installation still uses the older `docker-compose` binary, that w
 ## Next Step
 
 Continue with [Configuration](configuration.md).
+
+## Architecture Diagrams
+
+### System Overview
+
+```mermaid
+graph LR
+    A[Grafana] -->|webhook POST| B[IcingaAlertForge]
+    C[Alertmanager] -->|webhook POST| B
+    D[custom/curl] -->|universal JSON| B
+    B -->|passive check| E[Icinga2]
+    B -->|metrics| F[Prometheus]
+    E -->|notifications| G[Email/Slack/PagerDuty]
+```
+
+### Webhook Flow
+
+```mermaid
+sequenceDiagram
+    participant G as Grafana
+    participant B as Bridge
+    participant I as Icinga2 API
+    participant Q as Retry Queue
+
+    G->>B: POST /webhook (JSON)
+    B->>B: Validate API key
+    B->>B: Parse alert(s)
+    B->>I: process-check-result
+    alt Success
+        I-->>B: 200 OK
+    else Failure
+        I-->>B: Error
+        B->>Q: Enqueue retry
+    end
+    B-->>G: 200 OK
+```
+
+### Component Map
+
+| Component | Package | Responsibility |
+|-----------|---------|---------------|
+| HTTP Server | `main.go` | Router, middleware, shutdown |
+| Auth | `auth/` | API key validation |
+| Webhook | `handler/webhook.go` | Alert ingestion |
+| Admin API | `handler/admin.go` | Dashboard REST API |
+| Icinga2 Client | `icinga/` | REST API client |
+| Models | `models/` | Grafana/Alertmanager types |
+| Cache | `cache/` | Service state, freeze |
+| Retry Queue | `queue/` | Exponential backoff |
+| History | `history/` | JSONL alert history |
+| Audit | `audit/` | JSON/CEF audit log |
+| RBAC | `rbac/` | Role-based access |
+| Metrics | `metrics/` | Prometheus collector |
+| Health | `health/` | Reverse health checker |

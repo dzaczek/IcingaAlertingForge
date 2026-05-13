@@ -1,0 +1,36 @@
+# gitleaks configuration — allowlist for known false positives
+# Docs, test fixtures, and example configs contain fake credentials for illustration.
+
+title = "IcingaAlertForge gitleaks config"
+
+[allowlist]
+description = "documentation and test fixture allowlist"
+paths = [
+  # Documentation contains example curl commands and config snippets
+  '''docs/''',
+  '''wiki/''',
+  '''README\.md''',
+  '''\.env\.example''',
+  # Test environment contains test credentials and fixtures
+  '''testenv/''',
+  # Smoke test scripts use test API keys
+  '''scripts/smoke-data-flow\.sh''',
+  # Go test files
+  '''_test\.go''',
+]
+regexes = [
+  # Generic example passwords used throughout Polish-language docs
+  '''Twoje-Haslo-API-Min-12-Znakow''',
+  '''twoj-skopiowany-klucz-api''',
+  '''haslo''',
+  '''my-secret-key-prod''',
+  '''test-key-grafana-local''',
+  '''INVALID-KEY''',
+  '''icinga-alertforge''',
+  '''icinga2-webhook-bridge''',
+  '''supersecret''',
+  '''changeme''',
+  # Icinga2 API example credentials
+  '''apiuser''',
+  '''apipassword''',
+]

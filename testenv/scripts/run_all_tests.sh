@@ -18,10 +18,10 @@ run_test() {
   echo "> TEST: $name"
   if $fn; then
     echo "  PASS"
-    ((PASS++))
+    PASS=$((PASS+1))
   else
     echo "  FAIL"
-    ((FAIL++))
+    FAIL=$((FAIL+1))
   fi
 }
 

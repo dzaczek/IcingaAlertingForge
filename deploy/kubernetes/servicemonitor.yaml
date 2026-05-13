@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: icingaalertforge
+  labels:
+    app: icingaalertforge
+spec:
+  selector:
+    matchLabels:
+      app: icingaalertforge
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      basicAuth:
+        username:
+          name: icingaalertforge-secrets
+          key: metrics_user
+        password:
+          name: icingaalertforge-secrets
+          key: metrics_pass

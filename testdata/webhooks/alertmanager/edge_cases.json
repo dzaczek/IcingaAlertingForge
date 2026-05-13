@@ -1,0 +1,12 @@
+{
+  "version": "4",
+  "groupKey": "{}:{}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "icinga-webhook",
+  "groupLabels": {},
+  "commonLabels": {},
+  "commonAnnotations": {},
+  "externalURL": "",
+  "alerts": []
+}

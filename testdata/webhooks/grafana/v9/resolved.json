@@ -1,0 +1,20 @@
+{
+  "status": "resolved",
+  "alerts": [
+    {
+      "status": "resolved",
+      "labels": {
+        "alertname": "HighCPUUsage",
+        "severity": "critical",
+        "instance": "web-01",
+        "job": "node",
+        "grafana_folder": "Production"
+      },
+      "annotations": {
+        "summary": "CPU usage back to normal on web-01"
+      },
+      "startsAt": "2026-05-13T10:00:00Z",
+      "endsAt": "2026-05-13T10:15:00Z"
+    }
+  ]
+}

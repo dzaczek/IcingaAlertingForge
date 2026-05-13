@@ -1,0 +1,52 @@
+{
+  "version": "4",
+  "groupKey": "{}:{severity=\"critical\"}",
+  "truncatedAlerts": 0,
+  "status": "firing",
+  "receiver": "icinga-webhook",
+  "groupLabels": {
+    "severity": "critical"
+  },
+  "commonLabels": {
+    "severity": "critical",
+    "team": "platform"
+  },
+  "commonAnnotations": {},
+  "externalURL": "https://alertmanager.example.com",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "DiskFull",
+        "severity": "critical",
+        "instance": "storage-01",
+        "mountpoint": "/data",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "Disk /data at 95% on storage-01",
+        "runbook": "https://wiki.example.com/disk-full"
+      },
+      "startsAt": "2026-05-13T11:00:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://prometheus.example.com/graph?g0.expr=disk_used_percent",
+      "fingerprint": "def789abc012"
+    },
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "CertExpiring",
+        "severity": "warning",
+        "instance": "ingress-01",
+        "team": "platform"
+      },
+      "annotations": {
+        "summary": "TLS certificate expires in 7 days on ingress-01"
+      },
+      "startsAt": "2026-05-13T11:05:00Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "https://prometheus.example.com/graph?g0.expr=cert_expiry_days",
+      "fingerprint": "ghi345jkl678"
+    }
+  ]
+}

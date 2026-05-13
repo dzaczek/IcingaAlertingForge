@@ -420,6 +420,7 @@ func (h *SettingsHandler) HandleTestIcinga(w http.ResponseWriter, r *http.Reques
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
+				// #nosec G402 -- configurable TLS skip for self-signed Icinga2 certificates
 				InsecureSkipVerify: sc.Icinga2TLSSkipVerify,
 			},
 		},

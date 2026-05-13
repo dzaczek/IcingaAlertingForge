@@ -1,0 +1,45 @@
+version: "3.9"
+
+# Production deployment example with resource limits and secrets via files.
+# Copy to docker-compose.override.yml and customize for your environment.
+
+services:
+  icingaalertforge:
+    image: ghcr.io/dzaczek/icingaalertingforge:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - LISTEN_ADDR=:8080
+      - ICINGA2_HOST=${ICINGA2_HOST}
+      - ICINGA2_USER=${ICINGA2_USER}
+      - GOMEMLIMIT=256MiB
+    secrets:
+      - icinga2_pass
+      - api_key
+      - admin_pass
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "65534:65534"
+
+secrets:
+  icinga2_pass:
+    file: ./secrets/icinga2_pass.txt
+  api_key:
+    file: ./secrets/api_key.txt
+  admin_pass:
+    file: ./secrets/admin_pass.txt

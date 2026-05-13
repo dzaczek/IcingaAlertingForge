@@ -285,7 +285,7 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp" // l.filePath is absolute and cleaned at construction
+	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
 	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
 	if err != nil {
 		f.Close()

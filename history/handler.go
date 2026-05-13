@@ -96,7 +96,7 @@ func (h *Handler) HandleExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filePath := h.logger.FilePath() // absolute, cleaned path set at construction
-	f, err := os.Open(filePath)    // #nosec G304 — path is server-side config, not user input
+	f, err := os.Open(filePath)     // #nosec G304 — path is server-side config, not user input
 	if err != nil {
 		if os.IsNotExist(err) {
 			w.Header().Set("Content-Type", "application/x-ndjson")

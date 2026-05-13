@@ -73,7 +73,8 @@ func NewAPIClient(baseURL, user, pass string, tlsSkipVerify bool) *APIClient {
 		TLSHandshakeTimeout:   5 * time.Second,
 		ResponseHeaderTimeout: 10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
-		TLSClientConfig:       &tls.Config{InsecureSkipVerify: tlsSkipVerify},
+		// #nosec G402 -- configurable TLS skip for self-signed Icinga2 certificates
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: tlsSkipVerify},
 	}
 	return &APIClient{
 		BaseURL: baseURL,

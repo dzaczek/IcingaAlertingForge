@@ -5,7 +5,7 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 BINARY  := webhook-bridge
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: build docker run version tag release clean test test-unit lint ci smoke outdated vulncheck coverage
+.PHONY: build docker run version tag release clean test test-unit test-race test-coverage lint ci smoke outdated vulncheck coverage
 
 ## build — compile binary with version from git tag
 build:
@@ -41,9 +41,18 @@ release:
 test:
 	go test -v -count=1 -race -timeout=120s -coverprofile=coverage.out ./...
 
+## test-race — run unit tests with race detector (no verbose output)
+test-race:
+	go test -count=1 -race -timeout=120s ./...
+
 ## test-unit — run unit tests with coverage only (no race, faster)
 test-unit:
 	go test -v -count=1 -timeout=120s -coverprofile=coverage.out ./...
+
+## test-coverage — run tests with race+coverage and print per-function report
+test-coverage:
+	go test -count=1 -race -timeout=120s -coverprofile=coverage.out -covermode=atomic ./...
+	go tool cover -func=coverage.out
 
 ## lint — go vet + golangci-lint (same as CI)
 lint:
@@ -70,13 +79,8 @@ smoke:
 	fi
 	./scripts/smoke-data-flow.sh
 
-## ci — run full CI pipeline locally (same checks as GitHub Actions)
-ci:
-	@if [ ! -x scripts/run-ci-local.sh ]; then \
-		echo "scripts/run-ci-local.sh not found or not executable"; \
-		exit 1; \
-	fi
-	./scripts/run-ci-local.sh --full
+## ci — run lint + test-race + test-coverage + build (mirrors GitHub Actions)
+ci: lint test-race test-coverage build
 
 ## outdated — check for outdated direct dependencies
 outdated:

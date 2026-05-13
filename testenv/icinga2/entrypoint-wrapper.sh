@@ -1,12 +1,5 @@
 #!/bin/sh
-# Run custom init scripts before handing off to icinga2 daemon
-
-# Initialize /data from /data-init on first start (replaces the base image entrypoint logic)
-if [ -d /data-init ] && [ ! -f /data/etc/icinga2/icinga2.conf ]; then
-    echo "Initializing /data from /data-init..."
-    cp -a /data-init/. /data/
-    echo "Data initialized."
-fi
+# Wait for MariaDB and import IDO schema, then start icinga2 daemon.
 
 MYSQL_OPTS="-h mariadb -u icinga2_ido -picinga2_idopass --ssl=FALSE icinga2_ido"
 

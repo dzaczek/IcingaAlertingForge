@@ -220,7 +220,9 @@ func (s *Store) Save() error {
 		return fmt.Errorf("configstore: write tmp: %w", err)
 	}
 	if err := os.Rename(tmp, s.filePath); err != nil {
-		os.Remove(tmp)
+		if rmErr := os.Remove(tmp); rmErr != nil {
+			slog.Warn("configstore: failed to remove temp file", "error", rmErr)
+		}
 		return fmt.Errorf("configstore: rename: %w", err)
 	}
 

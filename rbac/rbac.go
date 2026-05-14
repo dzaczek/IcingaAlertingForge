@@ -6,13 +6,14 @@
 package rbac
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Role defines the access level for a user.
@@ -137,8 +138,15 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 		return User{}, false
 	}
 
-	// Check if password is in "salt:hash" format
-	// The salt is 16 bytes (32 hex chars), hash is 32 bytes (64 hex chars), plus ':' = 97 chars
+	// Bcrypt hash (starts with $2a$)
+	if len(user.Password) >= 4 && user.Password[:4] == "$2a$" {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+			return User{}, false
+		}
+		return user, true
+	}
+
+	// Legacy: SHA-256 "salt:hash" format (salt is 16 bytes = 32 hex chars, hash = 64 hex chars, plus ':' = 97 chars)
 	if len(user.Password) == 97 && user.Password[32] == ':' {
 		saltHex := user.Password[:32]
 		hashHex := user.Password[33:]
@@ -147,8 +155,11 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 		if subtle.ConstantTimeCompare([]byte(expectedHash), []byte(hashHex)) != 1 {
 			return User{}, false
 		}
-	} else if subtle.ConstantTimeCompare([]byte(password), []byte(user.Password)) != 1 {
-		// Fallback for plaintext (e.g. from env)
+		return user, true
+	}
+
+	// Fallback: plaintext comparison (e.g. from env) — constant-time to prevent timing leaks
+	if subtle.ConstantTimeCompare([]byte(password), []byte(user.Password)) != 1 {
 		return User{}, false
 	}
 
@@ -207,8 +218,12 @@ func (m *Manager) ListUsers() []User {
 // AddUser adds or updates a user and persists the change.
 func (m *Manager) AddUser(user User) error {
 	m.mu.Lock()
-	// Hash password if not already hashed
-	if len(user.Password) != 97 || user.Password[32] != ':' {
+	// Hash password if not already hashed (bcrypt or legacy format)
+	if len(user.Password) >= 4 && user.Password[:4] == "$2a$" {
+		// already bcrypt-hashed
+	} else if len(user.Password) == 97 && user.Password[32] == ':' {
+		// already legacy SHA-256 hashed
+	} else {
 		user.Password = hashPassword(user.Password)
 	}
 
@@ -259,13 +274,11 @@ func ParseRole(s string) Role {
 }
 
 func hashPassword(password string) string {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		panic(fmt.Sprintf("rbac: crypto/rand.Read failed: %v", err))
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		panic(fmt.Sprintf("rbac: bcrypt.GenerateFromPassword failed: %v", err))
 	}
-	saltHex := hex.EncodeToString(salt)
-	hashHex := hashPasswordWithSalt(password, saltHex)
-	return saltHex + ":" + hashHex
+	return string(hash)
 }
 
 func hashPasswordWithSalt(password, saltHex string) string {

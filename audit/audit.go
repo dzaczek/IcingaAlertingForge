@@ -127,7 +127,9 @@ func (l *Logger) Log(event Event) {
 // Close shuts down the audit logger.
 func (l *Logger) Close() {
 	if l.file != nil {
-		l.file.Close()
+		if err := l.file.Close(); err != nil {
+			slog.Warn("Audit: failed to close log file", "error", err)
+		}
 	}
 }
 

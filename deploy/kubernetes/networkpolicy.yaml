@@ -1,0 +1,30 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: icingaalertforge
+spec:
+  podSelector:
+    matchLabels:
+      app: icingaalertforge
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: grafana
+        - podSelector:
+            matchLabels:
+              app: alertmanager
+      ports:
+        - port: 8080
+          protocol: TCP
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: icinga2
+      ports:
+        - port: 5665
+          protocol: TCP

@@ -1,0 +1,54 @@
+name: Integration
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "37 2 * * *"  # nightly at 02:37 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: integration-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build bridge
+        run: |
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+          CGO_ENABLED=0 go build -ldflags "-X main.version=${VERSION}" -o ./webhook-bridge .
+
+      - name: Start test environment
+        run: |
+          cd testenv
+          docker compose up -d --wait --timeout=420
+          echo "Test environment started"
+
+      - name: Run integration tests
+        run: |
+          cd testenv
+          chmod +x scripts/*.sh
+          ./scripts/run_all_tests.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          cd testenv
+          docker compose logs --tail=100 > testenv-logs.txt
+          cat testenv-logs.txt
+
+      - name: Tear down
+        if: always()
+        run: |
+          cd testenv
+          docker compose down -v --timeout=30

@@ -494,8 +494,8 @@ type HistoryStats struct {
 // stripPort removes the port from a host:port address, returning just the IP.
 func stripPort(addr string) string {
 	// Fast path for IPv4
-	if strings.Count(addr, ":") == 1 {
-		idx := strings.LastIndexByte(addr, ':')
+	// ⚡ Bolt: Use IndexByte/LastIndexByte instead of Count to avoid scanning the whole string
+	if idx := strings.LastIndexByte(addr, ':'); idx != -1 && strings.IndexByte(addr, ':') == idx {
 		return addr[:idx]
 	}
 

@@ -8,7 +8,9 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 ### `POST /webhook`
 
-Receives alerts from Grafana, Alertmanager, or custom sources.
+**Fast Track:** Receives alerts from external sources.
+
+**Deep Dive:** Receives webhook POST payloads from Grafana, Alertmanager, or custom sources. Parses the payload, maps it to a target host based on the `X-API-Key` header, and forwards the status to Icinga2.
 
 **Headers:**
 - `X-API-Key: <key>` (required)
@@ -37,7 +39,9 @@ Receives alerts from Grafana, Alertmanager, or custom sources.
 
 ### `GET /health`
 
-Health check endpoint.
+**Fast Track:** Health check endpoint.
+
+**Deep Dive:** Returns system status, version, uptime, and basic Icinga2 connectivity state.
 
 **Response:** `200 OK`
 ```json
@@ -46,23 +50,54 @@ Health check endpoint.
 
 ### `GET /status`
 
-Redirects to the beauty dashboard (`/status/beauty`).
+**Fast Track:** Redirects to the beauty dashboard.
+
+**Deep Dive:** Returns a `302 Found` to `/status/beauty`.
 
 ### `GET /status/beauty`
 
-Beauty dashboard (HTML, SSE-powered live updates).
+**Fast Track:** The beauty dashboard interface.
+
+**Deep Dive:** Serves the HTML, JS, and CSS for the main dashboard. Supports an optional `?admin=1` query parameter for the admin panel.
 
 ### `GET /status/beauty/events`
 
-SSE event stream for live dashboard updates.
+**Fast Track:** SSE event stream for live updates.
+
+**Deep Dive:** Server-Sent Events stream providing real-time dashboard updates. Emits `webhook` and `debug` events.
+
+### `GET /status/{service_name}`
+
+**Fast Track:** Queries one service state from cache and Icinga2.
+
+**Deep Dive:** Returns detailed state including `cache_state`, `exists_in_icinga`, and `last_check_result`. If multiple hosts are configured, the `?host=<host>` query parameter is mandatory.
+
+**Response:** `200 OK`
+```json
+{
+  "host": "host-a",
+  "service": "CPU",
+  "cache_state": "ready",
+  "exists_in_icinga": true,
+  "last_check_result": {
+    "exit_status": 2,
+    "output": "CRITICAL: CPU usage above 95%",
+    "timestamp": "2026-03-21T09:24:00Z"
+  }
+}
+```
 
 ### `GET /history`
 
-Recent alert history (HTML).
+**Fast Track:** Recent alert history.
+
+**Deep Dive:** Returns a JSON list of recent alerts. Supports query filters: `limit`, `service`, `source`, `host`, `mode`, `from`, `to`.
 
 ### `GET /history/export`
 
-Export history as JSON. Query params: `?format=json&limit=1000`.
+**Fast Track:** Export history as JSONL.
+
+**Deep Dive:** Downloads the raw JSONL file containing the alert history.
 
 ## Admin API
 
@@ -70,7 +105,9 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 
 ### `GET /admin/services`
 
-List cached services.
+**Fast Track:** Lists all managed services across configured target hosts.
+
+**Deep Dive:** Queries the cache and Icinga2 to return a combined list of all passive check services managed by the bridge. Accepts an optional `host` query parameter to filter by a specific target host.
 
 **Response:**
 ```json
@@ -79,11 +116,15 @@ List cached services.
 
 ### `DELETE /admin/services/{name}?host=<host>`
 
-Delete a service from Icinga2.
+**Fast Track:** Deletes a specific service from Icinga2.
+
+**Deep Dive:** Removes the specified service object from Icinga2 via its API and evicts it from the local bridge cache. If multiple hosts are configured, the `host` query parameter is mandatory to prevent ambiguous deletions.
 
 ### `POST /admin/services/{name}/status`
 
-Manually set a service's status.
+**Fast Track:** Manually sets the status of a specific service.
+
+**Deep Dive:** Sends a manual passive check result to Icinga2 for the specified service. The request body must include the `host`, `exit_status` (0=OK, 1=WARNING, 2=CRITICAL, 3=UNKNOWN), and `output` message.
 
 **Body:**
 ```json
@@ -92,16 +133,20 @@ Manually set a service's status.
 
 ### `POST /admin/services/bulk-delete`
 
-Bulk delete services.
+**Fast Track:** Bulk deletes services from Icinga2.
+
+**Deep Dive:** Accepts a list of objects specifying `host` and `service` and deletes all matching services from Icinga2 and local cache.
 
 **Body:**
 ```json
-{"services": ["svc1", "svc2"]}
+{"services": [{"host": "host-a", "service": "svc1"}, {"host": "host-b", "service": "svc2"}]}
 ```
 
 ### `POST /admin/services/{name}/freeze`
 
-Freeze/unfreeze a service. POST to freeze, DELETE to unfreeze.
+**Fast Track:** Freezes or unfreezes a specific service to prevent it from auto-resolving.
+
+**Deep Dive:** A frozen service will ignore subsequent OK check results (e.g., from an auto-resolving alert). POST to freeze, DELETE to unfreeze.
 
 **Body:**
 ```json
@@ -110,35 +155,51 @@ Freeze/unfreeze a service. POST to freeze, DELETE to unfreeze.
 
 ### `GET /admin/services/frozen`
 
-List frozen services.
+**Fast Track:** Lists all currently frozen services.
+
+**Deep Dive:** Returns a list of all frozen services across all hosts, along with their `frozen_until` timestamps.
 
 ### `GET /admin/queue`
 
-Retry queue statistics.
+**Fast Track:** Returns the current retry queue statistics.
+
+**Deep Dive:** Returns a JSON object with `size` representing the total number of queued webhooks, and `is_flushing`.
 
 ### `POST /admin/queue/flush`
 
-Flush the retry queue.
+**Fast Track:** Flushes the retry queue immediately.
+
+**Deep Dive:** Resets the backoff timers for all items in the retry queue and wakes up the background worker to process them immediately.
 
 ### `GET /admin/ratelimit`
 
-Rate limiter statistics.
+**Fast Track:** Returns the current rate limiter statistics.
+
+**Deep Dive:** Returns the current mutate and status slot usage for bounded concurrency API calls to Icinga2, plus the queue depth.
 
 ### `POST /admin/history/clear`
 
-Clear all history.
+**Fast Track:** Clears all history entries.
+
+**Deep Dive:** Truncates the history log file and clears the in-memory history ring buffer. This action is irreversible.
 
 ### `GET /admin/debug/toggle` | `POST /admin/debug/toggle`
 
-View or toggle API debug ring buffer.
+**Fast Track:** View or toggle API debug capture ring buffer.
+
+**Deep Dive:** When enabled via POST `{"enabled": true}`, recent HTTP requests and responses to/from Icinga2 are captured in memory for dashboard inspection.
 
 ### `GET /admin/users`
 
-List RBAC users.
+**Fast Track:** Returns a list of all RBAC users.
+
+**Deep Dive:** Returns a JSON object mapping usernames to their respective roles. Secrets/passwords are not returned.
 
 ### `POST /admin/users`
 
-Create an RBAC user.
+**Fast Track:** Creates or updates an RBAC user.
+
+**Deep Dive:** Upserts a user in the RBAC system. Requires `username`, `password`, and `role` (one of `admin`, `operator`, `viewer`) in the JSON body.
 
 **Body:**
 ```json
@@ -147,21 +208,29 @@ Create an RBAC user.
 
 ### `DELETE /admin/users/{username}`
 
-Delete an RBAC user.
+**Fast Track:** Deletes an RBAC user.
+
+**Deep Dive:** Removes the specified user from the RBAC system. Attempting to delete the currently authenticated user will fail.
 
 ## Settings API
 
 ### `GET /admin/settings`
 
-Get current configuration (secrets masked).
+**Fast Track:** Returns the current application configuration.
+
+**Deep Dive:** Returns the full configuration with secrets masked as `***`.
 
 ### `PATCH /admin/settings`
 
-Partially update configuration.
+**Fast Track:** Partially updates the configuration.
+
+**Deep Dive:** Only non-empty fields are applied. Password fields with value `***` are ignored (preserving the current value).
 
 ### `POST /admin/settings/targets`
 
-Add a new target.
+**Fast Track:** Adds a new target host mapping.
+
+**Deep Dive:** Auto-generates a UUID if `id` is empty and an API key if none is provided. Returns the new API key in cleartext (shown only once).
 
 **Body:**
 ```json
@@ -170,33 +239,47 @@ Add a new target.
 
 ### `DELETE /admin/settings/targets/{id}`
 
-Delete a target.
+**Fast Track:** Removes a target.
+
+**Deep Dive:** Deletes the target mapping and revokes all its API keys.
 
 ### `POST /admin/settings/targets/{id}/generate-key`
 
-Generate a new API key for a target.
+**Fast Track:** Generates a new API key for a target.
+
+**Deep Dive:** Creates a new key and returns it in cleartext (shown only once).
 
 ### `GET /admin/settings/targets/{id}/reveal-keys`
 
-Reveal API keys for a target (requires admin).
+**Fast Track:** Reveals API keys for a target.
+
+**Deep Dive:** Returns the unmasked API keys for a specific target. Admin-only.
 
 ### `POST /admin/settings/test-icinga`
 
-Test Icinga2 connectivity.
+**Fast Track:** Tests Icinga2 connectivity.
+
+**Deep Dive:** Uses the stored Icinga2 credentials to verify connection status and fetch the Icinga2 version.
 
 ### `GET /admin/settings/export`
 
-Export configuration as JSON (for backup).
+**Fast Track:** Exports configuration as JSON.
+
+**Deep Dive:** Downloads the full configuration as a JSON backup file. Secrets are included in cleartext for restore purposes.
 
 ### `POST /admin/settings/import`
 
-Import configuration from JSON.
+**Fast Track:** Imports configuration from JSON.
+
+**Deep Dive:** Restores configuration from a previously exported backup. Validates schema and target structure.
 
 ## Metrics
 
 ### `GET /metrics`
 
-Prometheus metrics endpoint. Requires Basic Auth.
+**Fast Track:** Prometheus metrics endpoint.
+
+**Deep Dive:** Exposes application and system metrics in Prometheus text format. Authentication defaults to Basic Auth, or Bearer token if `METRICS_TOKEN` is configured.
 
 ## Error Codes
 

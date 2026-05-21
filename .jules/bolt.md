@@ -61,3 +61,7 @@
 ## 2024-06-11 - Sequential synchronous queue external API calls
 **Learning:** `queue.Queue.Flush` and `queue.Queue.processReady` previously processed external API calls sequentially in a loop. For a large queue, the linear O(N) waiting time for HTTP API calls to Icinga2 resulted in slow throughput.
 **Action:** When processing external API calls in a loop within background workers, utilize bounded concurrent execution (using a semaphore channel like `sem := make(chan struct{}, limit)` alongside `sync.WaitGroup` and `sync.Mutex` to protect shared state). This parallelizes network delays and significantly improves queue flushing throughput without overwhelming the downstream API.
+
+## 2026-05-21 - Optimize IP port stripping using IndexByte
+**Learning:** For single-character occurrence checks like splitting ports from IPv4 addresses, using `strings.Count(addr, ":") == 1` requires scanning the entire string.
+**Action:** When performing IP port stripping in hot paths, avoid `strings.Count`. Instead, use `idx := strings.LastIndexByte(addr, ':')` and `strings.IndexByte(addr, ':') == idx` to quickly verify a single occurrence. This completely avoids full string scans and prevents overhead without allocating memory.

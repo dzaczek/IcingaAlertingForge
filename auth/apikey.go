@@ -1,18 +1,25 @@
 package auth
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
-	"crypto/subtle"
 
 	"icinga-webhook-bridge/config"
 )
 
 // SecureCompare performs a constant-time comparison of two strings
-// by hashing them first, preventing length leakage.
+// by hashing them first with HMAC, preventing length leakage.
 func SecureCompare(a, b string) bool {
-	hashA := sha256.Sum256([]byte(a))
-	hashB := sha256.Sum256([]byte(b))
-	return subtle.ConstantTimeCompare(hashA[:], hashB[:]) == 1
+	key := []byte("icinga-alert-forge-compare")
+	macA := hmac.New(sha256.New, key)
+	macA.Write([]byte(a))
+	hashA := macA.Sum(nil)
+
+	macB := hmac.New(sha256.New, key)
+	macB.Write([]byte(b))
+	hashB := macB.Sum(nil)
+
+	return hmac.Equal(hashA, hashB)
 }
 
 // KeyStore holds the mapping of API key values to their source identifiers.

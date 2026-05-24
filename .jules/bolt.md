@@ -61,3 +61,7 @@
 ## 2024-06-11 - Sequential synchronous queue external API calls
 **Learning:** `queue.Queue.Flush` and `queue.Queue.processReady` previously processed external API calls sequentially in a loop. For a large queue, the linear O(N) waiting time for HTTP API calls to Icinga2 resulted in slow throughput.
 **Action:** When processing external API calls in a loop within background workers, utilize bounded concurrent execution (using a semaphore channel like `sem := make(chan struct{}, limit)` alongside `sync.WaitGroup` and `sync.Mutex` to protect shared state). This parallelizes network delays and significantly improves queue flushing throughput without overwhelming the downstream API.
+
+## 2024-06-12 - Fast path single-character occurrence checks
+**Learning:** `strings.Count(addr, ":") == 1` performs a full scan of the string even if the character occurs at the very beginning. For simple single-occurrence checks, using `idx := strings.LastIndexByte(addr, ':')` and verifying it matches `strings.IndexByte(addr, ':') == idx` avoids a full string scan and reduces processing time, especially on long strings.
+**Action:** When validating that a character only appears once in a string, avoid `strings.Count`. Use `IndexByte` and `LastIndexByte` comparisons to check single occurrences and prevent full string scanning.

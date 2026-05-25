@@ -1,10 +1,26 @@
 package auth
 
 import (
-	"crypto/subtle"
+	"crypto/hmac"
+	"crypto/sha256"
 
 	"icinga-webhook-bridge/config"
 )
+
+// SecureCompare performs a constant-time comparison of two strings
+// by hashing them first with HMAC, preventing length leakage.
+func SecureCompare(a, b string) bool {
+	key := []byte("icinga-alert-forge-compare")
+	macA := hmac.New(sha256.New, key)
+	macA.Write([]byte(a))
+	hashA := macA.Sum(nil)
+
+	macB := hmac.New(sha256.New, key)
+	macB.Write([]byte(b))
+	hashB := macB.Sum(nil)
+
+	return hmac.Equal(hashA, hashB)
+}
 
 // KeyStore holds the mapping of API key values to their source identifiers.
 type KeyStore struct {
@@ -25,9 +41,8 @@ func (ks *KeyStore) ValidateKey(key string) (route config.WebhookRoute, ok bool)
 
 	var matched config.WebhookRoute
 	found := false
-	keyBytes := []byte(key)
 	for k, r := range ks.routes {
-		if subtle.ConstantTimeCompare(keyBytes, []byte(k)) == 1 {
+		if SecureCompare(key, k) {
 			matched = r
 			found = true
 		}

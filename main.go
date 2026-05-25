@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/subtle"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -340,8 +340,8 @@ func main() {
 				return
 			}
 			// Check primary admin
-			primaryOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) == 1 &&
-				subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) == 1
+			primaryOK := auth.SecureCompare(user, cfg.AdminUser) &&
+				auth.SecureCompare(pass, cfg.AdminPass)
 			// Check RBAC users
 			rbacOK := false
 			if !primaryOK && rbacManager != nil {
@@ -380,7 +380,7 @@ func main() {
 					authHeader := r.Header.Get("Authorization")
 					if strings.HasPrefix(authHeader, "Bearer ") {
 						token := strings.TrimPrefix(authHeader, "Bearer ")
-						if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.MetricsToken)) == 1 {
+						if auth.SecureCompare(token, cfg.MetricsToken) {
 							next.ServeHTTP(w, r)
 							return
 						}
@@ -394,8 +394,8 @@ func main() {
 					httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 					return
 				}
-				primaryOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.AdminUser)) == 1 &&
-					subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.AdminPass)) == 1
+				primaryOK := auth.SecureCompare(user, cfg.AdminUser) &&
+					auth.SecureCompare(pass, cfg.AdminPass)
 
 				rbacOK := false
 				if !primaryOK && rbacManager != nil {

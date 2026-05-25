@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy configuration directly into /data/etc/icinga2/conf.d/ so Docker's
 # volume initialisation (which seeds from the container's /data filesystem)
 # includes our files on first start.
-COPY conf.d/api.conf           /data/etc/icinga2/conf.d/api.conf
 COPY conf.d/api-users.conf     /data/etc/icinga2/conf.d/api-users.conf
 COPY conf.d/hosts.conf         /data/etc/icinga2/conf.d/hosts.conf
 COPY conf.d/users.conf         /data/etc/icinga2/conf.d/users.conf

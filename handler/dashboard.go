@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/audit"
+	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/health"

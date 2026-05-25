@@ -1,7 +1,6 @@
 package handler
 
 import (
-
 	"encoding/json"
 	"errors"
 	"icinga-webhook-bridge/httputil"

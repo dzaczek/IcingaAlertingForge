@@ -20,7 +20,10 @@ COPY conf.d/ido-mysql.conf     /data/etc/icinga2/features-available/ido-mysql.co
 # Enable IDO MySQL feature and the API feature (via symlink)
 RUN mkdir -p /data/etc/icinga2/features-enabled && \
     ln -sf ../features-available/ido-mysql.conf \
-           /data/etc/icinga2/features-enabled/ido-mysql.conf
+           /data/etc/icinga2/features-enabled/ido-mysql.conf && \
+    rm -f /data/etc/icinga2/features-enabled/api.conf && \
+    ln -sf ../features-available/api.conf \
+           /data/etc/icinga2/features-enabled/api.conf
 
 # Generate TLS certs into /data/var/lib/icinga2/certs/
 RUN mkdir -p /data/var/lib/icinga2/certs /data/var/lib/icinga2/ca && \

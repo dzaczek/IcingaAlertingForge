@@ -71,7 +71,7 @@ jobs:
           fi
           echo "PASS: coverage ${COVERAGE}% meets threshold ${THRESHOLD}%"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-${{ matrix.go }}
@@ -162,7 +162,7 @@ jobs:
           REPORT_FILE=merge-report.md ./scripts/run-ci-local.sh --full
           cat merge-report.md >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: merge-report

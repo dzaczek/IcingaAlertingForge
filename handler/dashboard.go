@@ -2,7 +2,6 @@ package handler
 
 import (
 	"bytes"
-	"crypto/subtle"
 	"fmt"
 	"html/template"
 	"icinga-webhook-bridge/httputil"
@@ -22,6 +21,8 @@ import (
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
 	"icinga-webhook-bridge/rbac"
+
+	"icinga-webhook-bridge/auth"
 )
 
 // DashboardHandler serves the GET /status/beauty HTML dashboard
@@ -154,8 +155,8 @@ func (h *DashboardHandler) isAdmin(r *http.Request) bool {
 		return false
 	}
 	// Check primary admin credentials
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.AdminUser)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.AdminPass)) == 1
+	userOK := auth.SecureCompare(user, h.AdminUser)
+	passOK := auth.SecureCompare(pass, h.AdminPass)
 	if userOK && passOK {
 		return true
 	}
@@ -365,7 +366,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var userRole rbac.Role
 	if isAdmin {
 		authUser, _, _ := r.BasicAuth()
-		isPrimaryAdmin := subtle.ConstantTimeCompare([]byte(authUser), []byte(h.AdminUser)) == 1
+		isPrimaryAdmin := auth.SecureCompare(authUser, h.AdminUser)
 		if isPrimaryAdmin {
 			userRole = rbac.RoleAdmin
 		} else if h.RBAC != nil {

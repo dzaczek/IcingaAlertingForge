@@ -2,7 +2,6 @@ package handler
 
 import (
 	"crypto/rand"
-	"crypto/subtle"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +19,8 @@ import (
 	"icinga-webhook-bridge/rbac"
 
 	"github.com/google/uuid"
+
+	"icinga-webhook-bridge/auth"
 )
 
 // SettingsHandler serves REST API endpoints for managing configuration
@@ -47,8 +48,8 @@ func (h *SettingsHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool
 	}
 
 	// Check primary admin credentials
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
+	userOK := auth.SecureCompare(user, h.User)
+	passOK := auth.SecureCompare(pass, h.Pass)
 	if userOK && passOK {
 		return true
 	}

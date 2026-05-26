@@ -7,13 +7,14 @@ package rbac
 
 import (
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"icinga-webhook-bridge/auth"
 )
 
 // Role defines the access level for a user.
@@ -152,14 +153,14 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 		hashHex := user.Password[33:]
 
 		expectedHash := hashPasswordWithSalt(password, saltHex)
-		if subtle.ConstantTimeCompare([]byte(expectedHash), []byte(hashHex)) != 1 {
+		if !auth.SecureCompare(expectedHash, hashHex) {
 			return User{}, false
 		}
 		return user, true
 	}
 
 	// Fallback: plaintext comparison (e.g. from env) — constant-time to prevent timing leaks
-	if subtle.ConstantTimeCompare([]byte(password), []byte(user.Password)) != 1 {
+	if !auth.SecureCompare(password, user.Password) {
 		return User{}, false
 	}
 

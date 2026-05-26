@@ -20,7 +20,6 @@ COPY conf.d/ido-mysql.conf     /data/etc/icinga2/features-available/ido-mysql.co
 # Enable IDO MySQL feature and the API feature (via symlink)
 RUN mkdir -p /data/etc/icinga2/features-enabled && \
     ln -sf ../features-available/ido-mysql.conf \
-           /data/etc/icinga2/features-enabled/ido-mysql.conf && \
     rm -f /data/etc/icinga2/features-enabled/api.conf && \
     ln -sf ../features-available/api.conf \
            /data/etc/icinga2/features-enabled/api.conf

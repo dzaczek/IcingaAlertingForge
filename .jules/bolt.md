@@ -65,3 +65,6 @@
 ## 2024-06-11 - Single character occurrence checks
 **Learning:** Using `strings.Count(s, ":") == 1` to check for a single character occurrence scans the entire string unnecessarily, introducing extra overhead especially on long strings.
 **Action:** Use `idx := strings.LastIndexByte(s, ':')` and `strings.IndexByte(s, ':') == idx` for O(1) early exit checks instead of `strings.Count`.
+## 2024-04-05 - Lexicographical sorting optimization for FrozenEntry
+**Learning:** `cache.ServiceCache.AllFrozen()` sorted entries using a multi-field comparison (`Host` then `Service`). However, by adding the composite `Key` field (`Host + \x1f + Service`) with a stable, low-byte separator to `FrozenEntry`, a direct lexicographical comparison of the `Key` field is functionally equivalent but significantly faster, as it avoids branching and multiple string comparisons. This aligns with the previous learning for `AllEntries()`.
+**Action:** When returning objects that share a stable composite string key with a low-byte separator, always populate and use this key for single-string lexicographical sorting over multi-field comparisons to optimize sort operations.

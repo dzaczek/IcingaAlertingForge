@@ -19,6 +19,11 @@ import (
 	"icinga-webhook-bridge/models"
 )
 
+const (
+	recentEntriesLimit = 20
+	recentErrorsLimit  = 10
+)
+
 // Logger provides thread-safe JSONL history logging with rotation and filtering.
 type Logger struct {
 	mu          sync.RWMutex
@@ -26,6 +31,7 @@ type Logger struct {
 	maxEntries  int
 	appendCount atomic.Int64 // tracks appends since last rotation check
 	rotateEvery int64        // check rotation every N appends
+	entryCount  atomic.Int64 // in-memory count of current entries
 	cancelMaint context.CancelFunc
 }
 
@@ -49,6 +55,10 @@ func NewLogger(filePath string, maxEntries int) (*Logger, error) {
 		filePath:    filePath,
 		maxEntries:  maxEntries,
 		rotateEvery: 100, // check rotation every 100 appends
+	}
+	// Seed the in-memory entry counter from the existing file
+	if count, err := l.countLines(); err == nil {
+		l.entryCount.Store(int64(count))
 	}
 
 	return l, nil
@@ -104,6 +114,7 @@ func (l *Logger) Append(entry models.HistoryEntry) error {
 
 	// Trigger inline rotation check every N appends (bounded, no goroutine)
 	count := l.appendCount.Add(1)
+	l.entryCount.Add(1)
 	if count%l.rotateEvery == 0 {
 		l.rotateLockedInline()
 	}
@@ -120,6 +131,7 @@ func (l *Logger) Clear() error {
 		return fmt.Errorf("history: truncate file: %w", err)
 	}
 	l.appendCount.Store(0)
+	l.entryCount.Store(0)
 	slog.Info("History cleared", "file", l.filePath)
 	return nil
 }
@@ -271,9 +283,14 @@ func (l *Logger) rotateIfNeeded() {
 
 // rotateLockedInline performs rotation while the lock is already held.
 func (l *Logger) rotateLockedInline() {
-	// Fast path: avoid expensive processing if the file doesn't need rotation.
+	// Fast path: use in-memory counter to avoid scanning the file
+	if int(l.entryCount.Load()) <= l.maxEntries {
+		return
+	}
+
 	lineCount, err := l.countLines()
 	if err != nil || lineCount <= l.maxEntries {
+		l.entryCount.Store(int64(lineCount))
 		return
 	}
 
@@ -363,6 +380,7 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
+	l.entryCount.Store(int64(kept))
 	slog.Info("history: rotated file", "kept", kept, "max", l.maxEntries)
 }
 
@@ -371,10 +389,36 @@ func (l *Logger) FilePath() string {
 	return l.filePath
 }
 
-// Stats returns aggregate statistics from the history.
-func (l *Logger) Stats() (HistoryStats, error) {
+// UpdateConfig changes the history file path and/or max entries at runtime.
+// If maxEntries is lowered, an immediate rotation trims the file.
+func (l *Logger) UpdateConfig(filePath string, maxEntries int) error {
+	absPath, err := filepath.Abs(filepath.Clean(filePath))
+	if err != nil {
+		return fmt.Errorf("history: resolve new path %s: %w", filePath, err)
+	}
+	dir := filepath.Dir(absPath)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("history: create new directory %s: %w", dir, err)
+	}
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	l.filePath = absPath
+	l.maxEntries = maxEntries
+	l.appendCount.Store(0)
+
+	// Trim immediately if the new limit is smaller than current count
+	l.rotateLockedInline()
+
+	slog.Info("History config updated", "path", absPath, "max_entries", maxEntries)
+	return nil
+}
+
+// Stats returns aggregate statistics from the history.
+func (l *Logger) Stats() (HistoryStats, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
 
 	stats := HistoryStats{
 		TotalEntries:       0,
@@ -392,11 +436,11 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 	// We want newest recent entries/errors, but we are reading oldest to newest.
 	// So we keep ring buffers to avoid O(N) slice shifting, and unroll/reverse at the end.
-	recentEntriesBuf := make([]models.HistoryEntry, 100)
+	recentEntriesBuf := make([]models.HistoryEntry, recentEntriesLimit)
 	recentEntriesPos := 0
 	recentEntriesTotal := 0
 
-	recentErrorsBuf := make([]models.HistoryEntry, 10)
+	recentErrorsBuf := make([]models.HistoryEntry, recentErrorsLimit)
 	recentErrorsPos := 0
 	recentErrorsTotal := 0
 
@@ -432,12 +476,12 @@ func (l *Logger) Stats() (HistoryStats, error) {
 		}
 
 		recentEntriesBuf[recentEntriesPos] = e
-		recentEntriesPos = (recentEntriesPos + 1) % 20
+		recentEntriesPos = (recentEntriesPos + 1) % recentEntriesLimit
 		recentEntriesTotal++
 
 		if !e.IcingaOK || e.Error != "" {
 			recentErrorsBuf[recentErrorsPos] = e
-			recentErrorsPos = (recentErrorsPos + 1) % 10
+			recentErrorsPos = (recentErrorsPos + 1) % recentErrorsLimit
 			recentErrorsTotal++
 		}
 
@@ -454,20 +498,20 @@ func (l *Logger) Stats() (HistoryStats, error) {
 
 	// Unroll the ring buffers to get newest first
 	recentEntriesCount := recentEntriesTotal
-	if recentEntriesCount > 20 {
-		recentEntriesCount = 20
+	if recentEntriesCount > recentEntriesLimit {
+		recentEntriesCount = recentEntriesLimit
 	}
 	for i := 0; i < recentEntriesCount; i++ {
-		idx := (recentEntriesPos - 1 - i + 20) % 20
+		idx := (recentEntriesPos - 1 - i + recentEntriesLimit) % recentEntriesLimit
 		stats.RecentEntries = append(stats.RecentEntries, recentEntriesBuf[idx])
 	}
 
 	recentErrorsCount := recentErrorsTotal
-	if recentErrorsCount > 10 {
-		recentErrorsCount = 10
+	if recentErrorsCount > recentErrorsLimit {
+		recentErrorsCount = recentErrorsLimit
 	}
 	for i := 0; i < recentErrorsCount; i++ {
-		idx := (recentErrorsPos - 1 - i + 10) % 10
+		idx := (recentErrorsPos - 1 - i + recentErrorsLimit) % recentErrorsLimit
 		stats.RecentErrors = append(stats.RecentErrors, recentErrorsBuf[idx])
 	}
 

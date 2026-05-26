@@ -277,3 +277,8 @@ func (c *PrometheusCollector) UpdateComponents(q *queue.Queue, rl *icinga.RateLi
 	c.rateLimiter = rl
 	c.health = h
 }
+
+// SetHistory updates the history logger reference (for hot-reload scenarios).
+func (c *PrometheusCollector) SetHistory(l *history.Logger) {
+	c.history = l
+}

@@ -517,11 +517,15 @@ func main() {
 			adminHandler.User = newCfg.AdminUser
 			adminHandler.Pass = newCfg.AdminPass
 			settingsHandler.User = newCfg.AdminUser
-			settingsHandler.Pass = newCfg.AdminPass
+		settingsHandler.Pass = newCfg.AdminPass
 
-			slog.Info("Configuration hot-reload complete",
-				"targets", len(newCfg.Targets),
-				"routes", len(newCfg.WebhookRoutes))
+		if err := historyLogger.UpdateConfig(newCfg.HistoryFile, newCfg.HistoryMaxEntries); err != nil {
+			slog.Error("Failed to update history logger config on reload", "error", err)
+		}
+
+		slog.Info("Configuration hot-reload complete",
+			"targets", len(newCfg.Targets),
+			"routes", len(newCfg.WebhookRoutes))
 		}
 		mux.HandleFunc("/admin/settings/export", settingsHandler.HandleExportConfig)
 		mux.HandleFunc("/admin/settings/import", settingsHandler.HandleImportConfig)

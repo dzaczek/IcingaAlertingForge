@@ -108,12 +108,40 @@ scrape_configs:
 
 ## Grafana Dashboard
 
-Import `docs/grafana/icingaalertforge-dashboard.json` for a pre-built dashboard covering:
-- Request rate, latency, error rate
-- Queue depth and retry activity
-- Per-source traffic breakdown
-- Icinga2 health status
-- Go runtime metrics
+The `IAF Operations Analytics` dashboard is auto-provisioned in the test environment at `http://localhost:3000`.
+
+Dashboard file: [`testenv/grafana/dashboards/iaf-operations-analytics.json`](../../testenv/grafana/dashboards/iaf-operations-analytics.json)
+
+### Sections
+
+| Section | Content |
+|---|---|
+| Executive Overview | RPM, error rate, p95 latency, history entries, queue saturation, Icinga2 health, brute-force IPs, RL queue, consecutive failures |
+| Traffic & Reliability | RPM time series with 7d/14d/28d overlays, error rate trend, latency p50/p95/p99 |
+| History & Alert Flow | By action, by mode, by severity (firing), history errors, avg duration, all entries by severity |
+| Per-Source Analysis | Source breakdown table (requests, errors, error rate, history entries, last seen), RPM by source, history entries by source |
+| Queue & Rate Limiter | Queue depth vs max, queue throughput (retried/dropped/failed), rate limiter saturation, rate limiter queue |
+| Security & Auth | Auth failure rate, brute-force active IPs, cumulative failures |
+| Runtime & Capacity | Goroutines, memory (heap/alloc/sys/stack), GC activity, uptime |
+| Health | Icinga2 health state timeline, consecutive failures |
+
+### Time Comparisons
+
+Key panels overlay `offset 7d`, `offset 14d`, and `offset 28d` series for trend comparison. A Prometheus recording rule at [`testenv/prometheus/recording-rules.yml`](../../testenv/prometheus/recording-rules.yml) pre-computes the reference-day offset with day-of-week logic:
+
+| Today | Reference day | Offset |
+|---|---|---|
+| Monday | Previous Friday | 3d |
+| Saturday | Previous Saturday | 7d |
+| Sunday | Previous Sunday | 7d |
+| Tuesday–Friday | Previous day | 1d |
+
+### Import to Existing Grafana
+
+1. Copy `testenv/grafana/dashboards/iaf-operations-analytics.json` to your Grafana instance
+2. Import via Grafana UI: Dashboards → New → Import
+3. Select your Prometheus datasource
+4. Optionally copy `testenv/prometheus/recording-rules.yml` to your Prometheus server for the pre-computed aggregates
 
 ## Alerting Recommendations
 

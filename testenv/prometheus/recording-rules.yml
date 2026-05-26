@@ -1,0 +1,44 @@
+# IcingaAlertForge — Prometheus recording rules
+# Reference day offset for day-of-week comparison logic:
+#   Monday → compare to previous Friday  (offset 3d)
+#   Saturday → compare to previous Saturday (offset 7d)
+#   Sunday → compare to previous Sunday (offset 7d)
+#   Tuesday–Friday → compare to previous day (offset 1d)
+
+groups:
+  - name: iaf_reference_day
+    interval: 5m
+    rules:
+      # Compute the reference-day offset in days for the current day of week.
+      # 0=Sunday, 1=Monday, ... 6=Saturday in Prometheus time functions.
+      - record: iaf_dashboard:compare_offset_days
+        expr: |
+          (
+            (day_of_week() == 1) * 3 +
+            (day_of_week() == 0) * 7 +
+            (day_of_week() == 6) * 7 +
+            (day_of_week() == 2) * 1 +
+            (day_of_week() == 3) * 1 +
+            (day_of_week() == 4) * 1 +
+            (day_of_week() == 5) * 1
+          ) or vector(1)
+
+  - name: iaf_aggregates
+    interval: 1m
+    rules:
+      # Error rate percentage over 5-minute window
+      - record: iaf_dashboard:error_rate_pct
+        expr: |
+          rate(iaf_errors_total[5m]) / rate(iaf_requests_total[5m]) * 100
+
+      # Requests per minute (5m average)
+      - record: iaf_dashboard:rpm_5m
+        expr: rate(iaf_requests_total[5m]) * 60
+
+      # Queue saturation ratio
+      - record: iaf_dashboard:queue_saturation
+        expr: iaf_queue_depth / iaf_queue_max_size
+
+      # Rate limiter saturation by type
+      - record: iaf_dashboard:ratelimiter_saturation
+        expr: iaf_ratelimiter_slots_in_use / iaf_ratelimiter_slots_max

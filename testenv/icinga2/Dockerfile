@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy configuration directly into /data/etc/icinga2/conf.d/ so Docker's
 # volume initialisation (which seeds from the container's /data filesystem)
 # includes our files on first start.
-COPY conf.d/api.conf           /data/etc/icinga2/conf.d/api.conf
 COPY conf.d/api-users.conf     /data/etc/icinga2/conf.d/api-users.conf
 COPY conf.d/hosts.conf         /data/etc/icinga2/conf.d/hosts.conf
 COPY conf.d/users.conf         /data/etc/icinga2/conf.d/users.conf
@@ -20,7 +19,7 @@ COPY conf.d/ido-mysql.conf     /data/etc/icinga2/features-available/ido-mysql.co
 # Enable IDO MySQL feature and the API feature (via symlink)
 RUN mkdir -p /data/etc/icinga2/features-enabled && \
     ln -sf ../features-available/ido-mysql.conf \
-    rm -f /data/etc/icinga2/features-enabled/api.conf && \
+           /data/etc/icinga2/features-enabled/ido-mysql.conf && \
     ln -sf ../features-available/api.conf \
            /data/etc/icinga2/features-enabled/api.conf
 
@@ -45,7 +44,8 @@ RUN mkdir -p /data/var/lib/icinga2/certs /data/var/lib/icinga2/ca && \
     rm -f /tmp/icinga2.csr
 
 COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
-RUN chmod +x /entrypoint-wrapper.sh
+COPY setup-api.sh /setup-api.sh
+RUN chmod +x /entrypoint-wrapper.sh /setup-api.sh
 
 USER icinga
 

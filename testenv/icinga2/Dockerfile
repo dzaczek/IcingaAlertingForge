@@ -17,33 +17,16 @@ COPY conf.d/users.conf         /data/etc/icinga2/conf.d/users.conf
 COPY conf.d/notifications.conf /data/etc/icinga2/conf.d/notifications.conf
 COPY conf.d/ido-mysql.conf     /data/etc/icinga2/features-available/ido-mysql.conf
 
-# Enable IDO MySQL feature and the API feature (via symlink)
+# Enable IDO MySQL feature. Remove stale api.conf symlink (ApiListener is
+# defined in conf.d/api.conf instead — the base-image symlink points to a
+# non-existent /data-init path).
 RUN mkdir -p /data/etc/icinga2/features-enabled && \
     ln -sf ../features-available/ido-mysql.conf \
            /data/etc/icinga2/features-enabled/ido-mysql.conf && \
-    rm -f /data/etc/icinga2/features-enabled/api.conf && \
-    ln -sf ../features-available/api.conf \
-           /data/etc/icinga2/features-enabled/api.conf
+    rm -f /data/etc/icinga2/features-enabled/api.conf
 
-# Generate TLS certs into /data/var/lib/icinga2/certs/
-RUN mkdir -p /data/var/lib/icinga2/certs /data/var/lib/icinga2/ca && \
-    openssl genrsa -out /data/var/lib/icinga2/ca/ca.key 4096 && \
-    openssl req -x509 -new -nodes -key /data/var/lib/icinga2/ca/ca.key \
-      -sha256 -days 3650 -out /data/var/lib/icinga2/ca/ca.crt \
-      -subj "/CN=Icinga CA" && \
-    openssl genrsa -out /data/var/lib/icinga2/certs/icinga2.key 4096 && \
-    openssl req -new -key /data/var/lib/icinga2/certs/icinga2.key \
-      -out /tmp/icinga2.csr -subj "/CN=icinga2" && \
-    openssl x509 -req -in /tmp/icinga2.csr \
-      -CA /data/var/lib/icinga2/ca/ca.crt \
-      -CAkey /data/var/lib/icinga2/ca/ca.key \
-      -CAcreateserial -out /data/var/lib/icinga2/certs/icinga2.crt \
-      -days 3650 -sha256 && \
-    cp /data/var/lib/icinga2/ca/ca.crt /data/var/lib/icinga2/certs/ca.crt && \
-    chown -R icinga:icinga /data/var/lib/icinga2/certs /data/var/lib/icinga2/ca \
-                           /data/etc/icinga2/conf.d /data/etc/icinga2/features-available \
-                           /data/etc/icinga2/features-enabled && \
-    rm -f /tmp/icinga2.csr
+# Certs are generated at container start by entrypoint-wrapper.sh because
+# /data is a VOLUME in the base image — RUN writes do not survive runtime.
 
 COPY entrypoint-wrapper.sh /entrypoint-wrapper.sh
 RUN chmod +x /entrypoint-wrapper.sh

@@ -20,6 +20,9 @@ type SSEEvent struct {
 	Source      string `json:"source,omitempty"`
 	Mode        string `json:"mode,omitempty"`
 	RemoteAddr  string `json:"remote_addr,omitempty"`
+	Action      string `json:"action,omitempty"`
+	Severity    string `json:"severity,omitempty"`
+	ExitStatus  int    `json:"exit_status,omitempty"`
 	rawMessage  string // if set, sent verbatim (for named events like "debug")
 }
 

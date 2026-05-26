@@ -226,7 +226,7 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 		if exitStatus == 2 {
 			sseStatus = "critical"
 		}
-		h.SSE.Publish(SSEEvent{Status: sseStatus, ServiceName: serviceName, Source: source, Mode: "work", RemoteAddr: remoteAddr})
+		h.SSE.Publish(SSEEvent{Status: sseStatus, ServiceName: serviceName, Source: source, Mode: "work", RemoteAddr: remoteAddr, Action: action, Severity: severity, ExitStatus: exitStatus})
 	}
 
 	result := map[string]any{

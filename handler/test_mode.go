@@ -95,7 +95,7 @@ func (h *WebhookHandler) handleTestCreate(requestID, source string, target confi
 		"Service created", true, durationMs, "", remoteAddr)
 
 	if h.SSE != nil {
-		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr})
+		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr, Action: "create"})
 	}
 
 	return map[string]any{
@@ -150,7 +150,7 @@ func (h *WebhookHandler) handleTestDelete(requestID, source string, target confi
 		"Service deleted", true, durationMs, "", remoteAddr)
 
 	if h.SSE != nil {
-		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr})
+		h.SSE.Publish(SSEEvent{Status: "ok", ServiceName: serviceName, Source: source, Mode: "test", RemoteAddr: remoteAddr, Action: "delete"})
 	}
 
 	return map[string]any{

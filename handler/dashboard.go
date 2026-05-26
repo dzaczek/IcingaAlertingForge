@@ -206,7 +206,55 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 }
 
 // ServeHTTP renders the beauty dashboard.
+// DashboardStatsSnapshot is the JSON response for live stat tile refreshes.
+type DashboardStatsSnapshot struct {
+	TotalEntries   int   `json:"total_entries"`
+	Errors         int   `json:"errors"`
+	AvgDurationMs  int64 `json:"avg_duration_ms"`
+	Firing         int   `json:"firing"`
+	Resolved       int   `json:"resolved"`
+	TestMode       int   `json:"test_mode"`
+	CriticalFiring int   `json:"critical_firing"`
+	WarningFiring  int   `json:"warning_firing"`
+}
+
+// HandleStats serves GET /status/beauty/stats with a JSON snapshot of dashboard statistics.
+func (h *DashboardHandler) HandleStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	if h.History == nil {
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "history not available"})
+		return
+	}
+
+	stats, err := h.History.Stats()
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load stats"})
+		return
+	}
+
+	snapshot := DashboardStatsSnapshot{
+		TotalEntries:   stats.TotalEntries,
+		Errors:         stats.ErrorCount,
+		AvgDurationMs:  stats.AvgDurationMs,
+		Firing:         stats.ByAction["firing"],
+		Resolved:       stats.ByAction["resolved"],
+		TestMode:       stats.ByMode["test"],
+		CriticalFiring: stats.BySeverityFiring["critical"],
+		WarningFiring:  stats.BySeverityFiring["warning"],
+	}
+	httputil.WriteJSON(w, http.StatusOK, snapshot)
+}
+
 func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/status/beauty/stats" {
+		h.HandleStats(w, r)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
@@ -2153,7 +2201,7 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="stat-cell">
               <span class="info-trigger" data-info="history_entries">?</span>
               <div class="stat-label">History Entries</div>
-              <div class="stat-value">{{.Stats.TotalEntries}}</div>
+              <div class="stat-value" id="stat-history-entries">{{.Stats.TotalEntries}}</div>
               {{if .IsOperator}}<button class="btn btn-danger btn-sm" style="margin-top:6px" onclick="clearHistory()">Clear</button> <span class="info-trigger" data-info="clear_history_button" style="position:relative;top:auto;right:auto;display:inline-flex;vertical-align:middle;">?</span>{{end}}
             </div>
             <div class="stat-cell {{if gt .Stats.ErrorCount 0}}critical{{end}}">
@@ -2164,7 +2212,7 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="stat-cell blue">
               <span class="info-trigger" data-info="avg_duration">?</span>
               <div class="stat-label">Avg Duration</div>
-              <div class="stat-value blue">{{.Stats.AvgDurationMs}}ms</div>
+              <div class="stat-value blue" id="stat-avg-duration">{{.Stats.AvgDurationMs}}ms</div>
             </div>
             <div class="stat-cell purple">
               <span class="info-trigger" data-info="cached_services">?</span>
@@ -2195,7 +2243,7 @@ const dashboardHTML = `<!DOCTYPE html>
             <div class="stat-cell blue">
               <span class="info-trigger" data-info="resolved">?</span>
               <div class="stat-label">Resolved</div>
-              <div class="stat-value blue">{{index .Stats.ByAction "resolved"}}</div>
+              <div class="stat-value blue" id="stat-resolved">{{index .Stats.ByAction "resolved"}}</div>
             </div>
             <div class="stat-cell purple">
               <span class="info-trigger" data-info="test_mode">?</span>
@@ -3426,7 +3474,7 @@ function loadServiceHistoryBody(panel, service, host) {
   fetch(url, { credentials: 'include' }).then(function(r) { return r.json(); }).then(function(data) {
     var entries = data.entries || data;
     if (!entries || entries.length === 0) {
-      container.innerHTML = '<div class="svc-history-empty">No history entries found</div>';
+      container.innerHTML = '<div class="svc-history-empty">No entries found in the last 24h</div>';
       return;
     }
     var html = '';
@@ -4328,6 +4376,39 @@ function switchIPTab(source, tab, btn) {
     }).catch(function() {});
   }
 
+  // ── Live refresh: Overview stat tiles ──
+  var _overviewRefreshTimer = null;
+
+  function refreshOverviewStats() {
+    if (_overviewRefreshTimer) return; // debounce: only one flight at a time
+    fetch('/status/beauty/stats', { credentials: 'include' }).then(function(r) {
+      if (!r.ok) return;
+      return r.json();
+    }).then(function(data) {
+      if (!data) return;
+      _overviewRefreshTimer = null;
+      setStat('stat-history-entries', data.total_entries);
+      setStat('stat-errors', data.errors);
+      if (data.errors > 0) {
+        var ee = document.getElementById('stat-errors');
+        if (ee) { ee.className = ee.className.replace(/\bok\b/g, 'error'); }
+      }
+      setStat('stat-avg-duration', data.avg_duration_ms + 'ms');
+      setStat('stat-work', data.firing);
+      setStat('stat-resolved', data.resolved);
+      setStat('stat-test', data.test_mode);
+      setStat('stat-critical', data.critical_firing);
+      setStat('stat-warning', data.warning_firing);
+    }).catch(function() {}).finally(function() {
+      _overviewRefreshTimer = null;
+    });
+  }
+
+  function setStat(id, value) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
   function scheduleAlertsRefresh() {
     if (_alertsRefreshTimer) clearTimeout(_alertsRefreshTimer);
     _alertsRefreshTimer = setTimeout(refreshAlertsTable, 2000);
@@ -4343,11 +4424,15 @@ function switchIPTab(source, tab, btn) {
         var data = JSON.parse(e.data);
         spawnOrb(data.status || 'ok');
         incCounter('stat-total');
-        if (data.mode === 'work') incCounter('stat-work');
+        if (data.action === 'firing') {
+          incCounter('stat-work');
+          if (data.severity === 'critical') incCounter('stat-critical');
+          if (data.severity === 'warning')  incCounter('stat-warning');
+        }
+        if (data.action === 'resolved') incCounter('stat-resolved');
         if (data.mode === 'test') incCounter('stat-test');
-        if (data.status === 'critical') incCounter('stat-critical');
-        if (data.status === 'warning') incCounter('stat-warning');
         scheduleAlertsRefresh();
+        refreshOverviewStats();
       } catch(err) {}
     };
     es.onerror = function() {

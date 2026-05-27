@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Wait for MariaDB and import IDO schema, then start icinga2 daemon.
 
 MYSQL_OPTS="-h mariadb -u icinga2_ido -picinga2_idopass --ssl=FALSE icinga2_ido"
@@ -24,8 +24,5 @@ if ! mysql $MYSQL_OPTS -e "SELECT 1 FROM icinga_dbversion LIMIT 1" >/dev/null 2>
 else
     echo "IDO schema already exists."
 fi
-
-# Ensure api feature is configured
-/setup-api.sh
 
 exec "$@"

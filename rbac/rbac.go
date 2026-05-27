@@ -7,13 +7,11 @@ package rbac
 
 import (
 	"crypto/sha256"
-
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
-
-	"crypto/subtle"
 
 	"golang.org/x/crypto/bcrypt"
 

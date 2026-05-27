@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"icinga-webhook-bridge/httputil"
@@ -20,6 +19,8 @@ import (
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
 	"icinga-webhook-bridge/rbac"
+
+	"icinga-webhook-bridge/auth"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -52,8 +53,8 @@ func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 	}
 
 	// Check primary admin credentials
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(h.Pass)) == 1
+	userOK := auth.SecureCompare(user, h.User)
+	passOK := auth.SecureCompare(pass, h.Pass)
 	if userOK && passOK {
 		return true
 	}
@@ -79,7 +80,7 @@ func (h *AdminHandler) checkAuth(w http.ResponseWriter, r *http.Request) bool {
 func (h *AdminHandler) requirePermission(w http.ResponseWriter, r *http.Request, perm rbac.Permission) bool {
 	user, _, _ := r.BasicAuth()
 	// Primary admin has all permissions
-	if subtle.ConstantTimeCompare([]byte(user), []byte(h.User)) == 1 {
+	if auth.SecureCompare(user, h.User) {
 		return true
 	}
 	// Check RBAC permission

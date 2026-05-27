@@ -56,6 +56,24 @@ The script talks to the bridge admin API and is safer than guessing directly aga
 | Grafana | `http://localhost:3000` | `admin / admin` |
 | Prometheus | `http://localhost:9090` | — |
 
+## Credentials
+
+| Service | Login | Password |
+|---|---|---|
+| Bridge admin (Basic Auth) | `admin` | `admin123` |
+| Icinga2 API | `apiuser` | `apipassword` |
+| Icinga Web 2 | `admin` | `admin` |
+| Grafana | `admin` | `admin` |
+
+### API Keys
+
+| Key | Target | Source |
+|---|---|---|
+| `test-key-grafana-local` | `a-dummy-dev` | team-a |
+| `test-key-team-a-secondary` | `a-dummy-dev` | team-a |
+| `test-key-script-dev` | `b-dummy-device` | team-b |
+| `test-key-team-b-secondary` | `b-dummy-device` | team-b |
+
 ## Routing In The Lab
 
 Current defaults:

@@ -12,16 +12,19 @@ The alert flow is **one-way**: alert sources send webhooks, the bridge translate
 
 ## Reading Order
 
-If you are new to the project, this order usually works best:
+If you are new to the project, start here:
 
-1. [Fast Track Deployment](guides/fast-track-deployment.md)
-2. [Architecture and Setup](guides/architecture-and-setup.md)
+1. **[Production Deployment](guides/production-deployment.md)** — full guide: clone, configure, install, Grafana, notifications
+2. [Fast Track Deployment](guides/fast-track-deployment.md) — minimal path in 6 steps
 3. [Configuration](guides/configuration.md)
 4. [Usage and API](guides/usage-and-api.md)
 5. [Icinga Integration](guides/icinga-integration.md)
 6. [Test Environment](guides/test-environment.md)
 
 ## Guides
+
+- [Production Deployment](guides/production-deployment.md)
+  Complete guide from `git clone` to production: Icinga2 API setup, Docker Compose install, Grafana contact point, smoke test, Prometheus metrics, custom device notifications.
 
 - [Fast Track Deployment](guides/fast-track-deployment.md)
   The shortest path to a working deployment with a minimal `.env`, Docker run command, smoke test, and first Grafana contact point.

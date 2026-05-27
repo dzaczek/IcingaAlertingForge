@@ -73,7 +73,7 @@ jobs:
       - name: Build Docker image
         run: docker build -t icingaalertforge:ci-scan .
       - name: Run Trivy scan
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: icingaalertforge:ci-scan
           format: sarif

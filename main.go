@@ -90,6 +90,9 @@ func main() {
 			storedCfg.AuditLogEnabled = cfg.AuditLogEnabled
 			storedCfg.AuditLogFile = cfg.AuditLogFile
 			storedCfg.AuditLogFormat = cfg.AuditLogFormat
+			// Metrics + observability (env-only, never in JSON store)
+			storedCfg.MetricsEnabled = cfg.MetricsEnabled
+			storedCfg.MetricsToken = cfg.MetricsToken
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {

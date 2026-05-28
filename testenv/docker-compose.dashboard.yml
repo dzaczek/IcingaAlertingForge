@@ -1,0 +1,32 @@
+networks:
+  monitoring:
+    external: true
+    name: testenv_monitoring
+
+volumes:
+  dashboard_logs:
+
+services:
+  # ── Webhook Bridge (dashboard mode — zero pre-config) ──────────
+  webhook-bridge:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${IAF_VERSION:-dev}
+    container_name: testenv-dashboard-bridge
+    hostname: dashboard-bridge
+    networks:
+      - monitoring
+    ports:
+      - "9081:8080"
+    env_file:
+      - .env.dashboard
+    volumes:
+      - dashboard_logs:/var/log/webhook-bridge
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s

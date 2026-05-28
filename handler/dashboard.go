@@ -3742,20 +3742,23 @@ function loadFrozenList() {
       html += '<th style="text-align:left;padding:6px 8px;">Frozen Until</th>';
       html += '<th style="padding:6px 8px;"></th>';
       html += '</tr></thead><tbody>';
+      // Performance optimization: Pre-allocate an array and use join() for faster string concatenation inside loops
+      var htmlParts = new Array(items.length);
       for (var i = 0; i < items.length; i++) {
         var e = items[i];
         var until = e.frozen_until
           ? new Date(e.frozen_until).toLocaleString('en-GB', {hour12:false})
           : '<span style="color:var(--lcars-blue)">Permanent</span>';
-        html += '<tr style="border-top:1px solid rgba(255,255,255,0.05);">';
-        html += '<td class="mono" style="padding:7px 8px;">' + escHtml(e.host) + '</td>';
-        html += '<td style="padding:7px 8px;"><strong class="svc-link js-service-history-trigger" data-service="' + escHtml(e.service) + '" data-host="' + escHtml(e.host) + '">' + escHtml(e.service) + '</strong></td>';
-        html += '<td style="padding:7px 8px;font-size:12px;">' + until + '</td>';
-        html += '<td style="padding:7px 8px;text-align:right;">';
-        html += '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" style="padding:5px 14px;font-size:11px;" ';
-        html += 'data-host="' + escHtml(e.host) + '" data-service="' + escHtml(e.service) + '" onclick="unfreezeFromList(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), this)">Unfreeze</button>';
-        html += '</td></tr>';
+        htmlParts[i] = '<tr style="border-top:1px solid rgba(255,255,255,0.05);">' +
+          '<td class="mono" style="padding:7px 8px;">' + escHtml(e.host) + '</td>' +
+          '<td style="padding:7px 8px;"><strong class="svc-link js-service-history-trigger" data-service="' + escHtml(e.service) + '" data-host="' + escHtml(e.host) + '">' + escHtml(e.service) + '</strong></td>' +
+          '<td style="padding:7px 8px;font-size:12px;">' + until + '</td>' +
+          '<td style="padding:7px 8px;text-align:right;">' +
+          '<button class="svc-freeze-btn svc-freeze-btn-unfreeze" style="padding:5px 14px;font-size:11px;" ' +
+          'data-host="' + escHtml(e.host) + '" data-service="' + escHtml(e.service) + '" onclick="unfreezeFromList(this.getAttribute(\'data-host\'), this.getAttribute(\'data-service\'), this)">Unfreeze</button>' +
+          '</td></tr>';
       }
+      html += htmlParts.join('');
       html += '</tbody></table>';
       container.innerHTML = html;
     })

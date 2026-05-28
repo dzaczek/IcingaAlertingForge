@@ -3,8 +3,10 @@
 Welcome to the **IcingaAlertForge** developer wiki! This documentation provides a deep, function-by-function breakdown of the codebase's main logic and exported APIs. It is designed to supplement the high-level user guides in `docs/` with technical implementation details.
 
 ## Quick Links
-- [🚀 Installation Guide](Installation)
-- [📊 Grafana Integration Setup](Grafana-Setup)
+- [🚀 Installation Guide](Installation) — Docker Compose, binary, systemd
+- [⚡ Quick Setup Guide](../docs/guides/quick-setup-en.md) — 15-minute Grafana + Icinga2 setup (also in [Polish](../docs/guides/quick-setup.md), [German](../docs/guides/quick-setup-de.md), [French](../docs/guides/quick-setup-fr.md))
+- [📊 Grafana Integration Setup](Grafana-Setup) — contact points, API keys, alert mapping
+- [🔧 Icinga Integration](Icinga) — API client, templates, auto-creation
 
 ## Architecture Overview
 

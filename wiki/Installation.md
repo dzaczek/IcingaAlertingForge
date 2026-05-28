@@ -271,6 +271,36 @@ curl -s http://localhost:8080/health
 | Service not created in Icinga2 | Target host missing or wrong API key | Check `ICINGA2_HOST_AUTO_CREATE=true` and that the API key in Grafana matches `.env` |
 | Panel shows no data | Browser cache or wrong admin URL | Use `?admin=1` suffix and clear browser cache |
 | `tls: failed to verify certificate` | Self-signed Icinga2 cert | Set `ICINGA2_TLS_SKIP_VERIFY=true` (dev only) |
+| `Import references unknown template` (500) | Missing `generic-host`/`generic-service` templates | Add templates to `/etc/icinga2/conf.d/templates.conf` or disable auto-creation with `ICINGA2_HOST_AUTO_CREATE=false`. See [Icinga Integration](Icinga#template-requirements) |
+
+---
+
+## Prometheus Alertmanager Integration
+
+The bridge automatically detects Alertmanager payloads by the `version`, `groupKey`, and `receiver` fields and converts them internally.
+
+In your `alertmanager.yml`:
+
+```yaml
+receivers:
+  - name: 'icinga-alertforge'
+    webhook_configs:
+      - url: 'http://<bridge-host>:8080/webhook'
+        http_config:
+          headers:
+            X-API-Key: '<your-api-key>'
+```
+
+Each API key maps to a specific Icinga2 host — use distinct keys to route different Alertmanager receivers to different targets.
+
+Quick test:
+
+```bash
+curl -X POST http://localhost:8080/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: <your-api-key>" \
+  -d '{"version":"4","groupKey":"{}:{alertname=\"Test\"}","receiver":"icinga-alertforge","status":"firing","alerts":[{"status":"firing","labels":{"alertname":"TestAlert","severity":"critical"},"annotations":{"summary":"Alertmanager test"}}]}'
+```
 
 ---
 
@@ -279,4 +309,5 @@ curl -s http://localhost:8080/health
 - [Grafana Integration Setup](Grafana-Setup) — connect Grafana contact points
 - [Configuration Reference](../docs/guides/configuration.md) — all environment variables explained
 - [Beauty Panel](../docs/guides/beauty-panel.md) — admin dashboard guide
+- [Quick Setup Guide](../docs/guides/quick-setup.md) — 15-minute setup walkthrough
 - [Fast Track Deployment](../docs/guides/fast-track-deployment.md) — quick smoke test

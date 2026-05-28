@@ -77,8 +77,20 @@ IcingaAlertForge uses the following conventions to map Grafana alerts to Icinga2
 ### Common Issues
 1.  **401 Unauthorized:** The `X-API-Key` is missing or incorrect in the Grafana Contact Point headers.
 2.  **502 Bad Gateway:** IcingaAlertForge cannot reach the Icinga2 API. Check the bridge logs and verify network connectivity to port 5665.
-3.  **Service not created:**
+3.  **"Import references unknown template" (HTTP 500):** Icinga2 is missing the `generic-host`/`generic-service` templates. Add them to `/etc/icinga2/conf.d/templates.conf` or disable auto-creation (`ICINGA2_HOST_AUTO_CREATE=false`). See [Icinga Integration](Icinga#template-requirements) for template content.
+4.  **Service not created:**
     - Verify the API key is mapped to the correct Target Host.
     - Check if the target host actually exists in Icinga2.
     - Ensure `ICINGA2_HOST_AUTO_CREATE=true` is set if you want the bridge to handle host creation.
-4.  **Context Deadline Exceeded:** The Icinga2 API is responding too slowly. Check Icinga2 CPU usage or database health.
+5.  **Context Deadline Exceeded:** The Icinga2 API is responding too slowly. Check Icinga2 CPU usage or database health.
+
+## Managing API Keys
+
+When using dashboard config mode (`CONFIG_IN_DASHBOARD=true`), you have full control over API keys from the Beauty Panel:
+
+- **Generate keys:** Settings → Targets → **Generate Key** — creates a new key, shown only once
+- **Reveal keys:** Settings → Targets → **Reveal Keys** — shows masked keys for existing targets
+- **Delete keys:** Click the trash icon (🗑) next to a key — removes it permanently after confirmation
+- **Delete targets:** Settings → Targets → **Delete** — removes the entire target and all its API keys
+
+Each target can have multiple API keys, allowing you to rotate keys without downtime: generate a new key, update Grafana, then delete the old one.

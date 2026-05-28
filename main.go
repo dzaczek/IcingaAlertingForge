@@ -533,11 +533,13 @@ func main() {
 		mux.HandleFunc("/admin/settings/import", settingsHandler.HandleImportConfig)
 		mux.HandleFunc("/admin/settings/test-icinga", settingsHandler.HandleTestIcinga)
 		mux.HandleFunc("/admin/settings/targets/", func(w http.ResponseWriter, r *http.Request) {
-			// Route /admin/settings/targets/{id}/generate-key vs DELETE /admin/settings/targets/{id}
+			// Route /admin/settings/targets/{id}/generate-key vs DELETE /admin/settings/targets/{id} vs DELETE /admin/settings/targets/{id}/keys/{idx}
 			if strings.HasSuffix(r.URL.Path, "/generate-key") {
 				settingsHandler.HandleGenerateKey(w, r)
 			} else if strings.HasSuffix(r.URL.Path, "/reveal-keys") {
 				settingsHandler.HandleRevealKeys(w, r)
+			} else if strings.Contains(r.URL.Path, "/keys/") && r.Method == http.MethodDelete {
+				settingsHandler.HandleDeleteKey(w, r)
 			} else if r.Method == http.MethodDelete {
 				settingsHandler.HandleDeleteTarget(w, r)
 			} else {

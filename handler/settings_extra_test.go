@@ -163,3 +163,73 @@ func TestSettings_HandleTestIcinga_ConnectionError(t *testing.T) {
 		t.Errorf("expected status=error, got %q", resp["status"])
 	}
 }
+
+func TestSettings_HandleDeleteKey(t *testing.T) {
+	h := testSettingsHandler(t)
+
+	// ensure t1 has an API key to delete
+	h.Store.Update(configstore.StoredConfig{
+		Targets: []configstore.TargetStore{
+			{ID: "t1", HostName: "host1", APIKeys: []string{"key1"}},
+		},
+	})
+
+	t.Run("deletes key for existing target", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/admin/settings/targets/t1/keys/0", nil)
+		req.URL.Path = "/admin/settings/targets/t1/keys/0"
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.HandleDeleteKey(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		cfg := h.Store.Get()
+		if len(cfg.Targets[0].APIKeys) != 0 {
+			t.Errorf("expected 0 api keys, got %d", len(cfg.Targets[0].APIKeys))
+		}
+	})
+
+	t.Run("target not found", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/admin/settings/targets/nonexistent/keys/0", nil)
+		req.URL.Path = "/admin/settings/targets/nonexistent/keys/0"
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.HandleDeleteKey(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", rr.Code)
+		}
+	})
+
+	t.Run("invalid index", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/admin/settings/targets/t1/keys/99", nil)
+		req.URL.Path = "/admin/settings/targets/t1/keys/99"
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.HandleDeleteKey(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("invalid path", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/admin/settings/targets/t1/keys/invalid", nil)
+		req.URL.Path = "/admin/settings/targets/t1/keys/invalid"
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.HandleDeleteKey(rr, req)
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected 400, got %d", rr.Code)
+		}
+	})
+
+	t.Run("method not allowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/settings/targets/t1/keys/0", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.HandleDeleteKey(rr, req)
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", rr.Code)
+		}
+	})
+}

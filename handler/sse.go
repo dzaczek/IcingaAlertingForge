@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -127,7 +128,9 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if event.rawMessage != "" {
-				fmt.Fprint(w, event.rawMessage)
+				var buf bytes.Buffer
+				json.HTMLEscape(&buf, []byte(event.rawMessage))
+				fmt.Fprint(w, buf.String())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {

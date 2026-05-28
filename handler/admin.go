@@ -268,54 +268,65 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	var results []map[string]any
-	for _, ref := range refs {
-		if h.Limiter != nil {
-			if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
-				results = append(results, map[string]any{
+	results := make([]map[string]any, len(refs))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10)
+
+	for i, ref := range refs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(index int, ref adminServiceRef) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if h.Limiter != nil {
+				if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
+					results[index] = map[string]any{
+						"host":    ref.Host,
+						"service": ref.Service,
+						"status":  "error",
+						"error":   "rate limit: " + err.Error(),
+					}
+					return
+				}
+			}
+
+			if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
+				if h.Limiter != nil {
+					h.Limiter.ReleaseMutate()
+				}
+				var conflict *icinga.ErrConflict
+				if errors.As(err, &conflict) {
+					slog.Warn("Admin: bulk delete refused (conflict)", "host", ref.Host, "service", ref.Service, "error", err)
+					results[index] = map[string]any{
+						"host":    ref.Host,
+						"service": ref.Service,
+						"status":  "error",
+						"error":   err.Error(),
+					}
+					return
+				}
+				slog.Error("Admin: bulk delete failed", "host", ref.Host, "service", ref.Service, "error", err)
+				results[index] = map[string]any{
 					"host":    ref.Host,
 					"service": ref.Service,
 					"status":  "error",
-					"error":   "rate limit: " + err.Error(),
-				})
-				continue
+					"error":   err.Error(),
+				}
+				return
 			}
-		}
-
-		if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
 			if h.Limiter != nil {
 				h.Limiter.ReleaseMutate()
 			}
-			var conflict *icinga.ErrConflict
-			if errors.As(err, &conflict) {
-				slog.Warn("Admin: bulk delete refused (conflict)", "host", ref.Host, "service", ref.Service, "error", err)
-				results = append(results, map[string]any{
-					"host":    ref.Host,
-					"service": ref.Service,
-					"status":  "error",
-					"error":   "rate limit: " + err.Error(),
-				})
-				continue
-			}
-			slog.Error("Admin: bulk delete failed", "host", ref.Host, "service", ref.Service, "error", err)
-			results = append(results, map[string]any{
+			h.Cache.Remove(ref.Host, ref.Service)
+			results[index] = map[string]any{
 				"host":    ref.Host,
 				"service": ref.Service,
-				"status":  "error",
-				"error":   err.Error(),
-			})
-			continue
-		}
-		if h.Limiter != nil {
-			h.Limiter.ReleaseMutate()
-		}
-		h.Cache.Remove(ref.Host, ref.Service)
-		results = append(results, map[string]any{
-			"host":    ref.Host,
-			"service": ref.Service,
-			"status":  "deleted",
-		})
+				"status":  "deleted",
+			}
+		}(i, ref)
 	}
+	wg.Wait()
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
 }

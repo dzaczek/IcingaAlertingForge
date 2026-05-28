@@ -9,8 +9,10 @@ import (
 )
 
 type mockProber struct {
-	failCount atomic.Int32
-	calls     atomic.Int32
+	failCount         atomic.Int32
+	calls             atomic.Int32
+	sendCheckErr      error
+	createServiceErr  error
 }
 
 func (m *mockProber) GetHostInfo(host string) (HostResult, error) {
@@ -22,11 +24,11 @@ func (m *mockProber) GetHostInfo(host string) (HostResult, error) {
 }
 
 func (m *mockProber) SendCheckResult(host, service string, exitStatus int, message string) error {
-	return nil
+	return m.sendCheckErr
 }
 
 func (m *mockProber) CreateService(host, name string, labels, annotations map[string]string) error {
-	return nil
+	return m.createServiceErr
 }
 
 func TestHealthChecker_Healthy(t *testing.T) {
@@ -155,5 +157,87 @@ func TestHealthChecker_Disabled(t *testing.T) {
 
 	if prober.calls.Load() != 0 {
 		t.Error("expected no API calls when disabled")
+	}
+}
+
+func TestHealthChecker_ErrorPaths(t *testing.T) {
+	prober := &mockProber{
+		sendCheckErr:     errors.New("mock send error"),
+		createServiceErr: errors.New("mock create service error"),
+	}
+
+	c := New(Config{
+		Enabled:     true,
+		IntervalSec: 1,
+		TargetHost:  "test-host",
+		ServiceName: "bridge-health",
+		Register:    true,
+	}, prober)
+
+	// This triggers registerService() which will hit the createServiceErr path
+	c.registerService()
+
+	// This triggers runCheck() which will hit the sendCheckErr path
+	c.runCheck()
+
+	status := c.GetStatus()
+	if !status.Healthy {
+		t.Errorf("expected healthy=true when getHostInfo succeeds, got %v", status.Healthy)
+	}
+
+	// Now trigger runCheck but make the API fail to hit the other sendCheckErr path
+	// This also makes healthy=false which covers the "else" branch inside runCheck
+	prober.failCount.Store(100)
+	c.runCheck()
+
+	status = c.GetStatus()
+	if status.ConsecutiveFails != 1 {
+		t.Errorf("expected consecutive fails = 1, got %d", status.ConsecutiveFails)
+	}
+	if !status.Healthy {
+		t.Errorf("expected still healthy after 1 fail, got %v", status.Healthy)
+	}
+
+	c.runCheck()
+	c.runCheck()
+
+	status = c.GetStatus()
+	if status.ConsecutiveFails != 3 {
+		t.Errorf("expected consecutive fails = 3, got %d", status.ConsecutiveFails)
+	}
+	if status.Healthy {
+		t.Errorf("expected healthy=false after 3 fails, got %v", status.Healthy)
+	}
+}
+
+func TestHealthChecker_Ticker(t *testing.T) {
+	prober := &mockProber{}
+	c := New(Config{
+		Enabled:     true,
+		IntervalSec: 1,
+		TargetHost:  "test-host",
+		ServiceName: "bridge-health",
+		Register:    false,
+	}, prober)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Run Start in a goroutine
+	go c.Start(ctx)
+
+	// We can use a polling loop to wait for the ticker to fire, which is more robust than a sleep.
+	// Since interval is 1s, we'll poll for up to 3s.
+	success := false
+	for i := 0; i < 30; i++ {
+		time.Sleep(100 * time.Millisecond)
+		if prober.calls.Load() >= 2 {
+			success = true
+			break
+		}
+	}
+
+	if !success {
+		t.Errorf("expected at least 2 checks to have run due to ticker, got %d", prober.calls.Load())
 	}
 }

@@ -114,9 +114,31 @@ func Load() (*Config, error) {
 	// Load .env file if it exists (ignore error — env vars may come from the system)
 	_ = godotenv.Load()
 
-	targets, routes, defaultTargetID, err := loadTargetsAndRoutes()
+	// Evaluate dashboard mode early — when enabled, env-based targets and routes
+	// are optional so the app can boot and be configured via the web UI.
+	configInDashboard, err := optBool("CONFIG_IN_DASHBOARD", false)
 	if err != nil {
 		return nil, err
+	}
+	configFilePath := getEnvOrDefault("CONFIG_FILE_PATH", "/var/log/webhook-bridge/config.json")
+
+	var targets map[string]TargetConfig
+	var routes map[string]WebhookRoute
+	var defaultTargetID string
+
+	if configInDashboard {
+		targets, routes, defaultTargetID, _ = loadTargetsAndRoutes()
+		if targets == nil {
+			targets = make(map[string]TargetConfig)
+		}
+		if routes == nil {
+			routes = make(map[string]WebhookRoute)
+		}
+	} else {
+		targets, routes, defaultTargetID, err = loadTargetsAndRoutes()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	webhookKeys := make(map[string]string, len(routes))
@@ -151,8 +173,9 @@ func Load() (*Config, error) {
 		AuditLogFile:   getEnvOrDefault("AUDIT_LOG_FILE", "/var/log/webhook-bridge/audit.log"),
 		AuditLogFormat: getEnvOrDefault("AUDIT_LOG_FORMAT", "json"),
 
+		ConfigInDashboard:   configInDashboard,
 		ConfigEncryptionKey: getEnvOrDefault("CONFIG_ENCRYPTION_KEY", ""),
-		ConfigFilePath:      getEnvOrDefault("CONFIG_FILE_PATH", "/var/log/webhook-bridge/config.json"),
+		ConfigFilePath:      configFilePath,
 	}
 
 	if cfg.Icinga2Host, err = requireEnv("ICINGA2_HOST"); err != nil {
@@ -221,16 +244,12 @@ func Load() (*Config, error) {
 	if cfg.AuditLogEnabled, err = optBool("AUDIT_LOG_ENABLED", false); err != nil {
 		return nil, err
 	}
-	if cfg.ConfigInDashboard, err = optBool("CONFIG_IN_DASHBOARD", false); err != nil {
-		return nil, err
-	}
-
 	if cfg.MetricsEnabled, err = optBool("METRICS_ENABLED", true); err != nil {
 		return nil, err
 	}
 	cfg.MetricsToken = os.Getenv("METRICS_TOKEN")
 
-	if len(cfg.WebhookRoutes) == 0 {
+	if !cfg.ConfigInDashboard && len(cfg.WebhookRoutes) == 0 {
 		return nil, fmt.Errorf("config: at least one webhook route is required")
 	}
 

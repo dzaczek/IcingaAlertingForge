@@ -143,3 +143,39 @@ func TestSSEBroker_ServeHTTP_Event(t *testing.T) {
 	}
 	// context timeout is acceptable — we just verified the stream was opened
 }
+
+func TestSSEBroker_ServeHTTP_RawEvent(t *testing.T) {
+	b := NewSSEBroker()
+
+	srv := httptest.NewServer(b)
+	defer srv.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL+"/events", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil && ctx.Err() == nil {
+		t.Fatalf("unexpected connection error: %v", err)
+	}
+	if resp == nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	// Give the handler time to subscribe, then publish a raw event with HTML characters
+	time.Sleep(30 * time.Millisecond)
+	b.PublishRaw("debug", []byte(`{"msg":"<script>alert(1)</script>"}`))
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Wait for the specific data line containing our escaped payload
+		if strings.HasPrefix(line, "data: ") {
+			if !strings.Contains(line, `\u003cscript\u003e`) {
+				t.Errorf("expected HTML characters to be escaped to JSON unicode, got: %s", line)
+			}
+			return // success
+		}
+	}
+}

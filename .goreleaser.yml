@@ -39,13 +39,13 @@ changelog:
   sort: asc
   groups:
     - title: Breaking Changes
-      regexp: "^.*!?:.*"
+      regexp: '^.*!?:.*'
       order: 0
     - title: Features
-      regexp: "^feat(\(.*\))?:.*"
+      regexp: '^feat(\(.*\))?:.*'
       order: 1
     - title: Fixes
-      regexp: "^fix(\(.*\))?:.*"
+      regexp: '^fix(\(.*\))?:.*'
       order: 2
     - title: Others
       order: 999

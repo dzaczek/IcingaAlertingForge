@@ -310,6 +310,64 @@ func (h *SettingsHandler) HandleDeleteTarget(w http.ResponseWriter, r *http.Requ
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "target_id": targetID})
 }
 
+// HandleDeleteKey removes an API key from a target at the specified index.
+// DELETE /admin/settings/targets/{id}/keys/{idx}
+func (h *SettingsHandler) HandleDeleteKey(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+	if !h.checkAuth(w, r) {
+		return
+	}
+
+	// Extract target ID and key index. Path is /admin/settings/targets/{id}/keys/{idx}
+	path := strings.TrimPrefix(r.URL.Path, "/admin/settings/targets/")
+	parts := strings.Split(path, "/keys/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path format"})
+		return
+	}
+	targetID := parts[0]
+	var keyIdx int
+	_, err := fmt.Sscanf(parts[1], "%d", &keyIdx)
+	if err != nil || keyIdx < 0 {
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid key index"})
+		return
+	}
+
+	current := h.Store.Get()
+	found := false
+	for i := range current.Targets {
+		if current.Targets[i].ID == targetID {
+			found = true
+			if keyIdx >= len(current.Targets[i].APIKeys) {
+				httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "key index out of bounds"})
+				return
+			}
+			// Remove the key
+			current.Targets[i].APIKeys = append(current.Targets[i].APIKeys[:keyIdx], current.Targets[i].APIKeys[keyIdx+1:]...)
+			break
+		}
+	}
+
+	if !found {
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "target not found"})
+		return
+	}
+
+	if err := h.Store.Update(current); err != nil {
+		slog.Error("Settings: failed to save config after deleting key", "error", err)
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save: " + err.Error()})
+		return
+	}
+
+	slog.Info("Settings: API key deleted", "target_id", targetID, "key_idx", keyIdx)
+	h.reload()
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted", "target_id": targetID})
+}
+
 // HandleGenerateKey generates a new API key for a target.
 // POST /admin/settings/targets/{id}/generate-key
 func (h *SettingsHandler) HandleGenerateKey(w http.ResponseWriter, r *http.Request) {

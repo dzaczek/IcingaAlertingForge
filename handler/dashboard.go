@@ -3875,6 +3875,7 @@ function renderTargetCards(targets) {
         html += '<div class="settings-key-item">';
         html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
         html += '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>';
+        html += '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>';
         html += '</div>';
       });
       html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
@@ -3972,6 +3973,26 @@ function copyNewTargetKey() {
     document.execCommand('copy');
     settingsShowStatus('API key copied', false);
   }
+}
+
+function deleteKey(targetId, keyIdx) {
+  if (!confirm('Delete this API key from target "' + targetId + '"? This cannot be undone.')) return;
+  fetch('/admin/settings/targets/' + encodeURIComponent(targetId) + '/keys/' + keyIdx, {
+    method: 'DELETE',
+    credentials: 'include'
+  })
+    .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function(res) {
+      settingsShowStatus('API key deleted', false);
+      // Remove from revealed keys cache if it exists
+      if (_revealedKeys[targetId]) {
+         _revealedKeys[targetId].splice(keyIdx, 1);
+      }
+      loadSettings();
+    })
+    .catch(function(err) {
+      settingsShowStatus('Failed to delete key: ' + err.message, true);
+    });
 }
 
 function deleteTarget(id) {

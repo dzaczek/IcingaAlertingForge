@@ -279,6 +279,7 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 			defer wg.Done()
 			defer func() { <-sem }()
 
+			var acquired bool
 			if h.Limiter != nil {
 				if err := h.Limiter.AcquireMutate(r.Context()); err != nil {
 					results[index] = map[string]any{
@@ -289,12 +290,16 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 					}
 					return
 				}
+				acquired = true
 			}
 
-			if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
-				if h.Limiter != nil {
+			defer func() {
+				if acquired && h.Limiter != nil {
 					h.Limiter.ReleaseMutate()
 				}
+			}()
+
+			if err := h.API.DeleteService(ref.Host, ref.Service); err != nil {
 				var conflict *icinga.ErrConflict
 				if errors.As(err, &conflict) {
 					slog.Warn("Admin: bulk delete refused (conflict)", "host", ref.Host, "service", ref.Service, "error", err)
@@ -314,9 +319,6 @@ func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) 
 					"error":   err.Error(),
 				}
 				return
-			}
-			if h.Limiter != nil {
-				h.Limiter.ReleaseMutate()
 			}
 			h.Cache.Remove(ref.Host, ref.Service)
 			results[index] = map[string]any{

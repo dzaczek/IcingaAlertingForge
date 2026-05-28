@@ -2,11 +2,14 @@ package handler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
@@ -151,7 +154,7 @@ func TestAdmin_HandleDeleteService(t *testing.T) {
 }
 
 func TestAdmin_HandleBulkDelete(t *testing.T) {
-	deleteCount := 0
+	var deleteCount int32
 	h, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusOK)
@@ -159,31 +162,136 @@ func TestAdmin_HandleBulkDelete(t *testing.T) {
 			return
 		}
 		if r.Method == http.MethodDelete {
-			deleteCount++
+			atomic.AddInt32(&deleteCount, 1)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"results":[{"code":200}]}`))
 		}
 	})
 
-	payload := map[string]any{
-		"services": []any{
-			"svc-1",
-			map[string]string{"host": "host-a", "service": "svc-2"},
-		},
-	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest(http.MethodPost, "/admin/services/bulk-delete", bytes.NewBuffer(body))
-	req.SetBasicAuth("admin", "secret")
-	rr := httptest.NewRecorder()
+	t.Run("success", func(t *testing.T) {
+		atomic.StoreInt32(&deleteCount, 0)
+		payload := map[string]any{
+			"services": []any{
+				"svc-1",
+				map[string]string{"host": "host-a", "service": "svc-2"},
+			},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/admin/services/bulk-delete", bytes.NewBuffer(body))
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
 
-	h.HandleBulkDelete(rr, req)
+		h.HandleBulkDelete(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rr.Code)
-	}
-	if deleteCount != 2 {
-		t.Errorf("expected 2 deletes, got %d", deleteCount)
-	}
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+		if atomic.LoadInt32(&deleteCount) != 2 {
+			t.Errorf("expected 2 deletes, got %d", atomic.LoadInt32(&deleteCount))
+		}
+	})
+
+	t.Run("rate limit error", func(t *testing.T) {
+		h.Limiter = icinga.NewRateLimiter(0, 100, 100) // 0 max mutate
+		payload := map[string]any{
+			"services": []any{"svc-1"},
+		}
+		body, _ := json.Marshal(payload)
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		req := httptest.NewRequest(http.MethodPost, "/admin/services/bulk-delete", bytes.NewBuffer(body))
+		req = req.WithContext(ctx)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+
+		h.HandleBulkDelete(rr, req)
+
+		if rr.Code != http.StatusOK { // Returns 200 but results contain errors
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+		var resp struct {
+			Results []map[string]any `json:"results"`
+		}
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		if len(resp.Results) != 1 || resp.Results[0]["status"] != "error" {
+			t.Errorf("expected error in results, got %v", resp.Results)
+		}
+		h.Limiter = nil // reset
+	})
+
+	t.Run("conflict error", func(t *testing.T) {
+		// Mock unmanaged service
+		hConf, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				w.WriteHeader(http.StatusOK)
+				// NOT managed by bridge, NOT dummy
+				w.Write([]byte(`{"results":[{"attrs":{"vars":{},"check_command":"tcp"}}]}`))
+				return
+			}
+			if r.Method == http.MethodDelete {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"results":[{"code":200}]}`))
+			}
+		})
+
+		payload := map[string]any{
+			"services": []any{"svc-1"},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/admin/services/bulk-delete", bytes.NewBuffer(body))
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+
+		hConf.HandleBulkDelete(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+		var resp struct {
+			Results []map[string]any `json:"results"`
+		}
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if len(resp.Results) != 1 || resp.Results[0]["status"] != "error" || resp.Results[0]["error"] == "" {
+			t.Errorf("expected conflict error in results, got %v", resp.Results)
+		}
+	})
+
+	t.Run("API error", func(t *testing.T) {
+		hErr, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(`{"results":[{"attrs":{"vars":{"managed_by":"IcingaAlertingForge"},"check_command":"dummy"}}]}`))
+				return
+			}
+			if r.Method == http.MethodDelete {
+				w.WriteHeader(http.StatusInternalServerError) // force error
+				w.Write([]byte(`{"error":"internal"}`))
+			}
+		})
+
+		payload := map[string]any{
+			"services": []any{"svc-1"},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/admin/services/bulk-delete", bytes.NewBuffer(body))
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+
+		hErr.HandleBulkDelete(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+		var resp struct {
+			Results []map[string]any `json:"results"`
+		}
+		json.NewDecoder(rr.Body).Decode(&resp)
+		if len(resp.Results) != 1 || resp.Results[0]["status"] != "error" {
+			t.Errorf("expected API error in results, got %v", resp.Results)
+		}
+	})
 }
 
 func TestAdmin_HandleClearHistory(t *testing.T) {

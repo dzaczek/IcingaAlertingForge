@@ -80,3 +80,30 @@ The central client for interacting with Icinga2. It is thread-safe and supports 
     - `skip`: Log a warning and do nothing.
     - `warn`: Proceed but log a warning.
     - `fail`: Stop and return an error.
+
+---
+
+## Template Requirements
+
+The API client hardcodes `generic-host` and `generic-service` templates when creating objects via `CreateHost` and `CreateService`. These templates must exist in your Icinga2 configuration, otherwise the API returns HTTP 500 with `Import references unknown template`.
+
+Environments managed by Icinga Director or minimal Icinga2 installations often lack these templates. Add them to `/etc/icinga2/conf.d/templates.conf`:
+
+```icinga2
+template Host "generic-host" {
+  max_check_attempts = 3
+  check_interval = 1m
+  retry_interval = 30s
+  check_command = "hostalive"
+}
+
+template Service "generic-service" {
+  max_check_attempts = 5
+  check_interval = 1m
+  retry_interval = 30s
+}
+```
+
+After adding the templates, run `icinga2 daemon -C && systemctl reload icinga2`.
+
+Alternatively, disable auto-creation by setting `ICINGA2_HOST_AUTO_CREATE=false` and create hosts manually.

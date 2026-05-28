@@ -212,6 +212,12 @@ Structured logs include:
 
 That makes it possible to see which key sent an alert and which host in Icinga was touched.
 
+### "Import references unknown template" Error
+
+If auto-creation fails with HTTP 500 and `Import references unknown template`, your Icinga2 environment is missing the `generic-host` and/or `generic-service` templates. This is common in Icinga Director or minimal installations. See [Troubleshooting — Import references unknown template](../troubleshooting.md#import-references-unknown-template-http-500) for the fix.
+
+---
+
 ## Next Step
 
 Continue with [Beauty Panel](beauty-panel.md) or [Test Environment](test-environment.md).

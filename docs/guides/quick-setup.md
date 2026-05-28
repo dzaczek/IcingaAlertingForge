@@ -237,5 +237,6 @@ Grafana/Prometheus → webhook POST → Bridge → Icinga2 API
 | 401 Unauthorized | Klucz API nie pasuje do żadnego targetu |
 | 502 Bad Gateway | Icinga2 nieodpowiada — sprawdź `ICINGA2_HOST` i credentials |
 | "Host does not exist" | Ustaw `ICINGA2_HOST_AUTO_CREATE=true` albo stwórz hosta ręcznie |
+| "Import references unknown template" (500) | Brakuje szablonów `generic-host`/`generic-service` w Icinga2 — dodaj je do `/etc/icinga2/conf.d/templates.conf` albo wyłącz auto-kreację przez `ICINGA2_HOST_AUTO_CREATE=false`. Szczegóły: [Troubleshooting](../troubleshooting.md#import-references-unknown-template-http-500) |
 | Panel nie pokazuje Settings | `CONFIG_IN_DASHBOARD=true` nie jest ustawione |
 | Zmiany w panelu nie działają | Sprawdź logi — hot-reload może failować przy błędnych danych |

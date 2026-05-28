@@ -44,6 +44,37 @@ Fix:
 - Use the `ICINGA2_FORCE=true` flag to override ownership checks
 - Or set the service's `vars.managed_by` to `IcingaAlertingForge` in Icinga2
 
+### "Import references unknown template" (HTTP 500)
+
+When the bridge tries to auto-create a host or service, Icinga2 may respond with HTTP 500 and the error message `Import references unknown template`. This happens because the bridge hardcodes the `generic-host` and `generic-service` templates, which are missing in some Icinga2 environments — especially those managed by Icinga Director or minimal installations.
+
+**Solution A: Add the missing templates**
+
+Create `/etc/icinga2/conf.d/templates.conf` and reload Icinga2:
+
+```icinga2
+template Host "generic-host" {
+  max_check_attempts = 3
+  check_interval = 1m
+  retry_interval = 30s
+  check_command = "hostalive"
+}
+
+template Service "generic-service" {
+  max_check_attempts = 5
+  check_interval = 1m
+  retry_interval = 30s
+}
+```
+
+```bash
+icinga2 daemon -C && systemctl reload icinga2
+```
+
+**Solution B: Disable auto-creation**
+
+Set `ICINGA2_HOST_AUTO_CREATE=false` and manually create the dummy host in Icinga2 with the required custom variables (`vars.managed_by`, `vars.iaf_managed`).
+
 ### Icinga2 connection refused
 
 The bridge cannot reach the Icinga2 API.

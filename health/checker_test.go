@@ -157,3 +157,45 @@ func TestHealthChecker_Disabled(t *testing.T) {
 		t.Error("expected no API calls when disabled")
 	}
 }
+
+func TestHealthChecker_GetStatus(t *testing.T) {
+	c := New(Config{}, &mockProber{})
+
+	// Set start time to 5 seconds ago
+	c.startedAt = time.Now().Add(-5 * time.Second)
+
+	// Set internal status state to test deep copying and concurrent reads
+	c.mu.Lock()
+	c.status.TotalChecks = 42
+	c.mu.Unlock()
+
+	status := c.GetStatus()
+
+	if status.TotalChecks != 42 {
+		t.Errorf("expected TotalChecks to be 42, got %d", status.TotalChecks)
+	}
+
+	// Verify uptime calculation and formatting
+	parsedUptime, err := time.ParseDuration(status.Uptime)
+	if err != nil {
+		t.Fatalf("failed to parse uptime duration: %v", err)
+	}
+
+	// Uptime should be ~5 seconds, allow small buffer for execution time
+	expectedUptime := 5 * time.Second
+	diff := parsedUptime - expectedUptime
+	if diff < 0 {
+		diff = -diff
+	}
+	if diff > time.Second {
+		t.Errorf("uptime duration %v is too far from expected %v", parsedUptime, expectedUptime)
+	}
+
+	// Verify it returns a copy
+	status.TotalChecks = 100
+	c.mu.RLock()
+	if c.status.TotalChecks == 100 {
+		t.Error("expected GetStatus to return a copy, but modifying it altered internal state")
+	}
+	c.mu.RUnlock()
+}

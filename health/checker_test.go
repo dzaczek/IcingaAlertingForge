@@ -157,3 +157,38 @@ func TestHealthChecker_Disabled(t *testing.T) {
 		t.Error("expected no API calls when disabled")
 	}
 }
+
+func TestNew(t *testing.T) {
+	cfg := Config{
+		Enabled:     true,
+		IntervalSec: 10,
+		ServiceName: "test-service",
+		TargetHost:  "test-host",
+		Register:    true,
+	}
+	api := &mockProber{}
+
+	start := time.Now()
+	c := New(cfg, api)
+	end := time.Now()
+
+	if c == nil {
+		t.Fatal("expected non-nil Checker")
+	}
+
+	if c.cfg != cfg {
+		t.Errorf("expected config %v, got %v", cfg, c.cfg)
+	}
+
+	if c.api != api {
+		t.Errorf("expected api %v, got %v", api, c.api)
+	}
+
+	if c.startedAt.Before(start) || c.startedAt.After(end) {
+		t.Errorf("expected startedAt between %v and %v, got %v", start, end, c.startedAt)
+	}
+
+	if !c.status.Healthy {
+		t.Error("expected initial status to be healthy")
+	}
+}

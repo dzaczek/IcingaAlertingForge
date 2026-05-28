@@ -3479,7 +3479,7 @@ function loadServiceHistoryBody(panel, service, host) {
       container.innerHTML = '<div class="svc-history-empty">No entries found in the last 24h</div>';
       return;
     }
-    var html = '';
+    var htmlParts = new Array(entries.length);
     for (var i = 0; i < entries.length; i++) {
       var e = entries[i];
       var ts = '';
@@ -3490,18 +3490,22 @@ function loadServiceHistoryBody(panel, service, host) {
       var action = (e.action || '').toLowerCase();
       var actionClass = 'svc-history-action-' + action;
       var exitClass = 'svc-history-exit-' + (e.exit_status || 0);
-      html += '<div class="svc-history-row">';
-      html += '<span class="svc-history-time">' + ts + '</span>';
-      html += '<span class="svc-history-action ' + actionClass + '">' + escHtml(e.action || '') + '</span>';
+
+      var manualTag = '';
       if (e.mode === 'manual') {
         var who = (e.source_key || '').replace('admin:', '');
-        html += '<span class="svc-history-manual">MANUAL by ' + escHtml(who) + '</span>';
+        manualTag = '<span class="svc-history-manual">MANUAL by ' + escHtml(who) + '</span>';
       }
-      html += '<span class="svc-history-exit ' + exitClass + '">EXIT ' + (e.exit_status != null ? e.exit_status : '?') + '</span>';
-      html += '<span class="svc-history-msg" title="' + escHtml(e.message || '') + '">' + escHtml(e.message || '') + '</span>';
-      html += '</div>';
+
+      htmlParts[i] = '<div class="svc-history-row">' +
+        '<span class="svc-history-time">' + ts + '</span>' +
+        '<span class="svc-history-action ' + actionClass + '">' + escHtml(e.action || '') + '</span>' +
+        manualTag +
+        '<span class="svc-history-exit ' + exitClass + '">EXIT ' + (e.exit_status != null ? e.exit_status : '?') + '</span>' +
+        '<span class="svc-history-msg" title="' + escHtml(e.message || '') + '">' + escHtml(e.message || '') + '</span>' +
+        '</div>';
     }
-    container.innerHTML = html;
+    container.innerHTML = htmlParts.join('');
   }).catch(function() {
     container.innerHTML = '<div class="svc-history-empty">Failed to load history</div>';
   });
@@ -4365,6 +4369,7 @@ function switchIPTab(source, tab, btn) {
         html += '<th onclick="sortTable(8,\'number\',this.closest(\'table\'))">Duration <span class="sort-arrow"></span></th>';
         html += '</tr></thead><tbody>';
 
+        var htmlParts = new Array(entries.length);
         for (var i = 0; i < entries.length; i++) {
           var e = entries[i];
           var statusLabel = 'OK', statusClass = 'ok';
@@ -4378,18 +4383,20 @@ function switchIPTab(source, tab, btn) {
           var ts = e.timestamp ? new Date(e.timestamp).toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC') : '';
           var mode = escHtml(e.mode || '');
           var manualTag = (e.mode === 'manual') ? ' <span class="alerts-manual-tag">ADMIN</span>' : '';
-          html += '<tr data-service="' + escHtml(e.service_name || '') + '" data-host="' + escHtml(e.host_name || '') + '">';
-          html += '<td class="mono">' + ts + '</td>';
-          html += '<td><span class="badge ' + statusClass + '">' + escHtml(statusLabel) + '</span></td>';
-          html += '<td>' + mode + manualTag + '</td>';
-          html += '<td>' + escHtml(e.action || '') + '</td>';
-          html += '<td class="mono">' + (e.host_name ? escHtml(e.host_name) : '-') + '</td>';
-          html += '<td><strong class="svc-link js-service-history-trigger">' + escHtml(e.service_name || '') + '</strong></td>';
-          html += '<td class="mono">' + escHtml(e.source_key || '') + '</td>';
-          html += '<td>' + (e.icinga_ok ? '<span class="icinga-ok">OK</span>' : '<span class="icinga-fail">FAIL</span>') + '</td>';
-          html += '<td class="duration">' + (e.duration_ms || 0) + 'ms</td>';
-          html += '</tr>';
+
+          htmlParts[i] = '<tr data-service="' + escHtml(e.service_name || '') + '" data-host="' + escHtml(e.host_name || '') + '">' +
+            '<td class="mono">' + ts + '</td>' +
+            '<td><span class="badge ' + statusClass + '">' + escHtml(statusLabel) + '</span></td>' +
+            '<td>' + mode + manualTag + '</td>' +
+            '<td>' + escHtml(e.action || '') + '</td>' +
+            '<td class="mono">' + (e.host_name ? escHtml(e.host_name) : '-') + '</td>' +
+            '<td><strong class="svc-link js-service-history-trigger">' + escHtml(e.service_name || '') + '</strong></td>' +
+            '<td class="mono">' + escHtml(e.source_key || '') + '</td>' +
+            '<td>' + (e.icinga_ok ? '<span class="icinga-ok">OK</span>' : '<span class="icinga-fail">FAIL</span>') + '</td>' +
+            '<td class="duration">' + (e.duration_ms || 0) + 'ms</td>' +
+            '</tr>';
         }
+        html += htmlParts.join('');
         html += '</tbody></table>';
         container.innerHTML = html;
         if (prevFilter) {

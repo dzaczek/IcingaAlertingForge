@@ -9,8 +9,10 @@ import (
 )
 
 type mockProber struct {
-	failCount atomic.Int32
-	calls     atomic.Int32
+	failCount          atomic.Int32
+	calls              atomic.Int32
+	sendCheckResultErr error
+	createServiceErr   error
 }
 
 func (m *mockProber) GetHostInfo(host string) (HostResult, error) {
@@ -22,11 +24,11 @@ func (m *mockProber) GetHostInfo(host string) (HostResult, error) {
 }
 
 func (m *mockProber) SendCheckResult(host, service string, exitStatus int, message string) error {
-	return nil
+	return m.sendCheckResultErr
 }
 
 func (m *mockProber) CreateService(host, name string, labels, annotations map[string]string) error {
-	return nil
+	return m.createServiceErr
 }
 
 func TestHealthChecker_Healthy(t *testing.T) {
@@ -155,5 +157,35 @@ func TestHealthChecker_Disabled(t *testing.T) {
 
 	if prober.calls.Load() != 0 {
 		t.Error("expected no API calls when disabled")
+	}
+}
+
+func TestHealthChecker_Errors(t *testing.T) {
+	prober := &mockProber{
+		sendCheckResultErr: errors.New("failed to send result"),
+		createServiceErr:   errors.New("failed to create service"),
+	}
+	prober.failCount.Store(100) // always fail
+
+	c := New(Config{
+		Enabled:     true,
+		IntervalSec: 1,
+		TargetHost:  "test-host",
+		ServiceName: "bridge-health",
+		Register:    true,
+	}, prober)
+
+	// Trigger CreateService error logging path
+	c.registerService()
+
+	// Trigger SendCheckResult error logging path (both healthy and unhealthy)
+	// First 3 calls make it Unhealthy
+	for i := 0; i < 4; i++ {
+		c.runCheck()
+	}
+
+	status := c.GetStatus()
+	if status.Healthy {
+		t.Error("expected unhealthy after 4 consecutive failures")
 	}
 }

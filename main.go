@@ -449,6 +449,7 @@ func main() {
 		w.WriteHeader(http.StatusUnauthorized)
 		fmt.Fprint(w, `<html><head><meta http-equiv="refresh" content="1;url=/status/beauty"></head><body>Logged out. Redirecting...</body></html>`)
 	})
+	mux.HandleFunc("/status/beauty/stats", dashboardHandler.HandleStats)
 	mux.HandleFunc("/status/", requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		statusHandler.ServeHTTP(w, r)
 	}))

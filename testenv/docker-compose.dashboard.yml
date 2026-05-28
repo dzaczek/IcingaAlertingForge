@@ -1,3 +1,4 @@
+name: dashboard
 networks:
   monitoring:
     external: true
@@ -8,7 +9,7 @@ volumes:
 
 services:
   # ── Webhook Bridge (dashboard mode — zero pre-config) ──────────
-  webhook-bridge:
+  dashboard-bridge:
     build:
       context: ..
       dockerfile: Dockerfile

@@ -4331,7 +4331,9 @@ function switchIPTab(source, tab, btn) {
   }
 
   // ── Live refresh: Recent Transmissions table ──
-  var _alertsRefreshTimer = null;
+  var _alertsNextAllowed = 0; // throttle: minimum interval between fetches
+  var _alertsPeriodicInterval = null;
+
   function refreshAlertsTable() {
     fetch('/history?limit=100', { credentials: 'include' }).then(function(r) {
       if (!r.ok) return;
@@ -4400,16 +4402,18 @@ function switchIPTab(source, tab, btn) {
   }
 
   // ── Live refresh: Overview stat tiles ──
-  var _overviewRefreshTimer = null;
+  var _overviewRefreshInFlight = false;
+  var _overviewPending = false;
 
   function refreshOverviewStats() {
-    if (_overviewRefreshTimer) return; // debounce: only one flight at a time
+    if (_overviewRefreshInFlight) { _overviewPending = true; return; }
+    _overviewRefreshInFlight = true;
+    _overviewPending = false;
     fetch('/status/beauty/stats', { credentials: 'include' }).then(function(r) {
       if (!r.ok) return;
       return r.json();
     }).then(function(data) {
       if (!data) return;
-      _overviewRefreshTimer = null;
       setStat('stat-history-entries', data.total_entries);
       setStat('stat-errors', data.errors);
       if (data.errors > 0) {
@@ -4423,7 +4427,8 @@ function switchIPTab(source, tab, btn) {
       setStat('stat-critical', data.critical_firing);
       setStat('stat-warning', data.warning_firing);
     }).catch(function() {}).finally(function() {
-      _overviewRefreshTimer = null;
+      _overviewRefreshInFlight = false;
+      if (_overviewPending) refreshOverviewStats();
     });
   }
 
@@ -4433,8 +4438,23 @@ function switchIPTab(source, tab, btn) {
   }
 
   function scheduleAlertsRefresh() {
-    if (_alertsRefreshTimer) clearTimeout(_alertsRefreshTimer);
-    _alertsRefreshTimer = setTimeout(refreshAlertsTable, 2000);
+    var now = Date.now();
+    // Throttle: fetch immediately, then at most every 3s
+    if (now < _alertsNextAllowed) return;
+    _alertsNextAllowed = now + 3000;
+    refreshAlertsTable();
+  }
+
+  // Periodic fallback refresh every 10s (in case SSE disconnects silently)
+  function startPeriodicAlertsRefresh() {
+    if (_alertsPeriodicInterval) clearInterval(_alertsPeriodicInterval);
+    _alertsPeriodicInterval = setInterval(function() {
+      var now = Date.now();
+      if (now >= _alertsNextAllowed) {
+        _alertsNextAllowed = now + 3000;
+        refreshAlertsTable();
+      }
+    }, 10000);
   }
 
   // Apply frozen highlights to all tables on initial load
@@ -4462,6 +4482,8 @@ function switchIPTab(source, tab, btn) {
       // Reconnect is automatic with EventSource
     };
   }
+  // Start periodic fallback in case SSE is blocked or disconnects
+  startPeriodicAlertsRefresh();
 })();
 
 // ── LCARS Info Popup System ──

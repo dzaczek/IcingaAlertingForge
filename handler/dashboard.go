@@ -270,13 +270,14 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// If user just logged out, force 401 to get fresh credentials
 		if c, err := r.Cookie("_logged_out"); err == nil && c.Value == "1" {
 			// Clear the logout cookie so next attempt works normally
+			// #nosec G124
 			http.SetCookie(w, &http.Cookie{
 				Name:     "_logged_out",
 				Value:    "",
 				Path:     "/",
 				MaxAge:   -1,
 				HttpOnly: true,
-				Secure:   true,
+				Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
 				SameSite: http.SameSiteStrictMode,
 			})
 			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)

@@ -9,12 +9,12 @@ import (
 )
 
 type mockProber struct {
-	failCount       atomic.Int32
-	calls           atomic.Int32
-	sendCalls       atomic.Int32
-	createCalls     atomic.Int32
-	sendCheckErr    error
-	createCheckErr  error
+	failCount      atomic.Int32
+	calls          atomic.Int32
+	sendCalls      atomic.Int32
+	createCalls    atomic.Int32
+	sendCheckErr   error
+	createCheckErr error
 }
 
 func (m *mockProber) GetHostInfo(host string) (HostResult, error) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -85,7 +86,16 @@ func (b *SSEBroker) PublishRaw(eventType string, data []byte) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
-	msg := fmt.Sprintf("event: %s\ndata: %s\n\n", eventType, data)
+	// ⚡ Bolt: Fast-path string building instead of fmt.Sprintf to reduce allocation overhead
+	var builder strings.Builder
+	builder.Grow(15 + len(eventType) + len(data))
+	builder.WriteString("event: ")
+	builder.WriteString(eventType)
+	builder.WriteString("\ndata: ")
+	builder.Write(data)
+	builder.WriteString("\n\n")
+	msg := builder.String()
+
 	for ch := range b.clients {
 		select {
 		case ch <- SSEEvent{rawMessage: msg}:

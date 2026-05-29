@@ -209,14 +209,15 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 // ServeHTTP renders the beauty dashboard.
 // DashboardStatsSnapshot is the JSON response for live stat tile refreshes.
 type DashboardStatsSnapshot struct {
-	TotalEntries   int   `json:"total_entries"`
-	Errors         int   `json:"errors"`
-	AvgDurationMs  int64 `json:"avg_duration_ms"`
-	Firing         int   `json:"firing"`
-	Resolved       int   `json:"resolved"`
-	TestMode       int   `json:"test_mode"`
-	CriticalFiring int   `json:"critical_firing"`
-	WarningFiring  int   `json:"warning_firing"`
+	TotalEntries   int    `json:"total_entries"`
+	Errors         int    `json:"errors"`
+	AvgDurationMs  int64  `json:"avg_duration_ms"`
+	Firing         int    `json:"firing"`
+	Resolved       int    `json:"resolved"`
+	TestMode       int    `json:"test_mode"`
+	CriticalFiring int    `json:"critical_firing"`
+	WarningFiring  int    `json:"warning_firing"`
+	Uptime         string `json:"uptime"`
 }
 
 // HandleStats serves GET /status/beauty/stats with a JSON snapshot of dashboard statistics.
@@ -246,6 +247,7 @@ func (h *DashboardHandler) HandleStats(w http.ResponseWriter, r *http.Request) {
 		TestMode:       stats.ByMode["test"],
 		CriticalFiring: stats.BySeverityFiring["critical"],
 		WarningFiring:  stats.BySeverityFiring["warning"],
+		Uptime:         time.Since(h.StartedAt).Round(time.Second).String(),
 	}
 	httputil.WriteJSON(w, http.StatusOK, snapshot)
 }
@@ -2141,7 +2143,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="lcars-header-cap"><span>IAF</span></div>
     <div class="lcars-header-bar">
       <div class="bar-segment bar-seg-1">Stardate {{.GeneratedAt}}</div>
-      <div class="bar-segment bar-seg-2">{{.Uptime}}</div>
+      <div class="bar-segment bar-seg-2" id="header-uptime">{{.Uptime}}</div>
       <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
         {{if not .IsAdmin}}<a href="/status/beauty?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
@@ -2559,7 +2561,7 @@ const dashboardHTML = `<!DOCTYPE html>
             </div>
             <div class="stat-cell">
               <div class="stat-label">Uptime</div>
-              <div class="stat-value" style="font-size:16px;">{{.SysStats.Uptime}}</div>
+              <div class="stat-value" id="sys-uptime" style="font-size:16px;">{{.SysStats.Uptime}}</div>
             </div>
             {{if .QueueStats}}
             <div class="stat-cell {{if gt .QueueStats.Depth 0}}warning{{end}}">
@@ -4436,6 +4438,10 @@ function switchIPTab(source, tab, btn) {
       setStat('stat-test', data.test_mode);
       setStat('stat-critical', data.critical_firing);
       setStat('stat-warning', data.warning_firing);
+      if (data.uptime) {
+        setStat('header-uptime', data.uptime);
+        setStat('sys-uptime', data.uptime);
+      }
     }).catch(function() {}).finally(function() {
       _overviewRefreshInFlight = false;
       if (_overviewPending) refreshOverviewStats();

@@ -301,6 +301,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.History == nil {
+		http.Error(w, "History not available", http.StatusInternalServerError)
+		return
+	}
+
 	stats, err := h.History.Stats()
 	if err != nil {
 		http.Error(w, "Failed to load statistics", http.StatusInternalServerError)

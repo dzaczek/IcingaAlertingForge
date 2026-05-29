@@ -33,7 +33,7 @@ checksum:
 
 sboms:
   - artifacts: archive
-    args: ["$artifact", "-o", "$document"]
+    args: ["$artifact", "-o", "syft-json=$document"]
 
 changelog:
   sort: asc

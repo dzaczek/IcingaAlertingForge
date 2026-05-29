@@ -33,8 +33,8 @@ func newChromeContext(t *testing.T) (context.Context, context.CancelFunc) {
 		chromedp.WindowSize(1920, 1080),
 	)
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	ctx, cancel := chromedp.NewContext(allocCtx)
-	ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	ctx, _ := chromedp.NewContext(allocCtx)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	t.Cleanup(func() { cancel(); allocCancel() })
 	if err := chromedp.Run(ctx); err != nil {
 		t.Skipf("Chrome not available: %v", err)
@@ -309,7 +309,11 @@ func TestDashboardMode_EmptyStart(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Skip("dashboard bridge not healthy")
 	}
-	resp2, _ := http.Get("http://localhost:9081/status/beauty/stats")
+	resp2, err := http.Get("http://localhost:9081/status/beauty/stats")
+	if err != nil {
+		t.Errorf("dashboard stats: %v", err)
+		return
+	}
 	defer resp2.Body.Close()
 	if resp2.StatusCode != 200 {
 		t.Errorf("dashboard stats: %d", resp2.StatusCode)

@@ -4,13 +4,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"icinga-webhook-bridge/metrics"
-	"icinga-webhook-bridge/cache"
-	"icinga-webhook-bridge/config"
 	"testing"
 	"time"
 
+	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
+	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/rbac"
 )
@@ -286,7 +286,7 @@ func TestDashboard_ServeHTTP_LogoutAndAdmin(t *testing.T) {
 		AdminUser: "admin",
 		AdminPass: "secret",
 		Version:   "1.0",
-		Cache: cache.NewServiceCache(60),
+		Cache:     cache.NewServiceCache(60),
 		Targets:   map[string]config.TargetConfig{},
 	}
 

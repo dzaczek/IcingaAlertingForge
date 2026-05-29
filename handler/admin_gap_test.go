@@ -252,10 +252,7 @@ func TestAdmin_HandleBulkDelete_Gaps(t *testing.T) {
 }
 
 func TestAdminHandler_HandleDeleteService(t *testing.T) {
-	h := &AdminHandler{
-
-
-	}
+	h := &AdminHandler{}
 	t.Run("non-DELETE method returns 405", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/admin/services/abc", nil)
 		req.SetBasicAuth("admin", "secret")

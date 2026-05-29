@@ -515,12 +515,20 @@ func main() {
 			statusHandler.Targets = newCfg.Targets
 			adminHandler.Targets = newCfg.Targets
 			dashboardHandler.Targets = newCfg.Targets
-			dashboardHandler.AdminUser = newCfg.AdminUser
-			dashboardHandler.AdminPass = newCfg.AdminPass
-			adminHandler.User = newCfg.AdminUser
-			adminHandler.Pass = newCfg.AdminPass
-			settingsHandler.User = newCfg.AdminUser
-			settingsHandler.Pass = newCfg.AdminPass
+
+			// Admin credentials are env-only (never stored in dashboard JSON).
+			// Only update handlers if the reloaded config actually has them set,
+			// otherwise keep the existing env-provided credentials.
+			if newCfg.AdminUser != "" {
+				dashboardHandler.AdminUser = newCfg.AdminUser
+				adminHandler.User = newCfg.AdminUser
+				settingsHandler.User = newCfg.AdminUser
+			}
+			if newCfg.AdminPass != "" {
+				dashboardHandler.AdminPass = newCfg.AdminPass
+				adminHandler.Pass = newCfg.AdminPass
+				settingsHandler.Pass = newCfg.AdminPass
+			}
 
 			if err := historyLogger.UpdateConfig(newCfg.HistoryFile, newCfg.HistoryMaxEntries); err != nil {
 				slog.Error("Failed to update history logger config on reload", "error", err)

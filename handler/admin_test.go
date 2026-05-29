@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"icinga-webhook-bridge/cache"
@@ -151,7 +152,7 @@ func TestAdmin_HandleDeleteService(t *testing.T) {
 }
 
 func TestAdmin_HandleBulkDelete(t *testing.T) {
-	deleteCount := 0
+	var deleteCount int32
 	h, _ := testAdminHandler(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.WriteHeader(http.StatusOK)
@@ -159,7 +160,7 @@ func TestAdmin_HandleBulkDelete(t *testing.T) {
 			return
 		}
 		if r.Method == http.MethodDelete {
-			deleteCount++
+			atomic.AddInt32(&deleteCount, 1)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"results":[{"code":200}]}`))
 		}
@@ -181,8 +182,8 @@ func TestAdmin_HandleBulkDelete(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rr.Code)
 	}
-	if deleteCount != 2 {
-		t.Errorf("expected 2 deletes, got %d", deleteCount)
+	if atomic.LoadInt32(&deleteCount) != 2 {
+		t.Errorf("expected 2 deletes, got %d", atomic.LoadInt32(&deleteCount))
 	}
 }
 

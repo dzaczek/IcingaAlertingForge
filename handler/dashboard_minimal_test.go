@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"icinga-webhook-bridge/cache"
@@ -38,6 +39,24 @@ func TestDashboard_ServeHTTP_Basic(t *testing.T) {
 		h.ServeHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("GET renders dashboard with logged user", func(t *testing.T) {
+		h.AdminUser = "admin"
+		h.AdminPass = "test"
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("admin", "test")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+
+		body := rr.Body.String()
+		expectedStr := "[COMMAND ACCESS - USER: admin]"
+		if !strings.Contains(body, expectedStr) {
+			t.Errorf("expected body to contain %q, but it did not", expectedStr)
 		}
 	})
 

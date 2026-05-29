@@ -3,10 +3,14 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
+	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/rbac"
 )
@@ -178,4 +182,212 @@ func TestBuildSourceIPLists(t *testing.T) {
 	if len(lastIPs) != 2 {
 		t.Errorf("expected 2 sources in lastIPs, got %d", len(lastIPs))
 	}
+}
+
+func TestHandleStats(t *testing.T) {
+	h := &DashboardHandler{
+		History: nil,
+	}
+
+	t.Run("non-GET method returns 405", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/status/beauty/stats", nil)
+		rr := httptest.NewRecorder()
+		h.HandleStats(rr, req)
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", rr.Code)
+		}
+	})
+
+	t.Run("nil history returns 500", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/status/beauty/stats", nil)
+		rr := httptest.NewRecorder()
+		h.HandleStats(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("returns valid stats", func(t *testing.T) {
+		histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+		histLogger.Append(models.HistoryEntry{
+			RequestID: "1",
+			Mode:      "work",
+			Action:    "firing",
+		})
+		h.History = histLogger
+		h.StartedAt = time.Now()
+
+		req := httptest.NewRequest(http.MethodGet, "/status/beauty/stats", nil)
+		rr := httptest.NewRecorder()
+		h.HandleStats(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+	})
+}
+
+func TestDashboard_ServeHTTP_StatsEndpoint(t *testing.T) {
+	h := &DashboardHandler{
+		History: nil,
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/status/beauty/stats", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	// should route to HandleStats -> returns 500 because history is nil
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+func TestDashboard_ServeHTTP_Errors(t *testing.T) {
+	h := &DashboardHandler{
+		History: nil,
+	}
+
+	t.Run("GET without history fails", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500 without history, got %d", rr.Code)
+		}
+	})
+
+	t.Run("wrong auth logs metric", func(t *testing.T) {
+		histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+		metric := metrics.NewCollector()
+		h2 := &DashboardHandler{
+			History:   histLogger,
+			Metrics:   metric,
+			AdminUser: "admin",
+			AdminPass: "secret",
+		}
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("wrong", "password")
+		rr := httptest.NewRecorder()
+		h2.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401, got %d", rr.Code)
+		}
+		stats := metric.Snapshot()
+		if stats.FailedAuthTotal == 0 {
+			t.Errorf("expected failed auth metric to increase")
+		}
+	})
+}
+
+func TestDashboard_ServeHTTP_LogoutAndAdmin(t *testing.T) {
+	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+	h := &DashboardHandler{
+		History:   histLogger,
+		AdminUser: "admin",
+		AdminPass: "secret",
+		Version:   "1.0",
+		Cache:     cache.NewServiceCache(60),
+		Targets:   map[string]config.TargetConfig{},
+	}
+
+	t.Run("logout logic sets 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.AddCookie(&http.Cookie{Name: "_logged_out", Value: "1"})
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("expected 401 for logout, got %d", rr.Code)
+		}
+	})
+
+	t.Run("admin with valid auth", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+	})
+}
+
+func TestDashboard_ServeHTTP_AdminRendering(t *testing.T) {
+	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+	h := &DashboardHandler{
+		History:   histLogger,
+		AdminUser: "admin",
+		AdminPass: "secret",
+		Version:   "1.0",
+		Targets:   map[string]config.TargetConfig{},
+		Cache:     cache.NewServiceCache(60),
+	}
+
+	t.Run("admin with valid auth and rendering", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+	})
+
+	t.Run("admin missing history causes 500", func(t *testing.T) {
+		hNoHist := &DashboardHandler{
+			History:   nil,
+			AdminUser: "admin",
+			AdminPass: "secret",
+		}
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		hNoHist.ServeHTTP(rr, req)
+		if rr.Code != http.StatusInternalServerError {
+			t.Errorf("expected 500, got %d", rr.Code)
+		}
+	})
+
+	t.Run("viewer role returns 200 but not admin panel", func(t *testing.T) {
+		rbacMgr := rbac.New(nil)
+		rbacMgr.AddUser(rbac.User{Username: "user", Password: "pass", Role: rbac.RoleViewer})
+		h.RBAC = rbacMgr
+
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("user", "pass")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+	})
+}
+
+func TestDashboard_ServeHTTP_FullAdmin(t *testing.T) {
+	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+
+	c := cache.NewServiceCache(60)
+	c.Register("host-b", "service-b")
+	c.Freeze("host-b", "service-b", nil)
+
+	metric := metrics.NewCollector()
+
+	h := &DashboardHandler{
+		History:   histLogger,
+		AdminUser: "admin",
+		AdminPass: "secret",
+		Version:   "1.0",
+		Targets:   map[string]config.TargetConfig{},
+		Cache:     c,
+		Metrics:   metric,
+	}
+
+	t.Run("admin with valid auth and rendering with cache and metrics", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("expected 200, got %d", rr.Code)
+		}
+	})
 }

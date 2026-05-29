@@ -9,6 +9,7 @@ import (
 
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/rbac"
 )
 
 // ── firstHostName ──────────────────────────────────────────────────────────
@@ -246,6 +247,39 @@ func TestAdmin_HandleBulkDelete_Gaps(t *testing.T) {
 		h.HandleBulkDelete(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+func TestAdminHandler_HandleDeleteService(t *testing.T) {
+	h := &AdminHandler{}
+	t.Run("non-DELETE method returns 405", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/admin/services/abc", nil)
+		req.SetBasicAuth("admin", "secret")
+		rr := httptest.NewRecorder()
+
+		h.HandleDeleteService(rr, req)
+
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("expected 405, got %d", rr.Code)
+		}
+	})
+}
+
+func TestAdminHandler_HandleDeleteService_NoService(t *testing.T) {
+	h := &AdminHandler{
+		RBAC: rbac.New(nil),
+	}
+	h.RBAC.AddUser(rbac.User{Username: "admin", Password: "pwd", Role: rbac.RoleAdmin})
+	t.Run("missing service returns 400", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/admin/services/", nil)
+		req.SetBasicAuth("admin", "pwd")
+		rr := httptest.NewRecorder()
+
+		h.HandleDeleteService(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("expected 403, got %d", rr.Code)
 		}
 	})
 }

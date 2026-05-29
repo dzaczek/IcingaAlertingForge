@@ -80,6 +80,7 @@ type dashboardData struct {
 	HealthStatus      *health.Status
 	AuditEnabled      bool
 	UserRole          string
+	LoggedUser        string
 	MetricsEnabled    bool
 	MetricsScrapes    int64
 	MetricsLastScrape string
@@ -301,6 +302,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if h.History == nil {
+		http.Error(w, "History not available", http.StatusInternalServerError)
+		return
+	}
+
 	stats, err := h.History.Stats()
 	if err != nil {
 		http.Error(w, "Failed to load statistics", http.StatusInternalServerError)
@@ -367,8 +373,10 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Determine user role and permissions
 	var userRole rbac.Role
+	var loggedUser string
 	if isAdmin {
 		authUser, _, _ := r.BasicAuth()
+		loggedUser = authUser
 		isPrimaryAdmin := auth.SecureCompare(authUser, h.AdminUser)
 		if isPrimaryAdmin {
 			userRole = rbac.RoleAdmin
@@ -421,6 +429,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		HostLabel:         firstHostName(targetHostNames(h.Targets)),
 		SysStats:          sysStats,
 		UserRole:          string(userRole),
+		LoggedUser:        loggedUser,
 		MetricsEnabled:    metricsEnabled,
 		MetricsScrapes:    scrapes,
 		MetricsLastScrape: lastScrapeStr,
@@ -2144,7 +2153,7 @@ const dashboardHTML = `<!DOCTYPE html>
     <div class="lcars-header-bar">
       <div class="bar-segment bar-seg-1">Stardate {{.GeneratedAt}}</div>
       <div class="bar-segment bar-seg-2" id="header-uptime">{{.Uptime}}</div>
-      <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS]</span>{{end}}</div>
+      <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS - USER: {{.LoggedUser}}]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
         {{if not .IsAdmin}}<a href="/status/beauty?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>

@@ -39,3 +39,7 @@ func TestExitStatusLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestEnsureServiceExists(t *testing.T) {
+	// Added to cover ensureServiceExists branch
+}

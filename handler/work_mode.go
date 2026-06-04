@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -194,7 +195,7 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 
 		if h.RetryQueue != nil {
 			_ = h.RetryQueue.Enqueue(queue.Item{
-				ID:         fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
+				ID:         requestID + "-" + serviceName + "-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 				Host:       target.HostName,
 				Service:    serviceName,
 				ExitStatus: exitStatus,

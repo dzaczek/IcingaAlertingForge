@@ -1,16 +1,16 @@
 package handler
 
 import (
-	"icinga-webhook-bridge/config"
-	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/cache"
-	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
-	"path/filepath"
-	"os"
-	"testing"
+	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/models"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func TestHandleWorkMode_Coverage(t *testing.T) {
@@ -26,9 +26,9 @@ func TestHandleWorkMode_Coverage(t *testing.T) {
 	apiClient := icinga.NewAPIClient(ts.URL, "user", "pass", false)
 
 	h := &WebhookHandler{
-		Cache: cache.NewServiceCache(60),
+		Cache:   cache.NewServiceCache(60),
 		History: histLogger,
-		API: apiClient,
+		API:     apiClient,
 	}
 
 	alert := models.GrafanaAlert{
@@ -66,9 +66,9 @@ func TestWebhook_ProcessAlert_Coverage(t *testing.T) {
 	apiClient := icinga.NewAPIClient(ts.URL, "user", "pass", false)
 
 	h := &WebhookHandler{
-		Cache: cache.NewServiceCache(60),
+		Cache:   cache.NewServiceCache(60),
 		History: histLogger,
-		API: apiClient,
+		API:     apiClient,
 	}
 
 	alert := models.GrafanaAlert{

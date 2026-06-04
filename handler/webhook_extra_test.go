@@ -1,19 +1,19 @@
 package handler
 
 import (
-	"icinga-webhook-bridge/config"
-	"icinga-webhook-bridge/models"
+	"bytes"
+	"encoding/json"
+	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
-	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
-	"path/filepath"
-	"os"
-	"testing"
+	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/models"
 	"net/http"
 	"net/http/httptest"
-	"encoding/json"
-	"bytes"
-	"icinga-webhook-bridge/auth"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
 func TestWebhook_ServeHTTP_Coverage(t *testing.T) {
@@ -30,10 +30,10 @@ func TestWebhook_ServeHTTP_Coverage(t *testing.T) {
 
 	h := &WebhookHandler{
 		KeyStore: auth.NewKeyStore(map[string]config.WebhookRoute{"key": {Source: "src", TargetID: "t1"}}),
-		Targets: map[string]config.TargetConfig{"t1": {HostName: "test-host"}},
-		Cache: cache.NewServiceCache(60),
-		History: histLogger,
-		API: apiClient,
+		Targets:  map[string]config.TargetConfig{"t1": {HostName: "test-host"}},
+		Cache:    cache.NewServiceCache(60),
+		History:  histLogger,
+		API:      apiClient,
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/", nil)

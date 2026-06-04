@@ -124,3 +124,30 @@ func TestDashboard_ServeHTTP_AdminLoggedOut(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboard_ServeHTTP_WriteErrors(t *testing.T) {
+	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
+	h := &DashboardHandler{
+		Cache:     cache.NewServiceCache(60),
+		History:   histLogger,
+		Metrics:   metrics.NewCollector(),
+		Targets:   map[string]config.TargetConfig{},
+		Version:   "test",
+		AdminPass: "test",
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
+	// Important: add the _logged_out cookie to trigger the early return with the Enter credentials page.
+	req.AddCookie(&http.Cookie{Name: "_logged_out", Value: "1"})
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
+	}
+
+	body := rr.Body.String()
+	expectedStr := "Enter credentials"
+	if !strings.Contains(body, expectedStr) {
+		t.Errorf("expected body to contain %q, but it did not", expectedStr)
+	}
+}

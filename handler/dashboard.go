@@ -285,7 +285,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte(`<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Enter credentials</h2><p>Authenticate to access command panel.</p></body></html>`))
+			_, _ = w.Write([]byte(`<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Enter credentials</h2><p>Authenticate to access command panel.</p></body></html>`))
 			return
 		}
 		if h.isAdmin(r) {

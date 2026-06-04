@@ -139,13 +139,13 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if event.rawMessage != "" {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
-				w.Write(buf.Bytes())
+				_, _ = w.Write(buf.Bytes())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
-				w.Write([]byte("data: " + string(data) + "\n\n"))
+				_, _ = w.Write([]byte("data: " + string(data) + "\n\n"))
 			}
 			flusher.Flush()
 		}

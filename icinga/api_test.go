@@ -7,6 +7,72 @@ import (
 	"testing"
 )
 
+import (
+	"time"
+)
+
+func TestNewAPIClient(t *testing.T) {
+	baseURL := "https://icinga.example.com:5665"
+	user := "icinga_user"
+	pass := "icinga_pass"
+	tlsSkipVerify := true
+
+	client := NewAPIClient(baseURL, user, pass, tlsSkipVerify)
+
+	if client.BaseURL != baseURL {
+		t.Errorf("expected BaseURL %q, got %q", baseURL, client.BaseURL)
+	}
+	if client.User != user {
+		t.Errorf("expected User %q, got %q", user, client.User)
+	}
+	if client.Pass != pass {
+		t.Errorf("expected Pass %q, got %q", pass, client.Pass)
+	}
+	if client.HTTPClient == nil {
+		t.Fatal("expected HTTPClient to be initialized, got nil")
+	}
+	if client.HTTPClient.Timeout != 15*time.Second {
+		t.Errorf("expected Timeout %v, got %v", 15*time.Second, client.HTTPClient.Timeout)
+	}
+
+	transport, ok := client.HTTPClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected Transport to be *http.Transport, got %T", client.HTTPClient.Transport)
+	}
+	if transport.TLSClientConfig == nil {
+		t.Fatal("expected TLSClientConfig to be initialized, got nil")
+	}
+	if transport.TLSClientConfig.InsecureSkipVerify != tlsSkipVerify {
+		t.Errorf("expected InsecureSkipVerify %v, got %v", tlsSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
+	}
+}
+
+func TestUpdateCredentials(t *testing.T) {
+	client := NewAPIClient("old_url", "old_user", "old_pass", false)
+
+	newBaseURL := "https://icinga.example.com:5665"
+	newUser := "icinga_user"
+	newPass := "icinga_pass"
+	newTLSSkipVerify := true
+
+	client.UpdateCredentials(newBaseURL, newUser, newPass, newTLSSkipVerify)
+
+	if client.BaseURL != newBaseURL {
+		t.Errorf("expected BaseURL %q, got %q", newBaseURL, client.BaseURL)
+	}
+	if client.User != newUser {
+		t.Errorf("expected User %q, got %q", newUser, client.User)
+	}
+	if client.Pass != newPass {
+		t.Errorf("expected Pass %q, got %q", newPass, client.Pass)
+	}
+
+	transport := client.HTTPClient.Transport.(*http.Transport)
+	if transport.TLSClientConfig.InsecureSkipVerify != newTLSSkipVerify {
+		t.Errorf("expected InsecureSkipVerify %v, got %v", newTLSSkipVerify, transport.TLSClientConfig.InsecureSkipVerify)
+	}
+}
+
 func TestSendCheckResult_Success(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

@@ -30,6 +30,7 @@ import (
 	"icinga-webhook-bridge/icinga"
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/queue"
+	"icinga-webhook-bridge/ratelimit"
 	"icinga-webhook-bridge/rbac"
 )
 
@@ -93,6 +94,9 @@ func main() {
 			// Metrics + observability (env-only, never in JSON store)
 			storedCfg.MetricsEnabled = cfg.MetricsEnabled
 			storedCfg.MetricsToken = cfg.MetricsToken
+			// Webhook flood protection (env-only security control)
+			storedCfg.WebhookRateLimitPerSec = cfg.WebhookRateLimitPerSec
+			storedCfg.WebhookRateLimitBurst = cfg.WebhookRateLimitBurst
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {
@@ -148,6 +152,16 @@ func main() {
 	historyLogger.StartMaintenance(mainCtx)
 	serviceCache.StartMaintenance(mainCtx, time.Minute)
 	startCacheResync(mainCtx, apiClient, serviceCache, cfg.Targets, time.Duration(cfg.CacheTTLMinutes)*time.Minute)
+
+	// ── Webhook ingress flood protection (per source IP) ────────────
+	ingressLimiter := ratelimit.New(float64(cfg.WebhookRateLimitPerSec), cfg.WebhookRateLimitBurst)
+	if ingressLimiter != nil {
+		ingressLimiter.StartEviction(mainCtx, time.Minute)
+		slog.Info("Webhook ingress rate limit enabled",
+			"per_sec", cfg.WebhookRateLimitPerSec, "burst", cfg.WebhookRateLimitBurst)
+	} else {
+		slog.Warn("Webhook ingress rate limit disabled")
+	}
 
 	// ── Metrics Collector ────────────────────────────────────────────
 	metricsCollector := metrics.NewCollector()
@@ -278,6 +292,7 @@ func main() {
 		History:    historyLogger,
 		Targets:    cfg.Targets,
 		Limiter:    rateLimiter,
+		Ingress:    ingressLimiter,
 		Metrics:    metricsCollector,
 		PerKey:     perKeyCollector,
 		SSE:        sseBroker,

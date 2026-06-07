@@ -65,6 +65,10 @@ type Config struct {
 	// Cache
 	CacheTTLMinutes int
 
+	// Webhook ingress flood protection (per source IP). 0 = disabled.
+	WebhookRateLimitPerSec int
+	WebhookRateLimitBurst  int
+
 	// Logging
 	LogLevel  string
 	LogFormat string
@@ -202,6 +206,15 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.CacheTTLMinutes, err = optInt("CACHE_TTL_MINUTES", 60); err != nil {
+		return nil, err
+	}
+
+	// Per-IP webhook flood protection. Generous defaults that only block actual
+	// floods; set WEBHOOK_RATELIMIT_PER_SEC=0 to disable.
+	if cfg.WebhookRateLimitPerSec, err = optInt("WEBHOOK_RATELIMIT_PER_SEC", 50); err != nil {
+		return nil, err
+	}
+	if cfg.WebhookRateLimitBurst, err = optInt("WEBHOOK_RATELIMIT_BURST", 100); err != nil {
 		return nil, err
 	}
 

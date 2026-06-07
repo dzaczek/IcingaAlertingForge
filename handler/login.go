@@ -79,6 +79,24 @@ func (h *LoginHandler) handlePost(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 
+// HandleLogout destroys the current session, clears the cookie, and sends the
+// user back to the login form.
+func (h *LoginHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	if c, err := r.Cookie(auth.SessionCookieName); err == nil {
+		h.Sessions.Delete(c.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     auth.SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
+
 // valid reports whether the credentials match the primary admin or an RBAC user.
 // Mirrors the Basic Auth check used elsewhere so authorization stays identical.
 func (h *LoginHandler) valid(username, password string) bool {

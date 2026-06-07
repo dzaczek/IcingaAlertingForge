@@ -474,12 +474,7 @@ func main() {
 	mux.Handle("/login", loginHandler)
 	mux.Handle("/status/beauty/events", sseBroker)
 	mux.Handle("/status/beauty", dashboardHandler)
-	mux.HandleFunc("/status/beauty/logout", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `<html><head><meta http-equiv="refresh" content="1;url=/status/beauty"></head><body>Logged out. Redirecting...</body></html>`)
-	})
+	mux.HandleFunc("/status/beauty/logout", loginHandler.HandleLogout)
 	mux.HandleFunc("/status/beauty/stats", dashboardHandler.HandleStats)
 	mux.HandleFunc("/status/", requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		statusHandler.ServeHTTP(w, r)

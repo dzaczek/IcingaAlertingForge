@@ -2136,7 +2136,7 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="bar-segment bar-seg-2" id="header-uptime">{{.Uptime}}</div>
       <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS - USER: {{.LoggedUser}}]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
-        {{if not .IsAdmin}}<a href="/status/beauty?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
+        {{if not .IsAdmin}}<a href="/login" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>
       <div class="bar-segment bar-seg-5">{{.Version}}</div>
     </div>
@@ -4242,9 +4242,8 @@ function rbacDeleteUser(username) {
 }
 
 function doLogout() {
-  // Set logout cookie so server forces fresh 401 on next admin login
-  var sec = window.location.protocol === 'https:' ? ';secure' : ''; document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
-  window.location.href = '/status/beauty';
+  // Server destroys the session, clears the cookie, and redirects to /login.
+  window.location.href = '/status/beauty/logout';
 }
 
 // ── Preserve section on auto-refresh ──
@@ -4637,8 +4636,7 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    var sec = window.location.protocol === 'https:' ? ';secure' : ''; document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
-    window.location.href = '/status/beauty';
+    window.location.href = '/status/beauty/logout';
   }
 
   function showWarning() {

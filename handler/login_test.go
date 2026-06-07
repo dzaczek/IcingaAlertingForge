@@ -94,6 +94,35 @@ func TestLogin_POST_InvalidRejected(t *testing.T) {
 	}
 }
 
+func TestLogout_DestroysSessionAndRedirects(t *testing.T) {
+	h := testLoginHandler()
+	token, _ := h.Sessions.Create("admin", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/status/beauty/logout", nil)
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookieName, Value: token})
+	rr := httptest.NewRecorder()
+	h.HandleLogout(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "/login" {
+		t.Errorf("expected redirect to /login, got %q", loc)
+	}
+	if _, ok := h.Sessions.Get(token); ok {
+		t.Error("session should be destroyed after logout")
+	}
+	var cleared bool
+	for _, c := range rr.Result().Cookies() {
+		if c.Name == auth.SessionCookieName && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("expected session cookie to be cleared (MaxAge < 0)")
+	}
+}
+
 func TestSafeNext_BlocksOpenRedirect(t *testing.T) {
 	cases := map[string]string{
 		"":                 defaultLoginRedirect,

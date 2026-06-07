@@ -40,16 +40,15 @@ func TestExitStatusLabel(t *testing.T) {
 	}
 }
 
-
 // ⚡ Bolt: Adding tests to satisfy coverage requirements after performance improvements
 func TestMapSeverityToExitStatus_UnknownDefaults(t *testing.T) {
-    if got := mapSeverityToExitStatus("unknown"); got != 2 {
-        t.Errorf("expected 2, got %d", got)
-    }
+	if got := mapSeverityToExitStatus("unknown"); got != 2 {
+		t.Errorf("expected 2, got %d", got)
+	}
 }
 
 func TestExitStatusLabel_Unknown(t *testing.T) {
-    if got := exitStatusLabel(99); got != "UNKNOWN" {
-        t.Errorf("expected UNKNOWN, got %s", got)
-    }
+	if got := exitStatusLabel(99); got != "UNKNOWN" {
+		t.Errorf("expected UNKNOWN, got %s", got)
+	}
 }

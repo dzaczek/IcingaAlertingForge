@@ -499,16 +499,13 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 	}
 }
 
-
-
-
 // ⚡ Bolt: Adding coverage for the missing alert status cases inside handleWorkMode
 func TestWebhook_UnknownStatus(t *testing.T) {
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
 
 	payload := map[string]any{
-		"status":      "unknown_status",
-		"alerts":      []map[string]any{{"status": "unknown_status", "labels": map[string]string{"alertname": "Unknown Alert"}}},
+		"status":       "unknown_status",
+		"alerts":       []map[string]any{{"status": "unknown_status", "labels": map[string]string{"alertname": "Unknown Alert"}}},
 		"commonLabels": map[string]string{"alertname": "Unknown Alert"},
 	}
 

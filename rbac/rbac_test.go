@@ -95,6 +95,20 @@ func TestHasPermission(t *testing.T) {
 	}
 }
 
+func TestAddUser_PasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	longPass := make([]byte, 73)
+	for i := range longPass {
+		longPass[i] = 'a'
+	}
+
+	err := m.AddUser(User{Username: "new-user", Password: string(longPass), Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error for password longer than 72 bytes, got nil")
+	}
+}
+
 func TestAddRemoveUser(t *testing.T) {
 	m := New(nil)
 

@@ -147,6 +147,7 @@ func main() {
 	defer mainCancel()
 	historyLogger.StartMaintenance(mainCtx)
 	serviceCache.StartMaintenance(mainCtx, time.Minute)
+	startCacheResync(mainCtx, apiClient, serviceCache, cfg.Targets, time.Duration(cfg.CacheTTLMinutes)*time.Minute)
 
 	// ── Metrics Collector ────────────────────────────────────────────
 	metricsCollector := metrics.NewCollector()
@@ -697,6 +698,43 @@ func restoreManagedServicesFromIcinga(apiClient *icinga.APIClient, serviceCache 
 			"sample", legacySamples,
 			"expected_managed_by", icinga.ManagedByIAF)
 	}
+}
+
+// startCacheResync periodically re-registers managed services from Icinga2 so
+// that healthy (green) services which never emit a webhook event do not expire
+// from the cache and disappear from the dashboard. Each pass refreshes the
+// entry's CreatedAt, keeping live services inside the TTL window while still
+// letting genuinely deleted services age out.
+//
+// The interval is derived from the TTL (a quarter of it, with a one-minute
+// floor) so that several consecutive resync failures can occur before an entry
+// is at risk of expiring.
+func startCacheResync(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, targets map[string]config.TargetConfig, ttl time.Duration) {
+	interval := ttl / 4
+	if interval < time.Minute {
+		interval = time.Minute
+	}
+	slog.Info("Cache resync enabled", "interval", interval, "ttl", ttl)
+	startCacheResyncEvery(ctx, apiClient, serviceCache, targets, interval)
+}
+
+// startCacheResyncEvery runs a resync pass over all targets on the given
+// interval until ctx is cancelled.
+func startCacheResyncEvery(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, targets map[string]config.TargetConfig, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for _, target := range sortedTargets(targets) {
+					restoreManagedServicesFromIcinga(apiClient, serviceCache, target.HostName)
+				}
+			}
+		}
+	}()
 }
 
 func ensureConfiguredHosts(apiClient *icinga.APIClient, targets map[string]config.TargetConfig, autoCreate bool) error {

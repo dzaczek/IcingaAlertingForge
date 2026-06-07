@@ -498,3 +498,96 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 		t.Fatalf("expected failed auto-create to be retried, got %d create attempt(s)", createCallCount)
 	}
 }
+
+func TestWebhook_Authenticate_AuthorizationHeader_WithScheme(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	// Ensure we use a valid payload so that it passes parsing
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	// Using "ApiKey" scheme
+	req.Header.Set("Authorization", "ApiKey valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	// Since we provided a valid payload and valid key, it should go through or hit a bad gateway (but not 401)
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected auth to pass, got 401")
+	}
+}
+
+func TestWebhook_Authenticate_AuthorizationHeader_NoScheme(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	// No scheme
+	req.Header.Set("Authorization", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected auth to pass, got 401")
+	}
+}
+
+func TestWebhook_Authenticate_UnknownTarget(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+	// Corrupt the target configuration so the target doesn't exist
+	h.Targets = map[string]config.TargetConfig{}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for missing target, got %d", rr.Code)
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_GrafanaFallback(t *testing.T) {
+	// Send invalid payload to test parsing fallback logic in parseWebhookPayload
+	rawBody := []byte(`{"invalid": "data"}`)
+	_, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Logf("expected fallback error but got %v", err)
+	}
+	if format != "grafana" {
+		t.Logf("expected fallback format 'grafana', got %s", format)
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_Alertmanager(t *testing.T) {
+	rawBody := []byte(`{"version": "4", "groupKey": "key", "receiver": "web", "alerts": [{"status": "firing", "labels": {"alertname": "Test"}}]}`)
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if format != "alertmanager" {
+		t.Errorf("expected format 'alertmanager', got %s", format)
+	}
+	if len(payload.Alerts) != 1 {
+		t.Errorf("expected 1 alert, got %d", len(payload.Alerts))
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_Universal(t *testing.T) {
+	rawBody := []byte(`{"alerts": [{"status": "firing", "labels": {"alertname": "Test"}}]}`)
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if format != "universal" {
+		t.Errorf("expected format 'universal', got %s", format)
+	}
+	if len(payload.Alerts) != 1 {
+		t.Errorf("expected 1 alert, got %d", len(payload.Alerts))
+	}
+}

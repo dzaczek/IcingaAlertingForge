@@ -50,44 +50,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// ── Authentication ──────────────────────────────────────────────
-	// Check X-API-Key header first, then fall back to Authorization header
-	// (Grafana webhook sends: "Authorization: <scheme> <credentials>")
-	apiKey := r.Header.Get("X-API-Key")
-	if apiKey == "" {
-		if auth := r.Header.Get("Authorization"); auth != "" {
-			// Strip scheme prefix (e.g. "ApiKey abc123" -> "abc123")
-			if i := strings.Index(auth, " "); i >= 0 {
-				apiKey = auth[i+1:]
-			} else {
-				apiKey = auth
-			}
-		}
-	}
-	route, ok := h.KeyStore.ValidateKey(apiKey)
+	route, target, ok := h.authenticate(w, r)
 	if !ok {
-		slog.Warn("Unauthorized webhook request", "remote_addr", r.RemoteAddr)
-		if h.Metrics != nil {
-			h.Metrics.RecordAuthFailure(r.RemoteAddr, apiKey)
-		}
-		if h.Audit != nil {
-			h.Audit.Log(audit.Event{
-				EventType:  audit.EventAuthFailure,
-				Severity:   audit.SevHigh,
-				RemoteAddr: r.RemoteAddr,
-				Action:     "webhook.auth",
-				Outcome:    "failure",
-			})
-		}
-		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-
-	target, ok := h.Targets[route.TargetID]
-	if !ok {
-		slog.Error("Webhook route points to unknown target",
-			"target_id", route.TargetID,
-			"remote_addr", r.RemoteAddr)
-		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "webhook route misconfigured"})
 		return
 	}
 
@@ -227,6 +191,53 @@ func resultHasError(result map[string]any) bool {
 		return true
 	}
 	return false
+}
+
+// authenticate extracts and validates the API key, returning the route and target if successful.
+func (h *WebhookHandler) authenticate(w http.ResponseWriter, r *http.Request) (config.WebhookRoute, config.TargetConfig, bool) {
+	// Check X-API-Key header first, then fall back to Authorization header
+	// (Grafana webhook sends: "Authorization: <scheme> <credentials>")
+	apiKey := r.Header.Get("X-API-Key")
+	if apiKey == "" {
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			// Strip scheme prefix (e.g. "ApiKey abc123" -> "abc123")
+			if i := strings.Index(auth, " "); i >= 0 {
+				apiKey = auth[i+1:]
+			} else {
+				apiKey = auth
+			}
+		}
+	}
+
+	route, ok := h.KeyStore.ValidateKey(apiKey)
+	if !ok {
+		slog.Warn("Unauthorized webhook request", "remote_addr", r.RemoteAddr)
+		if h.Metrics != nil {
+			h.Metrics.RecordAuthFailure(r.RemoteAddr, apiKey)
+		}
+		if h.Audit != nil {
+			h.Audit.Log(audit.Event{
+				EventType:  audit.EventAuthFailure,
+				Severity:   audit.SevHigh,
+				RemoteAddr: r.RemoteAddr,
+				Action:     "webhook.auth",
+				Outcome:    "failure",
+			})
+		}
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return config.WebhookRoute{}, config.TargetConfig{}, false
+	}
+
+	target, ok := h.Targets[route.TargetID]
+	if !ok {
+		slog.Error("Webhook route points to unknown target",
+			"target_id", route.TargetID,
+			"remote_addr", r.RemoteAddr)
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "webhook route misconfigured"})
+		return config.WebhookRoute{}, config.TargetConfig{}, false
+	}
+
+	return route, target, true
 }
 
 // processAlert routes a single alert to the appropriate handler based on mode.

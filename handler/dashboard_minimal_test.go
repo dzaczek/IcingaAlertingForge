@@ -60,17 +60,20 @@ func TestDashboard_ServeHTTP_Basic(t *testing.T) {
 		}
 	})
 
-	t.Run("GET with admin=1 without creds returns 401", func(t *testing.T) {
+	t.Run("GET with admin=1 without creds redirects to login", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, req)
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("expected 401, got %d", rr.Code)
+		if rr.Code != http.StatusSeeOther {
+			t.Errorf("expected 303 redirect, got %d", rr.Code)
+		}
+		if loc := rr.Header().Get("Location"); !strings.HasPrefix(loc, "/login") {
+			t.Errorf("expected redirect to /login, got %q", loc)
 		}
 	})
 }
 
-func TestDashboard_ServeHTTP_AdminLoggedOut(t *testing.T) {
+func TestDashboard_ServeHTTP_UnauthenticatedAdminRedirectsToLogin(t *testing.T) {
 	histLogger, _ := history.NewLogger(filepath.Join(t.TempDir(), "hist.jsonl"), 100)
 	h := &DashboardHandler{
 		Cache:     cache.NewServiceCache(60),
@@ -81,46 +84,15 @@ func TestDashboard_ServeHTTP_AdminLoggedOut(t *testing.T) {
 		AdminPass: "test",
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
-	req.AddCookie(&http.Cookie{Name: "_logged_out", Value: "1"})
+	req := httptest.NewRequest(http.MethodGet, "/status/beauty?admin=1", nil)
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", rr.Code)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect, got %d", rr.Code)
 	}
-
-	cookies := rr.Result().Cookies()
-	var found bool
-	for _, c := range cookies {
-		if c.Name == "_logged_out" {
-			found = true
-			if c.Value != "" {
-				t.Errorf("expected empty value for _logged_out cookie, got %q", c.Value)
-			}
-			if c.MaxAge != -1 {
-				t.Errorf("expected MaxAge -1, got %d", c.MaxAge)
-			}
-			if c.Secure {
-				t.Errorf("expected Secure false for non-TLS request, got true")
-			}
-		}
-	}
-	if !found {
-		t.Errorf("expected _logged_out cookie to be cleared")
-	}
-
-	// Test over TLS
-	reqTLS := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
-	reqTLS.AddCookie(&http.Cookie{Name: "_logged_out", Value: "1"})
-	reqTLS.Header.Set("X-Forwarded-Proto", "https")
-	rrTLS := httptest.NewRecorder()
-	h.ServeHTTP(rrTLS, reqTLS)
-
-	cookiesTLS := rrTLS.Result().Cookies()
-	for _, c := range cookiesTLS {
-		if c.Name == "_logged_out" && !c.Secure {
-			t.Errorf("expected Secure true for TLS request, got false")
-		}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/login?next=") {
+		t.Errorf("expected redirect to /login with next param, got %q", loc)
 	}
 }

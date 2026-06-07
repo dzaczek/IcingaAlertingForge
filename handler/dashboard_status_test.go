@@ -269,8 +269,8 @@ func TestDashboard_ServeHTTP_Errors(t *testing.T) {
 		req.SetBasicAuth("wrong", "password")
 		rr := httptest.NewRecorder()
 		h2.ServeHTTP(rr, req)
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("expected 401, got %d", rr.Code)
+		if rr.Code != http.StatusSeeOther {
+			t.Errorf("expected 303 redirect to login, got %d", rr.Code)
 		}
 		stats := metric.Snapshot()
 		if stats.FailedAuthTotal == 0 {
@@ -290,13 +290,12 @@ func TestDashboard_ServeHTTP_LogoutAndAdmin(t *testing.T) {
 		Targets:   map[string]config.TargetConfig{},
 	}
 
-	t.Run("logout logic sets 401", func(t *testing.T) {
+	t.Run("unauthenticated admin redirects to login", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/?admin=1", nil)
-		req.AddCookie(&http.Cookie{Name: "_logged_out", Value: "1"})
 		rr := httptest.NewRecorder()
 		h.ServeHTTP(rr, req)
-		if rr.Code != http.StatusUnauthorized {
-			t.Errorf("expected 401 for logout, got %d", rr.Code)
+		if rr.Code != http.StatusSeeOther {
+			t.Errorf("expected 303 redirect to login, got %d", rr.Code)
 		}
 	})
 

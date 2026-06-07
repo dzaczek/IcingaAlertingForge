@@ -344,6 +344,20 @@ func main() {
 		RBAC:       rbacManager,
 	}
 
+	// ── Login session store + form login ────────────────────────────
+	sessionTTL := time.Duration(cfg.SessionTTLMinutes) * time.Minute
+	sessionStore := auth.NewSessionStore(sessionTTL)
+	sessionStore.StartEviction(mainCtx, time.Minute)
+	loginHandler := &handler.LoginHandler{
+		Sessions:   sessionStore,
+		AdminUser:  cfg.AdminUser,
+		AdminPass:  cfg.AdminPass,
+		RBAC:       rbacManager,
+		Metrics:    metricsCollector,
+		Version:    version,
+		SessionTTL: sessionTTL,
+	}
+
 	// ── Auth Middleware ─────────────────────────────────────────────
 	requireAuth := func(next http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
@@ -457,6 +471,7 @@ func main() {
 
 	// Core endpoints
 	mux.Handle("/webhook", webhookHandler)
+	mux.Handle("/login", loginHandler)
 	mux.Handle("/status/beauty/events", sseBroker)
 	mux.Handle("/status/beauty", dashboardHandler)
 	mux.HandleFunc("/status/beauty/logout", func(w http.ResponseWriter, r *http.Request) {
@@ -609,6 +624,9 @@ func main() {
 		slog.Warn("ADMIN_PASS not set — admin endpoints and dashboard management will be disabled")
 	}
 
+	// Session middleware: bridges login cookies to Basic-Auth handlers.
+	sessionMux := handler.SessionAuthMiddleware(sessionStore, mux)
+
 	// Security headers middleware
 	secureHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -617,7 +635,7 @@ func main() {
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;")
-		mux.ServeHTTP(w, r)
+		sessionMux.ServeHTTP(w, r)
 	})
 
 	server := &http.Server{

@@ -627,7 +627,6 @@ func TestWebhook_ParseWebhookPayload_UniversalInvalid(t *testing.T) {
 	}
 }
 
-
 func TestWebhook_Authenticate_FallbackHeader(t *testing.T) {
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
 
@@ -647,18 +646,18 @@ func TestWebhook_Authenticate_FallbackHeader(t *testing.T) {
 }
 
 func TestWebhook_ResultHasError(t *testing.T) {
-    if !resultHasError(map[string]any{"status": "error"}) {
-        t.Errorf("expected true for status: error")
-    }
-    if !resultHasError(map[string]any{"icinga_ok": false}) {
-        t.Errorf("expected true for icinga_ok: false")
-    }
-    if !resultHasError(map[string]any{"error": "some error"}) {
-        t.Errorf("expected true for error string")
-    }
-    if resultHasError(map[string]any{"status": "success", "icinga_ok": true}) {
-        t.Errorf("expected false for success")
-    }
+	if !resultHasError(map[string]any{"status": "error"}) {
+		t.Errorf("expected true for status: error")
+	}
+	if !resultHasError(map[string]any{"icinga_ok": false}) {
+		t.Errorf("expected true for icinga_ok: false")
+	}
+	if !resultHasError(map[string]any{"error": "some error"}) {
+		t.Errorf("expected true for error string")
+	}
+	if resultHasError(map[string]any{"status": "success", "icinga_ok": true}) {
+		t.Errorf("expected false for success")
+	}
 }
 
 func TestWebhook_Authenticate_XAPIKey(t *testing.T) {
@@ -669,7 +668,7 @@ func TestWebhook_Authenticate_XAPIKey(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
 	req.Header.Set("Content-Type", "application/json")
 	// Try with valid X-API-Key
-    req.Header.Set("X-API-Key", "valid-key")
+	req.Header.Set("X-API-Key", "valid-key")
 	rr := httptest.NewRecorder()
 
 	h.ServeHTTP(rr, req)
@@ -679,7 +678,6 @@ func TestWebhook_Authenticate_XAPIKey(t *testing.T) {
 		t.Errorf("expected to pass auth, got %d", rr.Code)
 	}
 }
-
 
 func TestWebhook_ServeHTTP_GetMethod(t *testing.T) {
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
@@ -708,5 +706,20 @@ func TestWebhook_ServeHTTP_NoAlerts(t *testing.T) {
 
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 for no alerts, got %d", rr.Code)
+	}
+}
+
+func TestWebhook_Authenticate_AuditAndMetrics(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "INVALID-KEY")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
 	}
 }

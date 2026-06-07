@@ -498,3 +498,43 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 		t.Fatalf("expected failed auto-create to be retried, got %d create attempt(s)", createCallCount)
 	}
 }
+
+
+
+
+// ⚡ Bolt: Adding coverage for the missing alert status cases inside handleWorkMode
+func TestWebhook_UnknownStatus(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	payload := map[string]any{
+		"status":      "unknown_status",
+		"alerts":      []map[string]any{{"status": "unknown_status", "labels": map[string]string{"alertname": "Unknown Alert"}}},
+		"commonLabels": map[string]string{"alertname": "Unknown Alert"},
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/webhook/grafana", bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer valid-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	// In webhook.go: statusCode is StatusBadGateway if hasErrors is true.
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("expected 502 Bad Gateway, got %d", w.Code)
+	}
+	var resp map[string]any
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["results"] == nil {
+		t.Fatalf("expected results array")
+	}
+	results := resp["results"].([]any)
+	if len(results) == 0 {
+		t.Fatalf("expected at least one result")
+	}
+	firstResult := results[0].(map[string]any)
+	if firstResult["status"] != "error" {
+		t.Errorf("expected status 'error' for unknown alert status, got %v", firstResult["status"])
+	}
+}

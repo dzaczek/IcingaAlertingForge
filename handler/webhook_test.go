@@ -591,3 +591,122 @@ func TestWebhook_ParseWebhookPayload_Universal(t *testing.T) {
 		t.Errorf("expected 1 alert, got %d", len(payload.Alerts))
 	}
 }
+
+func TestWebhook_ParseWebhookPayload_InvalidJSON(t *testing.T) {
+	rawBody := []byte(`{"version": "4", "groupKey": `)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error for invalid json, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_AlertmanagerInvalid(t *testing.T) {
+	// Provide version field to trigger Alertmanager unmarshal, but make the rest of the payload structurally invalid for AlertmanagerPayload
+	rawBody := []byte(`{"version": "4", "groupKey": "key", "receiver": "web", "alerts": "not-an-array"}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when alertmanager unmarshal fails, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_GrafanaInvalid(t *testing.T) {
+	// Provide status field to trigger Grafana unmarshal, but make alerts invalid type
+	rawBody := []byte(`{"status": "firing", "alerts": "not-an-array"}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when grafana unmarshal fails, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_UniversalInvalid(t *testing.T) {
+	// Provide alerts field to trigger Universal unmarshal, but make it structurally invalid
+	rawBody := []byte(`{"alerts": [{"invalid"}]}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when universal unmarshal fails, got nil")
+	}
+}
+
+
+func TestWebhook_Authenticate_FallbackHeader(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	// Ensure we use a valid payload so that it passes parsing
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	// Try without any api key header or auth
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	// Since we provided no key, it should hit 401
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestWebhook_ResultHasError(t *testing.T) {
+    if !resultHasError(map[string]any{"status": "error"}) {
+        t.Errorf("expected true for status: error")
+    }
+    if !resultHasError(map[string]any{"icinga_ok": false}) {
+        t.Errorf("expected true for icinga_ok: false")
+    }
+    if !resultHasError(map[string]any{"error": "some error"}) {
+        t.Errorf("expected true for error string")
+    }
+    if resultHasError(map[string]any{"status": "success", "icinga_ok": true}) {
+        t.Errorf("expected false for success")
+    }
+}
+
+func TestWebhook_Authenticate_XAPIKey(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	// Ensure we use a valid payload so that it passes parsing
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	// Try with valid X-API-Key
+    req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	// Since we provided valid key, it should pass auth
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected to pass auth, got %d", rr.Code)
+	}
+}
+
+
+func TestWebhook_ServeHTTP_GetMethod(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	req := httptest.NewRequest(http.MethodGet, "/webhook", nil)
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestWebhook_ServeHTTP_NoAlerts(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	// valid format but no alerts
+	payload := `{"status": "firing", "alerts": []}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for no alerts, got %d", rr.Code)
+	}
+}

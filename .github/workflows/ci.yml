@@ -37,7 +37,7 @@ jobs:
       fail-fast: false
       matrix:
         # go directive in go.mod = 1.26
-        go: ['1.26.3']
+        go: ['1.26.4']
     steps:
       - uses: actions/checkout@v4
 

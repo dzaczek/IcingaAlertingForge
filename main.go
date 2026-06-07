@@ -97,6 +97,8 @@ func main() {
 			// Webhook flood protection (env-only security control)
 			storedCfg.WebhookRateLimitPerSec = cfg.WebhookRateLimitPerSec
 			storedCfg.WebhookRateLimitBurst = cfg.WebhookRateLimitBurst
+			// Dashboard login session lifetime (env-only)
+			storedCfg.SessionTTLMinutes = cfg.SessionTTLMinutes
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {

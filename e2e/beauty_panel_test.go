@@ -51,13 +51,14 @@ func TestLogin_Invalid(t *testing.T) {
 	var body string
 	if err := chromedp.Run(ctx,
 		chromedp.Navigate(baseURL+"/status/beauty?admin=1"),
-		chromedp.WaitVisible(`body`, chromedp.ByQuery),
+		chromedp.WaitVisible(`input[name="password"]`, chromedp.ByQuery),
 		chromedp.OuterHTML(`body`, &body),
 	); err != nil {
 		t.Skipf("render: %v", err)
 	}
-	if !strings.Contains(body, "Enter credentials") {
-		t.Errorf("expected login prompt, got: %.200s", body)
+	// Unauthenticated admin access now redirects to the login form.
+	if !strings.Contains(body, "Command Panel Authentication") {
+		t.Errorf("expected login form, got: %.200s", body)
 	}
 }
 
@@ -240,10 +241,19 @@ func TestRBAC_UserLifecycle(t *testing.T) {
 		}
 	})
 
+	// Don't follow redirects: unauthenticated/denied dashboard access now 303s to
+	// /login, which we want to observe rather than transparently follow to a 200.
 	authGet := func(username, password, path string) int {
+		client := &http.Client{
+			Timeout:       10 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+		}
 		req, _ := http.NewRequest("GET", baseURL+path, nil)
 		req.SetBasicAuth(username, password)
-		resp, _ := a.c.Do(req)
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0
+		}
 		resp.Body.Close()
 		return resp.StatusCode
 	}
@@ -274,9 +284,11 @@ func TestRBAC_UserLifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("deleted_401", func(t *testing.T) {
-		if c := authGet(user, "viewpass", "/status/beauty?admin=1"); c != 401 {
-			t.Errorf("deleted login: expected 401, got %d", c)
+	t.Run("deleted_denied", func(t *testing.T) {
+		// A deleted user can no longer authenticate: the dashboard redirects them
+		// to the login form (303) instead of granting access.
+		if c := authGet(user, "viewpass", "/status/beauty?admin=1"); c != http.StatusSeeOther {
+			t.Errorf("deleted login: expected 303 redirect to login, got %d", c)
 		}
 	})
 }

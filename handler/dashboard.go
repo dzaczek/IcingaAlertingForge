@@ -2,11 +2,11 @@ package handler
 
 import (
 	"bytes"
-	"fmt"
 	"html/template"
 	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"sync"
 	"time"
@@ -264,31 +264,13 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Admin mode requires both ?admin=1 query param AND valid credentials.
-	// A "_logged_out" cookie is set on logout to force a fresh 401 prompt
-	// even when the browser re-sends cached Basic Auth credentials.
+	// Admin mode requires both ?admin=1 and a valid login session (or Basic Auth
+	// injected from one). Unauthenticated requests are redirected to the login
+	// form instead of the native browser Basic Auth prompt, so password managers
+	// can autofill.
 	wantAdmin := r.URL.Query().Get("admin") == "1"
 	isAdmin := false
 	if wantAdmin {
-		// If user just logged out, force 401 to get fresh credentials
-		if c, err := r.Cookie("_logged_out"); err == nil && c.Value == "1" {
-			// Clear the logout cookie so next attempt works normally
-			// #nosec G124
-			http.SetCookie(w, &http.Cookie{
-				Name:     "_logged_out",
-				Value:    "",
-				Path:     "/",
-				MaxAge:   -1,
-				HttpOnly: true,
-				Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
-				SameSite: http.SameSiteStrictMode,
-			})
-			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(http.StatusUnauthorized)
-			fmt.Fprint(w, `<html><body style="background:#000;color:#fc0;font-family:monospace;padding:40px;text-align:center;"><h2>Enter credentials</h2><p>Authenticate to access command panel.</p></body></html>`)
-			return
-		}
 		if h.isAdmin(r) {
 			isAdmin = true
 		} else {
@@ -296,8 +278,7 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if h.Metrics != nil && user != "" {
 				h.Metrics.RecordAuthFailure(r.RemoteAddr, user)
 			}
-			w.Header().Set("WWW-Authenticate", `Basic realm="IcingaAlertForge"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 			return
 		}
 	}
@@ -2155,7 +2136,7 @@ const dashboardHTML = `<!DOCTYPE html>
       <div class="bar-segment bar-seg-2" id="header-uptime">{{.Uptime}}</div>
       <div class="bar-segment bar-seg-3">IcingaAlertForge{{if .IsAdmin}} <span style="font-size:12px; letter-spacing:2px;">[COMMAND ACCESS - USER: {{.LoggedUser}}]</span>{{end}}</div>
       <div class="bar-segment bar-seg-4">
-        {{if not .IsAdmin}}<a href="/status/beauty?admin=1" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
+        {{if not .IsAdmin}}<a href="/login" style="color:#000;text-decoration:none;">AUTH</a>{{else}}<a href="#" onclick="doLogout();return false;" style="color:#000;text-decoration:none;">LOGOUT</a>{{end}}
       </div>
       <div class="bar-segment bar-seg-5">{{.Version}}</div>
     </div>
@@ -4261,9 +4242,8 @@ function rbacDeleteUser(username) {
 }
 
 function doLogout() {
-  // Set logout cookie so server forces fresh 401 on next admin login
-  var sec = window.location.protocol === 'https:' ? ';secure' : ''; document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
-  window.location.href = '/status/beauty';
+  // Server destroys the session, clears the cookie, and redirects to /login.
+  window.location.href = '/status/beauty/logout';
 }
 
 // ── Preserve section on auto-refresh ──
@@ -4656,8 +4636,7 @@ function filterTable(tableId, query, countId) {
   function doLogout() {
     if (countdownInterval) clearInterval(countdownInterval);
     if (popupEl) popupEl.remove();
-    var sec = window.location.protocol === 'https:' ? ';secure' : ''; document.cookie = '_logged_out=1;path=/;samesite=strict' + sec;
-    window.location.href = '/status/beauty';
+    window.location.href = '/status/beauty/logout';
   }
 
   function showWarning() {

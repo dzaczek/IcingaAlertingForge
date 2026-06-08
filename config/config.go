@@ -102,6 +102,9 @@ type Config struct {
 	AuditLogFile    string
 	AuditLogFormat  string // "json" or "cef"
 
+	// Dashboard login session
+	SessionTTLMinutes int // lifetime of a dashboard login session
+
 	// Dashboard config mode
 	ConfigInDashboard   bool   // if true, config is managed via admin panel
 	ConfigEncryptionKey string // AES key for encrypting secrets (auto-generated if empty)
@@ -215,6 +218,11 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.WebhookRateLimitBurst, err = optInt("WEBHOOK_RATELIMIT_BURST", 100); err != nil {
+		return nil, err
+	}
+
+	// Dashboard login session lifetime (matches the client-side 30 min timeout).
+	if cfg.SessionTTLMinutes, err = optInt("SESSION_TTL_MINUTES", 30); err != nil {
 		return nil, err
 	}
 

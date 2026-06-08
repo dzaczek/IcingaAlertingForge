@@ -13,6 +13,7 @@ import (
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/ratelimit"
 )
 
 // testWebhookHandler creates a WebhookHandler wired to a mock Icinga2 API server.
@@ -61,6 +62,37 @@ func testWebhookHandler(t *testing.T, icingaHandler http.HandlerFunc) *WebhookHa
 				HostName: "team-b-host",
 			},
 		},
+	}
+}
+
+func TestWebhook_RateLimit_Returns429AfterBurst(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+	h.Ingress = ratelimit.New(1, 2) // 1 req/s, burst of 2
+
+	send := func(remoteAddr string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(`{}`))
+		req.Header.Set("X-API-Key", "valid-key")
+		req.RemoteAddr = remoteAddr
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		return rr
+	}
+
+	// First two requests consume the burst and pass the rate gate.
+	send("203.0.113.7:5555")
+	send("203.0.113.7:5555")
+
+	rr := send("203.0.113.7:5555")
+	if rr.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 after burst exhausted, got %d", rr.Code)
+	}
+	if rr.Header().Get("Retry-After") == "" {
+		t.Error("expected Retry-After header on 429 response")
+	}
+
+	// A different source IP has an independent bucket and is not throttled.
+	if rr := send("198.51.100.9:4444"); rr.Code == http.StatusTooManyRequests {
+		t.Error("a different source IP should not be rate limited")
 	}
 }
 

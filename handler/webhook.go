@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +25,7 @@ import (
 	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/queue"
+	"icinga-webhook-bridge/ratelimit"
 )
 
 // WebhookHandler is the main HTTP handler for incoming Grafana webhooks.
@@ -34,6 +38,7 @@ type WebhookHandler struct {
 	History    *history.Logger
 	Targets    map[string]config.TargetConfig
 	Limiter    *icinga.RateLimiter
+	Ingress    *ratelimit.Limiter // per-IP ingress flood protection (nil = disabled)
 	Metrics    *metrics.Collector
 	PerKey     *metrics.PerKeyCollector
 	SSE        *SSEBroker
@@ -42,10 +47,34 @@ type WebhookHandler struct {
 	Audit      *audit.Logger
 }
 
+// clientIP extracts the client IP (without port) from RemoteAddr for rate-limit
+// keying. Falls back to the raw RemoteAddr if it has no port.
+func clientIP(remoteAddr string) string {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return remoteAddr
+	}
+	return host
+}
+
 // ServeHTTP handles POST /webhook requests from Grafana.
 func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	// ── Ingress rate limit (per source IP) ──────────────────────────
+	// Enforced before authentication so floods of invalid keys are also
+	// throttled at the source, protecting CPU/IO and Icinga2 downstream.
+	if allowed, retryAfter := h.Ingress.Allow(clientIP(r.RemoteAddr)); !allowed {
+		retrySec := int(math.Ceil(retryAfter.Seconds()))
+		if retrySec < 1 {
+			retrySec = 1
+		}
+		w.Header().Set("Retry-After", strconv.Itoa(retrySec))
+		slog.Warn("Webhook rate limit exceeded", "remote_addr", r.RemoteAddr, "retry_after_s", retrySec)
+		httputil.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
 		return
 	}
 

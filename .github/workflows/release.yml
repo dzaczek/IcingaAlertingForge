@@ -38,11 +38,22 @@ jobs:
 
       - uses: sigstore/cosign-installer@v3
 
-      - uses: anchore/sbom-action/download-syft@v0
-        with:
-          # Pin a real, current Syft release. The action's default drifted to a
-          # stale tag (v1.42.3) whose download 504s, failing every release.
-          syft-version: v1.45.1
+      # Install Syft via the official script with retries. GitHub's release
+      # endpoint intermittently returns 504 for valid tags; retrying across a
+      # short window rides out the transient failures that were breaking every
+      # release. Pinned to a real, current version (the action's stale default
+      # v1.42.3 was permanently broken).
+      - name: Install Syft (retry on transient GitHub 504s)
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+                 | sh -s -- -b /usr/local/bin v1.45.1; then
+              syft version && exit 0
+            fi
+            echo "::warning::syft install attempt $i failed; retrying in 20s"
+            sleep 20
+          done
+          echo "::error::syft install failed after 5 attempts"; exit 1
 
       - uses: goreleaser/goreleaser-action@v7
         with:

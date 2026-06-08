@@ -69,6 +69,11 @@ type StoredConfig struct {
 	// Cache
 	CacheTTLMinutes int `json:"cache_ttl_minutes"`
 
+	// Stale-service pruning. AfterDays 0 = disabled. DryRun is a pointer so an
+	// absent value defaults to true (dry-run, safe) rather than false (delete).
+	ServicePruneAfterDays int   `json:"service_prune_after_days"`
+	ServicePruneDryRun    *bool `json:"service_prune_dry_run,omitempty"`
+
 	// Logging
 	LogLevel  string `json:"log_level"`
 	LogFormat string `json:"log_format"`
@@ -291,6 +296,7 @@ func (s *Store) Update(sc StoredConfig) error {
 // MigrateFromEnv creates the initial stored config from a loaded env config.
 func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 	now := time.Now().UTC()
+	dryRun := cfg.ServicePruneDryRun
 	sc := StoredConfig{
 		Version:   1,
 		CreatedAt: now,
@@ -308,6 +314,9 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 		HistoryMaxEntries: cfg.HistoryMaxEntries,
 
 		CacheTTLMinutes: cfg.CacheTTLMinutes,
+
+		ServicePruneAfterDays: cfg.ServicePruneAfterDays,
+		ServicePruneDryRun:    &dryRun,
 
 		LogLevel:  cfg.LogLevel,
 		LogFormat: cfg.LogFormat,
@@ -418,6 +427,8 @@ func (s *Store) ToConfig(serverPort, serverHost string) *config.Config {
 		HistoryFile:           sc.HistoryFile,
 		HistoryMaxEntries:     sc.HistoryMaxEntries,
 		CacheTTLMinutes:       sc.CacheTTLMinutes,
+		ServicePruneAfterDays: sc.ServicePruneAfterDays,
+		ServicePruneDryRun:    sc.ServicePruneDryRun == nil || *sc.ServicePruneDryRun,
 		LogLevel:              sc.LogLevel,
 		LogFormat:             sc.LogFormat,
 		RateLimitMutate:       sc.RateLimitMutate,

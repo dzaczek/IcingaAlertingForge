@@ -44,7 +44,7 @@ func pruneMockServer(t *testing.T, listJSON string, deleted chan<- string) *icin
 // pruneTestList builds a ListServices response with one stale-OK, one fresh-OK,
 // one stale-critical, and one unmanaged service.
 func pruneTestList() string {
-	old := float64(time.Now().Add(-2 * time.Hour).Unix())
+	old := float64(time.Now().Add(-48 * time.Hour).Unix())
 	now := float64(time.Now().Unix())
 	return fmt.Sprintf(`{"results":[
 		{"attrs":{"name":"Stale OK","state":0,"vars":{"managed_by":"IcingaAlertingForge"},"last_check_result":{"state":0,"execution_end":%f}}},
@@ -91,6 +91,44 @@ func TestPruneStaleManagedServices_DeletesOnlyStaleOK(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("expected a DELETE call")
+	}
+}
+
+func TestLivePruneState_SetGet(t *testing.T) {
+	s := &livePruneState{}
+	s.set(30, false, map[string]config.TargetConfig{"a": {HostName: "h1"}})
+	days, dry, targets := s.get()
+	if days != 30 || dry != false || len(targets) != 1 {
+		t.Fatalf("unexpected state: days=%d dry=%v targets=%d", days, dry, len(targets))
+	}
+}
+
+func TestServicePruner_LiveEnableViaTrigger(t *testing.T) {
+	deleted := make(chan string, 4)
+	api := pruneMockServer(t, pruneTestList(), deleted)
+	sc := cache.NewServiceCache(60)
+
+	// Start disabled — no pass should delete anything yet.
+	state := &livePruneState{}
+	targets := map[string]config.TargetConfig{"h": {HostName: "host-a"}}
+	state.set(0, true, targets)
+
+	trigger := make(chan struct{}, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	startServicePruner(ctx, api, sc, nil, state, trigger)
+
+	// Reconfigure live: enable with real deletion, then trigger a pass.
+	state.set(1, false, targets)
+	trigger <- struct{}{}
+
+	select {
+	case p := <-deleted:
+		if !strings.Contains(p, "Stale") {
+			t.Errorf("expected to delete the stale service, deleted %q", p)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("live enable + trigger should run a prune pass without restart")
 	}
 }
 

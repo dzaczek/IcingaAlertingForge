@@ -2744,6 +2744,17 @@ const dashboardHTML = `<!DOCTYPE html>
             </div>
           </div>
 
+          <!-- Service Pruning -->
+          <div class="settings-section">
+            <h3>Service Pruning</h3>
+            <div class="settings-grid">
+              <span class="settings-label">Prune After (days, 0 = off)</span>
+              <input type="number" class="settings-input" id="cfg-prune-days" placeholder="0">
+              <span class="settings-label">Dry Run (log only, no delete)</span>
+              <input type="checkbox" class="settings-input" id="cfg-prune-dryrun">
+            </div>
+          </div>
+
           <!-- Action buttons -->
           <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
             <button class="settings-btn ok" onclick="saveSettings()">Save Configuration</button>
@@ -3803,6 +3814,8 @@ function loadSettings() {
       document.getElementById('cfg-rl-mutate').value = cfg.ratelimit_mutate_max || '';
       document.getElementById('cfg-rl-status').value = cfg.ratelimit_status_max || '';
       document.getElementById('cfg-rl-queue').value = cfg.ratelimit_max_queue || '';
+      document.getElementById('cfg-prune-days').value = cfg.service_prune_after_days || '';
+      document.getElementById('cfg-prune-dryrun').checked = cfg.service_prune_dry_run !== false;
 
       if (cfg.targets) {
         renderTargetCards(cfg.targets);
@@ -3830,7 +3843,9 @@ function saveSettings() {
     log_format: document.getElementById('cfg-log-format').value,
     ratelimit_mutate_max: parseInt(document.getElementById('cfg-rl-mutate').value) || 0,
     ratelimit_status_max: parseInt(document.getElementById('cfg-rl-status').value) || 0,
-    ratelimit_max_queue: parseInt(document.getElementById('cfg-rl-queue').value) || 0
+    ratelimit_max_queue: parseInt(document.getElementById('cfg-rl-queue').value) || 0,
+    service_prune_after_days: parseInt(document.getElementById('cfg-prune-days').value) || 0,
+    service_prune_dry_run: document.getElementById('cfg-prune-dryrun').checked
   };
   if (passVal) { payload.icinga2_pass = passVal; }
   fetch('/admin/settings', {

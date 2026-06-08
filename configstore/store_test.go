@@ -88,6 +88,33 @@ func TestSaveLoad(t *testing.T) {
 	}
 }
 
+func TestToConfig_PruneDryRunDefault(t *testing.T) {
+	s, _ := New(filepath.Join(t.TempDir(), "config.json"), "")
+	base := StoredConfig{
+		Targets:               []TargetStore{{ID: "t1", HostName: "h1"}},
+		ServicePruneAfterDays: 30,
+	}
+
+	// Absent (nil) dry-run must default to true (dry-run / safe), never delete.
+	base.ServicePruneDryRun = nil
+	s.Update(base)
+	cfg := s.ToConfig("8080", "0.0.0.0")
+	if cfg.ServicePruneAfterDays != 30 {
+		t.Errorf("after_days not preserved: %d", cfg.ServicePruneAfterDays)
+	}
+	if !cfg.ServicePruneDryRun {
+		t.Error("nil dry-run must resolve to true (dry-run)")
+	}
+
+	// Explicit false must be honored (real deletion enabled).
+	f := false
+	base.ServicePruneDryRun = &f
+	s.Update(base)
+	if s.ToConfig("8080", "0.0.0.0").ServicePruneDryRun {
+		t.Error("explicit false dry-run must be honored")
+	}
+}
+
 func TestLoadError(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

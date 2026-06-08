@@ -39,6 +39,10 @@ jobs:
       - uses: sigstore/cosign-installer@v3
 
       - uses: anchore/sbom-action/download-syft@v0
+        with:
+          # Pin a real, current Syft release. The action's default drifted to a
+          # stale tag (v1.42.3) whose download 504s, failing every release.
+          syft-version: v1.45.1
 
       - uses: goreleaser/goreleaser-action@v7
         with:

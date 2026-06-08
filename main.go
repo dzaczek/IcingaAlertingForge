@@ -719,7 +719,7 @@ func startCacheResync(ctx context.Context, apiClient *icinga.APIClient, serviceC
 }
 
 // startCacheResyncEvery runs a resync pass over all targets on the given
-// interval until ctx is cancelled.
+// interval until ctx is canceled.
 func startCacheResyncEvery(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, targets map[string]config.TargetConfig, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {

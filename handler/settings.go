@@ -151,6 +151,12 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 	if patch.CacheTTLMinutes > 0 {
 		current.CacheTTLMinutes = patch.CacheTTLMinutes
 	}
+	// Prune: AfterDays applied directly (0 = disable is a valid choice). DryRun
+	// only when present so an omitted field never silently enables deletion.
+	current.ServicePruneAfterDays = patch.ServicePruneAfterDays
+	if patch.ServicePruneDryRun != nil {
+		current.ServicePruneDryRun = patch.ServicePruneDryRun
+	}
 	if patch.LogLevel != "" {
 		current.LogLevel = patch.LogLevel
 	}

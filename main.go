@@ -99,9 +99,6 @@ func main() {
 			storedCfg.WebhookRateLimitBurst = cfg.WebhookRateLimitBurst
 			// Dashboard login session lifetime (env-only)
 			storedCfg.SessionTTLMinutes = cfg.SessionTTLMinutes
-			// Stale-service pruning (env-only operational control)
-			storedCfg.ServicePruneAfterDays = cfg.ServicePruneAfterDays
-			storedCfg.ServicePruneDryRun = cfg.ServicePruneDryRun
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {

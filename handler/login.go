@@ -66,6 +66,9 @@ func (h *LoginHandler) handlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Secure is conditional because the bridge legitimately runs over plain HTTP
+	// behind a TLS-terminating proxy; HttpOnly + SameSite are always set.
+	// #nosec G124
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.SessionCookieName,
 		Value:    token,
@@ -85,6 +88,7 @@ func (h *LoginHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(auth.SessionCookieName); err == nil {
 		h.Sessions.Delete(c.Value)
 	}
+	// #nosec G124 -- see note in handlePost; clearing cookie, Secure is conditional.
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.SessionCookieName,
 		Value:    "",

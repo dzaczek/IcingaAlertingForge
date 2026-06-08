@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-05-29 - Bolt: Optimize clientIP string formatting
+**Learning:** In Go, calling `net.SplitHostPort` allocates strings and includes significant processing, while simple string index matching on `remoteAddr` skips this entirely, which is faster and reduces allocation overhead.
+**Action:** When stripping ports from IP addresses in hot paths, avoid `net.SplitHostPort` and use a fast path for IPv4 by using string manipulation.

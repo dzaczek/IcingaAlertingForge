@@ -50,6 +50,12 @@ type WebhookHandler struct {
 // clientIP extracts the client IP (without port) from RemoteAddr for rate-limit
 // keying. Falls back to the raw RemoteAddr if it has no port.
 func clientIP(remoteAddr string) string {
+	// ⚡ Bolt: Fast path for IPv4 - avoid scanning entire string with strings.Count
+	// or calling net.SplitHostPort when unnecessary
+	if idx := strings.LastIndexByte(remoteAddr, ':'); idx != -1 && strings.IndexByte(remoteAddr, ':') == idx {
+		return remoteAddr[:idx]
+	}
+
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
 		return remoteAddr

@@ -1,9 +1,9 @@
 package rbac
 
 import (
-	"testing"
 	"crypto/sha256"
 	"encoding/hex"
+	"testing"
 )
 
 func TestAuthenticate(t *testing.T) {

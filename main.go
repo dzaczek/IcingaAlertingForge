@@ -99,6 +99,9 @@ func main() {
 			storedCfg.WebhookRateLimitBurst = cfg.WebhookRateLimitBurst
 			// Dashboard login session lifetime (env-only)
 			storedCfg.SessionTTLMinutes = cfg.SessionTTLMinutes
+			// Stale-service pruning (env-only operational control)
+			storedCfg.ServicePruneAfterDays = cfg.ServicePruneAfterDays
+			storedCfg.ServicePruneDryRun = cfg.ServicePruneDryRun
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {
@@ -219,6 +222,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer auditLogger.Close()
+
+	// ── Stale-service pruner ───────────────────────────────────────
+	startServicePruner(mainCtx, apiClient, serviceCache, cfg.Targets, auditLogger,
+		cfg.ServicePruneAfterDays, cfg.ServicePruneDryRun)
 
 	// ── Health Checker ─────────────────────────────────────────────
 	var healthChecker *health.Checker
@@ -765,6 +772,109 @@ func startCacheResyncEvery(ctx context.Context, apiClient *icinga.APIClient, ser
 			}
 		}
 	}()
+}
+
+// startServicePruner periodically deletes IAF-managed services that have been
+// idle (OK state, no new check result) for longer than afterDays, to keep
+// Icinga2 from accumulating long-dead alert artifacts. It runs an initial pass
+// shortly after startup and then daily. In dry-run mode it only logs what it
+// would delete. Disabled when afterDays <= 0.
+func startServicePruner(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, targets map[string]config.TargetConfig, auditLogger *audit.Logger, afterDays int, dryRun bool) {
+	if afterDays <= 0 {
+		slog.Info("Service prune disabled")
+		return
+	}
+	threshold := time.Duration(afterDays) * 24 * time.Hour
+	slog.Info("Service prune enabled", "after_days", afterDays, "dry_run", dryRun)
+
+	runPass := func() {
+		for _, target := range sortedTargets(targets) {
+			c, d := pruneStaleManagedServices(apiClient, serviceCache, target.HostName, threshold, dryRun, auditLogger)
+			if c > 0 {
+				slog.Info("Service prune pass complete",
+					"host", target.HostName, "candidates", c, "deleted", d, "dry_run", dryRun)
+			}
+		}
+	}
+
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		// Initial pass shortly after startup for early visibility.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Minute):
+			runPass()
+		}
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				runPass()
+			}
+		}
+	}()
+}
+
+// pruneStaleManagedServices deletes (or, in dry-run, logs) IAF-managed services
+// on host that are in OK state and whose last check result is older than
+// threshold. Firing/critical/warning services and frozen services are never
+// pruned. Returns the number of candidates and the number actually deleted.
+func pruneStaleManagedServices(apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, host string, threshold time.Duration, dryRun bool, auditLogger *audit.Logger) (candidates, deleted int) {
+	services, err := apiClient.ListServices(host)
+	if err != nil {
+		slog.Warn("Service prune: could not list services", "host", host, "error", err)
+		return 0, 0
+	}
+
+	cutoff := time.Now().Add(-threshold)
+	for _, svc := range services {
+		switch {
+		case !svc.IsManagedByUs(): // only our own services
+			continue
+		case svc.ExitStatus != 0: // only OK/green — never prune an active alert
+			continue
+		case !svc.HasCheckResult: // unknown freshness — skip to be safe
+			continue
+		case !svc.LastCheck.Before(cutoff): // still fresh
+			continue
+		case serviceCache.IsFrozen(host, svc.Name): // respect freeze
+			continue
+		}
+
+		candidates++
+		lastCheck := svc.LastCheck.UTC().Format(time.RFC3339)
+
+		if dryRun {
+			slog.Info("Service prune (dry-run): would delete stale managed service",
+				"host", host, "service", svc.Name, "last_check", lastCheck)
+			continue
+		}
+
+		if err := apiClient.DeleteService(host, svc.Name); err != nil {
+			slog.Error("Service prune: failed to delete service",
+				"host", host, "service", svc.Name, "error", err)
+			continue
+		}
+		serviceCache.Remove(host, svc.Name)
+		deleted++
+		slog.Info("Service prune: deleted stale managed service",
+			"host", host, "service", svc.Name, "last_check", lastCheck)
+		if auditLogger != nil {
+			auditLogger.Log(audit.Event{
+				EventType: audit.EventServiceDelete,
+				Severity:  audit.SevMedium,
+				Actor:     "service-pruner",
+				Resource:  host + "!" + svc.Name,
+				Action:    "prune.delete",
+				Outcome:   "success",
+				Details:   map[string]string{"reason": "stale", "last_check": lastCheck},
+			})
+		}
+	}
+	return candidates, deleted
 }
 
 func ensureConfiguredHosts(apiClient *icinga.APIClient, targets map[string]config.TargetConfig, autoCreate bool) error {

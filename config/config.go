@@ -69,6 +69,11 @@ type Config struct {
 	WebhookRateLimitPerSec int
 	WebhookRateLimitBurst  int
 
+	// Stale-service pruning: delete IAF-managed services in OK state that have
+	// had no update for this many days. 0 = disabled. Dry-run only logs.
+	ServicePruneAfterDays int
+	ServicePruneDryRun    bool
+
 	// Logging
 	LogLevel  string
 	LogFormat string
@@ -223,6 +228,14 @@ func Load() (*Config, error) {
 
 	// Dashboard login session lifetime (matches the client-side 30 min timeout).
 	if cfg.SessionTTLMinutes, err = optInt("SESSION_TTL_MINUTES", 30); err != nil {
+		return nil, err
+	}
+
+	// Stale-service pruning (opt-in, dry-run by default). Recommended value 30.
+	if cfg.ServicePruneAfterDays, err = optInt("SERVICE_PRUNE_AFTER_DAYS", 0); err != nil {
+		return nil, err
+	}
+	if cfg.ServicePruneDryRun, err = optBool("SERVICE_PRUNE_DRY_RUN", true); err != nil {
 		return nil, err
 	}
 

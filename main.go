@@ -221,8 +221,12 @@ func main() {
 	defer auditLogger.Close()
 
 	// ── Stale-service pruner ───────────────────────────────────────
-	startServicePruner(mainCtx, apiClient, serviceCache, cfg.Targets, auditLogger,
-		cfg.ServicePruneAfterDays, cfg.ServicePruneDryRun)
+	// State is held separately so the pruner can be reconfigured live from the
+	// dashboard; pruneTrigger lets a config reload run a pass immediately.
+	pruneState := &livePruneState{}
+	pruneState.set(cfg.ServicePruneAfterDays, cfg.ServicePruneDryRun, cfg.Targets)
+	pruneTrigger := make(chan struct{}, 1)
+	startServicePruner(mainCtx, apiClient, serviceCache, auditLogger, pruneState, pruneTrigger)
 
 	// ── Health Checker ─────────────────────────────────────────────
 	var healthChecker *health.Checker
@@ -566,6 +570,13 @@ func main() {
 				slog.Error("Failed to update history logger config on reload", "error", err)
 			}
 
+			// Apply pruning config live and run a pass immediately.
+			pruneState.set(newCfg.ServicePruneAfterDays, newCfg.ServicePruneDryRun, newCfg.Targets)
+			select {
+			case pruneTrigger <- struct{}{}:
+			default:
+			}
+
 			slog.Info("Configuration hot-reload complete",
 				"targets", len(newCfg.Targets),
 				"routes", len(newCfg.WebhookRoutes))
@@ -776,15 +787,42 @@ func startCacheResyncEvery(ctx context.Context, apiClient *icinga.APIClient, ser
 // Icinga2 from accumulating long-dead alert artifacts. It runs an initial pass
 // shortly after startup and then daily. In dry-run mode it only logs what it
 // would delete. Disabled when afterDays <= 0.
-func startServicePruner(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, targets map[string]config.TargetConfig, auditLogger *audit.Logger, afterDays int, dryRun bool) {
-	if afterDays <= 0 {
-		slog.Info("Service prune disabled")
-		return
-	}
-	threshold := time.Duration(afterDays) * 24 * time.Hour
-	slog.Info("Service prune enabled", "after_days", afterDays, "dry_run", dryRun)
+// livePruneState holds the pruner's configuration so it can be changed at
+// runtime (e.g. from the dashboard settings panel) without restarting the
+// process. Safe for concurrent use.
+type livePruneState struct {
+	mu        sync.RWMutex
+	afterDays int
+	dryRun    bool
+	targets   map[string]config.TargetConfig
+}
 
+func (s *livePruneState) set(afterDays int, dryRun bool, targets map[string]config.TargetConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.afterDays = afterDays
+	s.dryRun = dryRun
+	s.targets = targets
+}
+
+func (s *livePruneState) get() (afterDays int, dryRun bool, targets map[string]config.TargetConfig) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.afterDays, s.dryRun, s.targets
+}
+
+// startServicePruner runs the stale-service pruner. It reads its configuration
+// from state on every pass, so changes made via the dashboard take effect
+// without a restart. A pass runs shortly after startup, then daily, and also
+// immediately whenever trigger fires (e.g. after a config reload). When pruning
+// is disabled (afterDays <= 0) a pass is a no-op.
+func startServicePruner(ctx context.Context, apiClient *icinga.APIClient, serviceCache *cache.ServiceCache, auditLogger *audit.Logger, state *livePruneState, trigger <-chan struct{}) {
 	runPass := func() {
+		afterDays, dryRun, targets := state.get()
+		if afterDays <= 0 {
+			return // pruning disabled
+		}
+		threshold := time.Duration(afterDays) * 24 * time.Hour
 		for _, target := range sortedTargets(targets) {
 			c, d := pruneStaleManagedServices(apiClient, serviceCache, target.HostName, threshold, dryRun, auditLogger)
 			if c > 0 {
@@ -794,21 +832,23 @@ func startServicePruner(ctx context.Context, apiClient *icinga.APIClient, servic
 		}
 	}
 
+	slog.Info("Service pruner started (config is read live on each pass)")
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
-		// Initial pass shortly after startup for early visibility.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(time.Minute):
-			runPass()
-		}
+		// Initial pass shortly after startup for early visibility; a config
+		// change (trigger) is honored immediately, even within this window.
+		initial := time.NewTimer(time.Minute)
+		defer initial.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
+			case <-initial.C:
+				runPass()
 			case <-ticker.C:
+				runPass()
+			case <-trigger:
 				runPass()
 			}
 		}

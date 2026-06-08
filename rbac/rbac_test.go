@@ -2,6 +2,8 @@ package rbac
 
 import (
 	"testing"
+	"crypto/sha256"
+	"encoding/hex"
 )
 
 func TestAuthenticate(t *testing.T) {
@@ -205,5 +207,62 @@ func TestParseRole(t *testing.T) {
 	}
 	if ParseRole("") != RoleViewer {
 		t.Error("expected viewer for empty string")
+	}
+}
+
+func TestAddUser_BcryptError(t *testing.T) {
+	m := New(nil)
+
+	// Create a password > 72 bytes which triggers a bcrypt error
+	longPassword := string(make([]byte, 73))
+
+	err := m.AddUser(User{Username: "longpass-user", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error due to long password failing bcrypt, got nil")
+	}
+}
+
+func TestHashPasswordWithSalt(t *testing.T) {
+	// A basic test to hit the legacy format helper
+	res := hashPasswordWithSalt("password", "somesalt")
+	if len(res) != 64 {
+		t.Errorf("expected 64 byte hex string, got %d bytes: %s", len(res), res)
+	}
+}
+
+func TestAuthenticate_Legacy(t *testing.T) {
+	m := New(nil)
+
+	// Create user with legacy password format. "somesalt" + "password" -> SHA256 hex
+	// "somesalt" is 8 bytes, so hex is 16 bytes.
+	// Total length is 97, format: "hex_salt(32):hex_hash(64)"
+	// To match exactly, let's look at Authenticate():
+	// format is saltHex:hashHex
+	// saltHex := parts[0]
+	// hashHex := parts[1]
+
+	// Create a dummy user bypassing AddUser to manually set the exact password string
+	saltHex := "0123456789abcdef0123456789abcdef" // 32 chars
+	h := sha256.New()
+	h.Write([]byte(saltHex + "password"))
+	hashHex := hex.EncodeToString(h.Sum(nil)) // 64 chars
+
+	legacyPass := saltHex + ":" + hashHex // 32 + 1 + 64 = 97 chars
+
+	m.mu.Lock()
+	m.users["legacy-user"] = User{Username: "legacy-user", Password: legacyPass, Role: RoleViewer}
+	m.mu.Unlock()
+
+	user, ok := m.Authenticate("legacy-user", "password")
+	if !ok {
+		t.Fatal("expected authentication to succeed")
+	}
+	if user.Username != "legacy-user" {
+		t.Errorf("expected legacy-user, got %s", user.Username)
+	}
+
+	_, ok = m.Authenticate("legacy-user", "wrong")
+	if ok {
+		t.Fatal("expected authentication to fail with wrong password")
 	}
 }

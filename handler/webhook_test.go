@@ -530,3 +530,96 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 		t.Fatalf("expected failed auto-create to be retried, got %d create attempt(s)", createCallCount)
 	}
 }
+
+func TestWebhook_Resolved_EmptySummary(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"code":200}]}`))
+	})
+
+	payload := `{
+		"status": "resolved",
+		"alerts": [{
+			"status": "resolved",
+			"labels": {"alertname": "Resolved Alert No Summary", "severity": "critical"},
+			"annotations": {"summary": ""}
+		}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+
+	var resp map[string]any
+	json.NewDecoder(rr.Body).Decode(&resp)
+	results := resp["results"].([]any)
+	result := results[0].(map[string]any)
+	if result["exit_status"].(float64) != 0 {
+		t.Errorf("expected exit_status 0, got %v", result["exit_status"])
+	}
+}
+
+func TestWebhook_Firing_EmptySummary(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"code":200}]}`))
+	})
+
+	payload := `{
+		"status": "firing",
+		"alerts": [{
+			"status": "firing",
+			"labels": {"alertname": "Firing Alert No Summary", "severity": "critical"},
+			"annotations": {"summary": ""}
+		}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+
+	var resp map[string]any
+	json.NewDecoder(rr.Body).Decode(&resp)
+	results := resp["results"].([]any)
+	result := results[0].(map[string]any)
+	if result["exit_status"].(float64) != 2 {
+		t.Errorf("expected exit_status 2, got %v", result["exit_status"])
+	}
+}
+
+func TestWebhook_UnknownAlertStatus(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"results":[{"code":200}]}`))
+	})
+
+	payload := `{
+		"status": "firing",
+		"alerts": [{
+			"status": "unknown_status",
+			"labels": {"alertname": "Unknown Alert", "severity": "critical"}
+		}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", rr.Code)
+	}
+}

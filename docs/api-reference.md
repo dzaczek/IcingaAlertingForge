@@ -66,6 +66,12 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 **Deep Dive:** Clears the Basic Auth credentials by returning a `401 Unauthorized` with a new `WWW-Authenticate` header, and redirects the user back to the dashboard interface.
 
+### `GET /status/beauty/stats`
+
+**Fast Track:** Dashboard statistics snapshot.
+
+**Deep Dive:** Returns a JSON snapshot of dashboard statistics (e.g. TotalEntries, Errors, AvgDurationMs) for the beauty panel.
+
 ### `GET /status/beauty/events`
 
 **Fast Track:** SSE event stream for live updates.
@@ -254,6 +260,12 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 **Fast Track:** Generates a new API key for a target.
 
 **Deep Dive:** Creates a new key and returns it in cleartext (shown only once).
+
+### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+**Fast Track:** Removes a specific API key from a target.
+
+**Deep Dive:** Deletes the API key at the given index (`idx`) for the specified target (`id`).
 
 ### `GET /admin/settings/targets/{id}/reveal-keys`
 

@@ -75,7 +75,7 @@ func (h *LoginHandler) handlePost(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   isHTTPS(r),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(h.SessionTTL.Seconds()),
 	})
 	slog.Info("Login successful", "user", username, "remote_addr", r.RemoteAddr)
@@ -96,7 +96,7 @@ func (h *LoginHandler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   isHTTPS(r),
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 	})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }

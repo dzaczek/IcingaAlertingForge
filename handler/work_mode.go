@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -124,17 +124,20 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	case "resolved":
 		exitStatus = 0
 		action = "resolved"
-		message = fmt.Sprintf("OK: %s", summary)
-		if message == "OK: " {
+		if summary == "" {
 			message = "OK: Alert resolved"
+		} else {
+			message = "OK: " + summary
 		}
 
 	case "firing":
 		exitStatus = mapSeverityToExitStatus(severity)
 		action = "firing"
-		message = fmt.Sprintf("%s: %s", exitStatusLabel(exitStatus), summary)
+		lbl := exitStatusLabel(exitStatus)
 		if summary == "" {
-			message = fmt.Sprintf("%s: Alert firing", exitStatusLabel(exitStatus))
+			message = lbl + ": Alert firing"
+		} else {
+			message = lbl + ": " + summary
 		}
 
 	default:
@@ -194,7 +197,8 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 
 		if h.RetryQueue != nil {
 			_ = h.RetryQueue.Enqueue(queue.Item{
-				ID:         fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
+				// ⚡ Bolt: Fast-path string concatenation and integer formatting instead of fmt.Sprintf
+				ID:         requestID + "-" + serviceName + "-" + strconv.FormatInt(time.Now().UnixNano(), 10),
 				Host:       target.HostName,
 				Service:    serviceName,
 				ExitStatus: exitStatus,

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -225,7 +224,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Outcome:    outcome,
 			RequestID:  requestID,
 			Details: map[string]string{
-				"alert_count": fmt.Sprintf("%d", len(payload.Alerts)),
+				// ⚡ Bolt: Fast-path integer conversion instead of fmt.Sprintf to reduce allocation overhead
+				"alert_count": strconv.Itoa(len(payload.Alerts)),
 				"format":      format,
 			},
 		})

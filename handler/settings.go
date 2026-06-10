@@ -6,11 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"icinga-webhook-bridge/httputil"
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 

@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -133,9 +132,9 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	case "firing":
 		exitStatus = mapSeverityToExitStatus(severity)
 		action = "firing"
-		message = fmt.Sprintf("%s: %s", exitStatusLabel(exitStatus), summary)
+		message = exitStatusLabel(exitStatus) + ": " + summary
 		if summary == "" {
-			message = fmt.Sprintf("%s: Alert firing", exitStatusLabel(exitStatus))
+			message = exitStatusLabel(exitStatus) + ": Alert firing"
 		}
 
 	default:

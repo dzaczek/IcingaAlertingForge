@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-06-10 - Optimize hot paths by replacing fmt.Sprintf
+**Learning:** Using `fmt.Sprintf` for simple string concatenation or integer conversions introduces reflection overhead and unnecessary memory allocations. In performance-critical hot paths, like webhook processing or generating IDs, this overhead can add up significantly.
+**Action:** Replace `fmt.Sprintf` with direct string concatenation (`+`) and the `strconv` package (like `strconv.Itoa` or `strconv.FormatInt`) to eliminate reflection and reduce memory allocations.

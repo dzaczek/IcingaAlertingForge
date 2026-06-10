@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"icinga-webhook-bridge/httputil"
 	"io"
 	"log/slog"
@@ -641,7 +642,7 @@ func (h *SettingsHandler) HandleImportConfig(w http.ResponseWriter, r *http.Requ
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"status":  "imported",
-		"targets": fmt.Sprintf("%d", len(importData.Config.Targets)),
+		"targets": strconv.Itoa(len(importData.Config.Targets)),
 	})
 }
 

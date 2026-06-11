@@ -143,7 +143,8 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 		return fmt.Errorf("icinga api: marshal payload: %w", err)
 	}
 
-	reqURL := fmt.Sprintf("%s/v1/actions/process-check-result", c.BaseURL)
+	// ⚡ Bolt: Fast-path string concatenation instead of fmt.Sprintf to reduce allocation overhead
+	reqURL := c.BaseURL + "/v1/actions/process-check-result"
 	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("icinga api: create request: %w", err)

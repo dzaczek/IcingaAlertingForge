@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
@@ -24,13 +25,21 @@ func testWebhookHandler(t *testing.T, icingaHandler http.HandlerFunc) *WebhookHa
 	icingaServer := httptest.NewTLSServer(icingaHandler)
 	t.Cleanup(icingaServer.Close)
 
-	historyPath := filepath.Join(t.TempDir(), "history.jsonl")
+	tempDir := t.TempDir()
+	historyPath := filepath.Join(tempDir, "history.jsonl")
 	histLogger, err := history.NewLogger(historyPath, 1000)
 	if err != nil {
 		t.Fatalf("failed to create history logger: %v", err)
 	}
 
+	auditPath := filepath.Join(tempDir, "audit.jsonl")
+	auditLogger, err := audit.New(audit.Config{Enabled: true, File: auditPath, Format: "json"})
+	if err != nil {
+		t.Fatalf("failed to create audit logger: %v", err)
+	}
+
 	return &WebhookHandler{
+		Audit: auditLogger,
 		KeyStore: auth.NewKeyStore(map[string]config.WebhookRoute{
 			"valid-key": {
 				Source:   "grafana-test",

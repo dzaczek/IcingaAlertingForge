@@ -207,3 +207,56 @@ func TestParseRole(t *testing.T) {
 		t.Error("expected viewer for empty string")
 	}
 }
+
+func TestHashPasswordError(t *testing.T) {
+	// GenerateFromPassword fails if password is > 72 bytes
+	longPass := string(make([]byte, 73))
+	_, err := hashPassword(longPass)
+	if err == nil {
+		t.Error("expected error for password > 72 bytes")
+	}
+
+	m := New(nil)
+	err = m.AddUser(User{Username: "bad-user", Password: longPass, Role: RoleViewer})
+	if err == nil {
+		t.Error("expected AddUser to fail when hashPassword fails")
+	}
+}
+
+func TestLegacyHashPasswordWithSalt(t *testing.T) {
+	password := "mypassword"
+	// Salt is 32 hex chars
+	saltHex := "0123456789abcdef0123456789abcdef"
+
+	hashHex := hashPasswordWithSalt(password, saltHex)
+
+	// Format is saltHex:hashHex
+	legacyHash := saltHex + ":" + hashHex
+
+	m := New([]User{
+		{Username: "legacy-user", Password: legacyHash, Role: RoleViewer},
+	})
+
+	// Valid auth
+	_, ok := m.Authenticate("legacy-user", "mypassword")
+	if !ok {
+		t.Error("expected legacy authentication to succeed")
+	}
+
+	// Invalid auth
+	_, ok = m.Authenticate("legacy-user", "wrongpassword")
+	if ok {
+		t.Error("expected legacy authentication to fail for wrong password")
+	}
+}
+
+func TestBcryptAuthenticateError(t *testing.T) {
+	m := New([]User{
+		{Username: "bcrypt-user", Password: "$2a$10$abcdefghijklmnopqrstuvwxyz1234567890", Role: RoleViewer},
+	})
+	// Invalid auth
+	_, ok := m.Authenticate("bcrypt-user", "wrongpassword")
+	if ok {
+		t.Error("expected bcrypt authentication to fail for wrong password")
+	}
+}

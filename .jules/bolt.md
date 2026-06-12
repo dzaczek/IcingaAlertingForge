@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-05-29 - Optimize renderTargetCards string concatenation
+**Learning:** In JavaScript, when constructing large HTML strings in a hot loop (like rendering target cards or API keys), repeated string concatenations (`+=`) can cause unnecessary string allocations and garbage collection overhead. Pre-allocating an array (`new Array(len)`) and using array indexing (`htmlParts[i] = ...`) followed by `.join('')` improves performance, especially in V8/browsers. Replacing `Array.prototype.forEach` with standard `for` loops also reduces callback overhead.
+**Action:** Use pre-allocated arrays and standard `for` loops combined with `.join('')` instead of `forEach` and `+=` when constructing large strings in JavaScript loops.

@@ -1,6 +1,9 @@
 package rbac
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
 	"testing"
 )
 
@@ -205,5 +208,47 @@ func TestParseRole(t *testing.T) {
 	}
 	if ParseRole("") != RoleViewer {
 		t.Error("expected viewer for empty string")
+	}
+}
+
+func TestAddUser_PasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	// Create a password > 72 bytes to trigger bcrypt.ErrPasswordTooLong
+	longPass := string(make([]byte, 73))
+
+	err := m.AddUser(User{Username: "long-pass-user", Password: longPass, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error when adding user with password > 72 bytes, got nil")
+	}
+	if !strings.Contains(err.Error(), "password is too long") && !strings.Contains(err.Error(), "failed to hash password") {
+		t.Errorf("expected error about password length or hashing failure, got: %v", err)
+	}
+}
+
+func TestAuthenticateLegacy(t *testing.T) {
+	// Create legacy format (97 chars): 32 chars salt + ':' + 64 chars hash
+	saltHex := "12345678901234567890123456789012"
+	pass := "legacy-pass"
+
+	// manually calculate hash
+	importHash := sha256.New()
+	importHash.Write([]byte(saltHex + pass))
+	hashHex := hex.EncodeToString(importHash.Sum(nil))
+
+	legacyPassword := saltHex + ":" + hashHex
+
+	m := New([]User{
+		{Username: "legacy-user", Password: legacyPassword, Role: RoleViewer},
+	})
+
+	_, ok := m.Authenticate("legacy-user", pass)
+	if !ok {
+		t.Error("expected legacy authenticate to succeed")
+	}
+
+	_, ok = m.Authenticate("legacy-user", "wrong-pass")
+	if ok {
+		t.Error("expected legacy authenticate to fail with wrong password")
 	}
 }

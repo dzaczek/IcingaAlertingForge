@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -205,5 +206,16 @@ func TestParseRole(t *testing.T) {
 	}
 	if ParseRole("") != RoleViewer {
 		t.Error("expected viewer for empty string")
+	}
+}
+
+func TestAddUser_PasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	longPass := strings.Repeat("a", 73)
+	err := m.AddUser(User{Username: "long-pass-user", Password: longPass, Role: RoleViewer})
+
+	if err == nil {
+		t.Error("expected error for password longer than 72 bytes, got nil")
 	}
 }

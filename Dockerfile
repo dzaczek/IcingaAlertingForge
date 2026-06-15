@@ -16,7 +16,7 @@ RUN if [ "$VERSION" = "dev" ] && command -v git >/dev/null 2>&1 && git describe 
     CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X main.version=${VERSION}" -o webhook-bridge .
 
 # ── Runtime stage ────────────────────────────────────────────────
-FROM alpine:3.23
+FROM alpine:3.24
 
 RUN apk add --no-cache ca-certificates curl tzdata
 

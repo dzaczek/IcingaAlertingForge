@@ -3870,36 +3870,42 @@ function renderTargetCards(targets) {
     container.innerHTML = '<div style="color:var(--lcars-tan);font-size:12px;opacity:0.6;">No targets configured</div>';
     return;
   }
-  var html = '';
-  targets.forEach(function(t) {
+
+  var targetParts = new Array(targets.length);
+  for (var i = 0; i < targets.length; i++) {
+    var t = targets[i];
     var safeId = escHtml(t.id || 'unknown');
     var safeHost = escHtml(t.host_name || '-');
-    html += '<div class="settings-target-card">';
-    html += '<div class="settings-target-header">';
-    html += '<span class="settings-target-title">' + safeId + '</span>';
-    html += '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ';
-    html += '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>';
-    html += '</div>';
-    html += '<div class="settings-grid" style="margin-bottom:8px;">';
-    html += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
-    html += '</div>';
-    html += '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+    var cardHtml = '<div class="settings-target-card">' +
+      '<div class="settings-target-header">' +
+      '<span class="settings-target-title">' + safeId + '</span>' +
+      '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ' +
+      '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>' +
+      '</div>' +
+      '<div class="settings-grid" style="margin-bottom:8px;">' +
+      '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>' +
+      '</div>' +
+      '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+
     if (t.api_keys && t.api_keys.length > 0) {
-      t.api_keys.forEach(function(k, idx) {
-        html += '<div class="settings-key-item">';
-        html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
-        html += '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>';
-        html += '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>';
-        html += '</div>';
-      });
-      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
+      var keyParts = new Array(t.api_keys.length);
+      for (var j = 0; j < t.api_keys.length; j++) {
+        var idx = j;
+        keyParts[j] = '<div class="settings-key-item">' +
+          '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>' +
+          '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>' +
+          '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>' +
+          '</div>';
+      }
+      cardHtml += keyParts.join('') +
+        '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
     } else {
-      html += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
+      cardHtml += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
     }
-    html += '</div>';
-    html += '</div>';
-  });
-  container.innerHTML = html;
+    cardHtml += '</div></div>';
+    targetParts[i] = cardHtml;
+  }
+  container.innerHTML = targetParts.join('');
 }
 
 function addNewTarget() {

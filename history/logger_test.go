@@ -164,6 +164,23 @@ func TestLogger_Rotation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "rotation-test.jsonl")
 	l, err := NewLogger(path, 5) // max 5 entries
+
+	// Test error path for temp file creation
+	badDir := filepath.Join(dir, "does_not_exist", "sub")
+	badPath := filepath.Join(badDir, "test.jsonl")
+	badLogger := &Logger{filePath: badPath, maxEntries: 1}
+
+	// Create the bad file so os.Open succeeds, but CreateTemp fails
+	os.MkdirAll(badDir, 0700)
+	f, _ := os.Create(badPath)
+	f.WriteString("test\ntest\n")
+	// Make dir read-only or remove so CreateTemp fails
+	os.Chmod(badDir, 0500)
+
+	badLogger.entryCount.Store(5)
+	badLogger.rotateLockedInline() // Should log error and return
+	f.Close()
+	os.Chmod(badDir, 0700) // reset so TempDir cleanup works
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}

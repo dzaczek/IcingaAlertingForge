@@ -42,6 +42,23 @@ func TestNew(t *testing.T) {
 func TestSaveLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")
+
+	// Test saveToDisk error path
+	badDir := filepath.Join(tmpDir, "does_not_exist", "sub")
+	badPath := filepath.Join(badDir, "config.json")
+
+	// Create bad path so os.CreateTemp fails
+	os.MkdirAll(badDir, 0700)
+	os.WriteFile(badPath, []byte("test"), 0600)
+	os.Chmod(badDir, 0500)
+
+	badS, _ := New(badPath, "test-key")
+	badS.current = &StoredConfig{}
+	if err := badS.Save(); err == nil {
+		t.Error("expected Save to fail with bad path")
+	}
+	os.Chmod(badDir, 0700)
+
 	s, _ := New(configPath, "test-key")
 
 	original := StoredConfig{

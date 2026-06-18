@@ -112,6 +112,12 @@ func TestPersistence(t *testing.T) {
 	sender := &mockSender{}
 	sender.failCount.Store(100) // never succeed
 
+	badQ := New(testConfig("/invalid/path/that/cannot/be/written/to.json"), sender)
+	badQ.items = append(badQ.items, Item{ID: "test"})
+	if err := badQ.saveToDisk(); err == nil {
+		t.Error("expected saveToDisk to fail with bad path")
+	}
+
 	q := New(testConfig(path), sender)
 	_ = q.Enqueue(testItem("1", "host-a", "svc1"))
 	_ = q.Enqueue(testItem("2", "host-a", "svc2"))

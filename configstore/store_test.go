@@ -59,6 +59,15 @@ func TestSaveLoad(t *testing.T) {
 	}
 	os.Chmod(badDir, 0700)
 
+	// Test Save Rename failure by making the target a directory
+	badRenameDir := filepath.Join(tmpDir, "rename_fail")
+	os.MkdirAll(badRenameDir, 0700)
+	badRenameS, _ := New(badRenameDir, "test-key")
+	badRenameS.current = &StoredConfig{}
+	if err := badRenameS.Save(); err == nil {
+		t.Error("expected Save to fail on rename when target is directory")
+	}
+
 	s, _ := New(configPath, "test-key")
 
 	original := StoredConfig{

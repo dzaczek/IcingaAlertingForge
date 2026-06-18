@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -181,6 +182,16 @@ func TestLogger_Rotation(t *testing.T) {
 	badLogger.rotateLockedInline() // Should log error and return
 	f.Close()
 	os.Chmod(badDir, 0700) // reset so TempDir cleanup works
+
+	// Test rotation write error (hard to simulate without mocking Write, but we can try rename failure)
+	badRenameDir := filepath.Join(dir, "rename_fail")
+	os.MkdirAll(badRenameDir, 0700)
+	badRenamePath := filepath.Join(badRenameDir, "test.jsonl")
+	os.MkdirAll(badRenamePath, 0700) // target is directory, rename fails
+	badRenameLogger := &Logger{filePath: badRenamePath, maxEntries: 1}
+	badRenameLogger.entryCount.Store(5)
+	badRenameLogger.rotateLockedInline()
+
 	if err != nil {
 		t.Fatalf("failed to create logger: %v", err)
 	}
@@ -266,4 +277,33 @@ func TestLogger_StartMaintenanceAndShutdown(t *testing.T) {
 	ctx := t.Context()
 	l.StartMaintenance(ctx)
 	l.Shutdown()
+}
+
+func TestLogger_UpdateConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "update-test.jsonl")
+	l, err := NewLogger(path, 10)
+	if err != nil {
+		t.Fatalf("failed to create logger: %v", err)
+	}
+
+	// Append some entries
+	for i := 0; i < 5; i++ {
+		l.Append(sampleEntry(fmt.Sprintf("svc-%d", i), "alertmanager", "CREATE", "src"))
+	}
+
+	newPath := filepath.Join(dir, "update-test-new.jsonl")
+	err = l.UpdateConfig(newPath, 2)
+	if err != nil {
+		t.Fatalf("UpdateConfig failed: %v", err)
+	}
+
+	if l.FilePath() != newPath {
+		t.Errorf("expected FilePath %s, got %s", newPath, l.FilePath())
+	}
+
+	count, _ := l.countLines()
+	if count > 2 {
+		t.Errorf("expected file to be truncated to 2 entries, got %d", count)
+	}
 }

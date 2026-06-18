@@ -118,6 +118,25 @@ func TestPersistence(t *testing.T) {
 		t.Error("expected saveToDisk to fail with bad path")
 	}
 
+	// Test write/close error by making temp file directory read-only
+	// or returning early if possible. Actually, simpler to just simulate by failing Rename.
+
+	testDir := t.TempDir()
+	badRenamePath := filepath.Join(testDir, "queue.json")
+	os.WriteFile(badRenamePath, []byte(""), 0600)
+
+	qRename := New(testConfig(badRenamePath), sender)
+	qRename.items = append(qRename.items, Item{ID: "test2"})
+
+	// CreateTemp should succeed, Write should succeed, Rename should fail if we lock the target
+	// Or we can mock the File object but it's hard.
+	// The best way to fail Rename on linux is to rename across devices, or target is a directory
+	os.Remove(badRenamePath)
+	os.Mkdir(badRenamePath, 0700)
+	if err := qRename.saveToDisk(); err == nil {
+		t.Error("expected saveToDisk to fail on rename when target is a directory")
+	}
+
 	q := New(testConfig(path), sender)
 	_ = q.Enqueue(testItem("1", "host-a", "svc1"))
 	_ = q.Enqueue(testItem("2", "host-a", "svc2"))

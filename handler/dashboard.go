@@ -2371,7 +2371,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .RecentAlerts}}
           <div class="table-filter">
-            <input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable('alertsTable', this.value, 'filterAlertsCount')">
+            <input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="debouncedFilterTable('alertsTable', this.value, 'filterAlertsCount')">
             <span class="table-filter-count" id="filterAlertsCount"></span>
           </div>
           <table id="alertsTable">
@@ -2471,7 +2471,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
           <div class="table-filter">
-            <input type="text" id="filterServices" placeholder="Filter services..." oninput="filterTable('svcRegistryTable', this.value, 'filterServicesCount')">
+            <input type="text" id="filterServices" placeholder="Filter services..." oninput="debouncedFilterTable('svcRegistryTable', this.value, 'filterServicesCount')">
             <span class="table-filter-count" id="filterServicesCount">{{len .CachedServices}} registered</span>
           </div>
           <table class="svc-registry-table" id="svcRegistryTable">
@@ -2855,7 +2855,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .IcingaServices}}
           <div class="table-filter">
-            <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="filterTable('servicesTable', this.value, 'filterIcingaCount')">
+            <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="debouncedFilterTable('servicesTable', this.value, 'filterIcingaCount')">
             <span class="table-filter-count" id="filterIcingaCount">{{len .IcingaServices}} registered</span>
           </div>
           {{if .CanDeleteService}}<div class="toolbar">
@@ -3402,6 +3402,22 @@ function appendDevEntry(d) {
   }
 }
 
+function debounce(func, wait) {
+  var timeout;
+  return function() {
+    var context = this, args = arguments;
+    clearTimeout(timeout);
+    timeout = setTimeout(function() {
+      timeout = null;
+      func.apply(context, args);
+    }, wait);
+  };
+}
+
+var debouncedFilterTable = debounce(function(tableId, query, countId) {
+  filterTable(tableId, query, countId);
+}, 250);
+
 function escHtml(s) {
   if (s == null) return '';
   return String(s)
@@ -3870,36 +3886,44 @@ function renderTargetCards(targets) {
     container.innerHTML = '<div style="color:var(--lcars-tan);font-size:12px;opacity:0.6;">No targets configured</div>';
     return;
   }
-  var html = '';
-  targets.forEach(function(t) {
+
+  // Performance optimization: Pre-allocate array and use join() instead of string concatenation
+  // Also replaced forEach with standard for loop for lower callback overhead
+  var htmlParts = new Array(targets.length);
+  for (var i = 0; i < targets.length; i++) {
+    var t = targets[i];
     var safeId = escHtml(t.id || 'unknown');
     var safeHost = escHtml(t.host_name || '-');
-    html += '<div class="settings-target-card">';
-    html += '<div class="settings-target-header">';
-    html += '<span class="settings-target-title">' + safeId + '</span>';
-    html += '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ';
-    html += '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>';
-    html += '</div>';
-    html += '<div class="settings-grid" style="margin-bottom:8px;">';
-    html += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
-    html += '</div>';
-    html += '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+    var tHtml = '<div class="settings-target-card">';
+    tHtml += '<div class="settings-target-header">';
+    tHtml += '<span class="settings-target-title">' + safeId + '</span>';
+    tHtml += '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ';
+    tHtml += '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>';
+    tHtml += '</div>';
+    tHtml += '<div class="settings-grid" style="margin-bottom:8px;">';
+    tHtml += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
+    tHtml += '</div>';
+    tHtml += '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+
     if (t.api_keys && t.api_keys.length > 0) {
-      t.api_keys.forEach(function(k, idx) {
-        html += '<div class="settings-key-item">';
-        html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
-        html += '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>';
-        html += '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>';
-        html += '</div>';
-      });
-      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
+      var keysParts = new Array(t.api_keys.length);
+      for (var j = 0; j < t.api_keys.length; j++) {
+        keysParts[j] = '<div class="settings-key-item">' +
+          '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + j + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>' +
+          '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + j + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>' +
+          '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + j + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>' +
+          '</div>';
+      }
+      tHtml += keysParts.join('');
+      tHtml += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
     } else {
-      html += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
+      tHtml += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
     }
-    html += '</div>';
-    html += '</div>';
-  });
-  container.innerHTML = html;
+    tHtml += '</div>';
+    tHtml += '</div>';
+    htmlParts[i] = tHtml;
+  }
+  container.innerHTML = htmlParts.join('');
 }
 
 function addNewTarget() {
@@ -4365,7 +4389,7 @@ function switchIPTab(source, tab, btn) {
         }
 
         var prevFilter = (document.getElementById('filterAlerts') || {}).value || '';
-        var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
+        var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="debouncedFilterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
         html += '<table id="alertsTable"><thead><tr>';
         html += '<th onclick="sortTable(0,\'date\',this.closest(\'table\'))">Stardate <span class="sort-arrow"></span></th>';
         html += '<th onclick="sortTable(1,\'string\',this.closest(\'table\'))">Status <span class="sort-arrow"></span></th>';

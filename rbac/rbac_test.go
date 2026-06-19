@@ -134,6 +134,13 @@ func TestAddRemoveUser(t *testing.T) {
 	if removed {
 		t.Error("expected false for non-existent user")
 	}
+
+	// AddUser with password exceeding 72 bytes should return an error and not panic
+	longPassword := string(make([]byte, 73))
+	err = m.AddUser(User{Username: "long-pass-user", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Error("expected AddUser to return an error for a password exceeding 72 bytes, got nil")
+	}
 }
 
 func TestPrimaryCannotBeDeleted(t *testing.T) {

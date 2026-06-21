@@ -4586,49 +4586,57 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Table Filter ──
+// ⚡ Bolt: Debounce table filtering (300ms) to prevent main thread blocking
+// during fast typing, reducing synchronous DOM reads/writes.
+var _filterTimers = {};
 function filterTable(tableId, query, countId) {
-  var table = document.getElementById(tableId);
-  if (!table) return;
-  var rows = table.querySelectorAll('tbody tr');
-  var q = query.toLowerCase();
-  var visible = 0;
-  var total = 0;
-  for (var i = 0; i < rows.length; i++) {
-    var row = rows[i];
-    if (row.classList.contains('svc-host-divider')) {
-      row.style.display = '';
-      continue;
-    }
-    total++;
-    var text = row.textContent.toLowerCase();
-    if (!q || text.indexOf(q) !== -1) {
-      row.style.display = '';
-      visible++;
-    } else {
-      row.style.display = 'none';
-    }
+  if (_filterTimers[tableId]) {
+    clearTimeout(_filterTimers[tableId]);
   }
-  // hide host dividers with no visible rows after them
-  if (tableId === 'svcRegistryTable') {
-    var dividers = table.querySelectorAll('.svc-host-divider');
-    for (var d = 0; d < dividers.length; d++) {
-      var next = dividers[d].nextElementSibling;
-      var hasVisible = false;
-      while (next && !next.classList.contains('svc-host-divider')) {
-        if (next.style.display !== 'none') hasVisible = true;
-        next = next.nextElementSibling;
+  _filterTimers[tableId] = setTimeout(function() {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
+    var q = query.toLowerCase();
+    var visible = 0;
+    var total = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (row.classList.contains('svc-host-divider')) {
+        row.style.display = '';
+        continue;
       }
-      dividers[d].style.display = hasVisible ? '' : 'none';
+      total++;
+      var text = row.textContent.toLowerCase();
+      if (!q || text.indexOf(q) !== -1) {
+        row.style.display = '';
+        visible++;
+      } else {
+        row.style.display = 'none';
+      }
     }
-  }
-  var countEl = document.getElementById(countId);
-  if (countEl) {
-    if (q) {
-      countEl.textContent = visible + ' / ' + total + ' matching';
-    } else {
-      countEl.textContent = total + ' registered';
+    // hide host dividers with no visible rows after them
+    if (tableId === 'svcRegistryTable') {
+      var dividers = table.querySelectorAll('.svc-host-divider');
+      for (var d = 0; d < dividers.length; d++) {
+        var next = dividers[d].nextElementSibling;
+        var hasVisible = false;
+        while (next && !next.classList.contains('svc-host-divider')) {
+          if (next.style.display !== 'none') hasVisible = true;
+          next = next.nextElementSibling;
+        }
+        dividers[d].style.display = hasVisible ? '' : 'none';
+      }
     }
-  }
+    var countEl = document.getElementById(countId);
+    if (countEl) {
+      if (q) {
+        countEl.textContent = visible + ' / ' + total + ' matching';
+      } else {
+        countEl.textContent = total + ' registered';
+      }
+    }
+  }, 300);
 }
 
 // ── Session Timeout (30 min, 3 min warning) ──

@@ -3371,31 +3371,32 @@ function appendDevEntry(d) {
     ts = dt.toLocaleTimeString('en-GB', {hour12:false}) + '.' + String(dt.getMilliseconds()).padStart(3,'0');
   }
 
-  var html = '<div class="dev-entry">';
-  html += '<div class="dev-entry-header">';
-  html += '<span class="dev-dir dev-dir-' + escHtml(d.direction||'outbound') + '">' + (isInbound ? 'IN' : 'OUT') + '</span>';
-  html += '<span class="dev-method dev-method-' + method + '">' + method + '</span>';
-  html += '<span class="dev-url">' + escHtml(d.url||'') + '</span>';
-  if (d.source) html += '<span class="dev-source">' + escHtml(d.source) + '</span>';
-  if (d.status_code) html += '<span class="dev-status dev-status-' + (statusOk?'ok':'err') + '">' + d.status_code + '</span>';
-  if (d.duration_ms) html += '<span class="dev-duration">' + d.duration_ms + 'ms</span>';
-  html += '<span class="dev-time">' + ts + '</span>';
-  if (d.remote_addr) html += '<span class="dev-remote">' + escHtml(d.remote_addr) + '</span>';
-  if (d.error) html += '<span class="dev-error-tag">ERR</span>';
-  html += '</div>';
+  var parts = [];
+  parts.push('<div class="dev-entry"><div class="dev-entry-header">');
+  parts.push('<span class="dev-dir dev-dir-' + escHtml(d.direction||'outbound') + '">' + (isInbound ? 'IN' : 'OUT') + '</span>');
+  parts.push('<span class="dev-method dev-method-' + method + '">' + method + '</span>');
+  parts.push('<span class="dev-url">' + escHtml(d.url||'') + '</span>');
+  if (d.source) parts.push('<span class="dev-source">' + escHtml(d.source) + '</span>');
+  if (d.status_code) parts.push('<span class="dev-status dev-status-' + (statusOk?'ok':'err') + '">' + d.status_code + '</span>');
+  if (d.duration_ms) parts.push('<span class="dev-duration">' + d.duration_ms + 'ms</span>');
+  parts.push('<span class="dev-time">' + ts + '</span>');
+  if (d.remote_addr) parts.push('<span class="dev-remote">' + escHtml(d.remote_addr) + '</span>');
+  if (d.error) parts.push('<span class="dev-error-tag">ERR</span>');
+  parts.push('</div>');
+
   if (d.request_body) {
     var bodyLabel = isInbound ? 'Webhook Payload' : 'Request Body';
-    html += '<details class="dev-details"><summary>' + bodyLabel + '</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.request_body) + '</pre></div></details>';
+    parts.push('<details class="dev-details"><summary>' + bodyLabel + '</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.request_body) + '</pre></div></details>');
   }
   if (d.response_body) {
-    html += '<details class="dev-details"><summary>Response Body</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.response_body) + '</pre></div></details>';
+    parts.push('<details class="dev-details"><summary>Response Body</summary><div class="dev-pre-wrap"><button class="dev-copy-btn" onclick="devCopyJSON(this)">Copy</button><pre class="dev-pre">' + colorizeJSON(d.response_body) + '</pre></div></details>');
   }
   if (d.error) {
-    html += '<div class="dev-error-msg">' + escHtml(d.error) + '</div>';
+    parts.push('<div class="dev-error-msg">' + escHtml(d.error) + '</div>');
   }
-  html += '</div>';
+  parts.push('</div>');
 
-  container.insertAdjacentHTML('afterbegin', html);
+  container.insertAdjacentHTML('afterbegin', parts.join(''));
 
   while (container.children.length > 200) {
     container.removeChild(container.lastChild);
@@ -3448,20 +3449,21 @@ function loadServiceDetail(panel, service, host) {
     }
     var cacheState = d.cache_state || '-';
     var inIcinga = d.exists_in_icinga ? 'Yes' : 'No';
-    var html = '<div class="svc-detail-grid">';
-    html += '<div class="svc-detail-item"><span class="svc-detail-label">Status</span><span class="svc-detail-value ' + exitCls + '">' + exitLabel + '</span></div>';
-    html += '<div class="svc-detail-item"><span class="svc-detail-label">Cache</span><span class="svc-detail-value">' + escHtml(cacheState) + '</span></div>';
-    html += '<div class="svc-detail-item"><span class="svc-detail-label">Last Check</span><span class="svc-detail-value">' + lastCheck + '</span></div>';
-    html += '<div class="svc-detail-item"><span class="svc-detail-label">In Icinga</span><span class="svc-detail-value">' + inIcinga + '</span></div>';
-    html += '<div class="svc-detail-item" style="grid-column:1/-1"><span class="svc-detail-label">Output</span><span class="svc-detail-value ' + exitCls + '">' + escHtml(output) + '</span></div>';
+    var parts = [];
+    parts.push('<div class="svc-detail-grid">');
+    parts.push('<div class="svc-detail-item"><span class="svc-detail-label">Status</span><span class="svc-detail-value ' + exitCls + '">' + exitLabel + '</span></div>');
+    parts.push('<div class="svc-detail-item"><span class="svc-detail-label">Cache</span><span class="svc-detail-value">' + escHtml(cacheState) + '</span></div>');
+    parts.push('<div class="svc-detail-item"><span class="svc-detail-label">Last Check</span><span class="svc-detail-value">' + lastCheck + '</span></div>');
+    parts.push('<div class="svc-detail-item"><span class="svc-detail-label">In Icinga</span><span class="svc-detail-value">' + inIcinga + '</span></div>');
+    parts.push('<div class="svc-detail-item" style="grid-column:1/-1"><span class="svc-detail-label">Output</span><span class="svc-detail-value ' + exitCls + '">' + escHtml(output) + '</span></div>');
     if (d.is_frozen) {
       var frozenLabel = d.frozen_until
         ? 'FROZEN until ' + new Date(d.frozen_until).toLocaleString('en-GB', {hour12:false})
         : 'FROZEN — permanent (alerts suppressed)';
-      html += '<div class="svc-detail-frozen-row">&#10052; ' + frozenLabel + '</div>';
+      parts.push('<div class="svc-detail-frozen-row">&#10052; ' + frozenLabel + '</div>');
     }
-    html += '</div>';
-    block.innerHTML = html;
+    parts.push('</div>');
+    block.innerHTML = parts.join('');
     // Refresh freeze button state in the panel
     var panel = block.closest('.svc-history-panel');
     if (panel) { _updateFreezeBtn(panel, d.is_frozen, d.frozen_until || null); }
@@ -3870,36 +3872,43 @@ function renderTargetCards(targets) {
     container.innerHTML = '<div style="color:var(--lcars-tan);font-size:12px;opacity:0.6;">No targets configured</div>';
     return;
   }
-  var html = '';
-  targets.forEach(function(t) {
+  var htmlParts = new Array(targets.length);
+  for (var i = 0; i < targets.length; i++) {
+    var t = targets[i];
     var safeId = escHtml(t.id || 'unknown');
     var safeHost = escHtml(t.host_name || '-');
-    html += '<div class="settings-target-card">';
-    html += '<div class="settings-target-header">';
-    html += '<span class="settings-target-title">' + safeId + '</span>';
-    html += '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ';
-    html += '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>';
-    html += '</div>';
-    html += '<div class="settings-grid" style="margin-bottom:8px;">';
-    html += '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>';
-    html += '</div>';
-    html += '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">';
+    var keysHtml = '';
+
     if (t.api_keys && t.api_keys.length > 0) {
-      t.api_keys.forEach(function(k, idx) {
-        html += '<div class="settings-key-item">';
-        html += '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>';
-        html += '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>';
-        html += '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>';
-        html += '</div>';
-      });
-      html += '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
+      var keysParts = new Array(t.api_keys.length);
+      for (var idx = 0; idx < t.api_keys.length; idx++) {
+        keysParts[idx] = '<div class="settings-key-item">' +
+          '<span class="settings-key-value" id="key-val-' + encodeURIComponent(t.id) + '-' + idx + '">&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;</span>' +
+          '<button class="settings-key-copy" title="Copy key" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="copyRevealedKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F4CB;</button>' +
+          '<button class="settings-key-copy" title="Delete key" style="color:var(--lcars-red);" data-id="' + encodeURIComponent(t.id) + '" data-idx="' + idx + '" onclick="deleteKey(this.getAttribute(\'data-id\'), parseInt(this.getAttribute(\'data-idx\')))">&#x1F5D1;</button>' +
+          '</div>';
+      }
+      keysHtml = keysParts.join('') +
+        '<button class="settings-btn settings-btn-sm" id="reveal-btn-' + encodeURIComponent(t.id) + '" style="margin-top:4px;background:var(--lcars-blue);font-size:11px;" data-id="' + encodeURIComponent(t.id) + '" onclick="toggleKeys(this.getAttribute(\'data-id\'))">Reveal Keys</button>';
     } else {
-      html += '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
+      keysHtml = '<div style="color:var(--lcars-tan);font-size:11px;opacity:0.5;">No API keys</div>';
     }
-    html += '</div>';
-    html += '</div>';
-  });
-  container.innerHTML = html;
+
+    htmlParts[i] = '<div class="settings-target-card">' +
+      '<div class="settings-target-header">' +
+      '<span class="settings-target-title">' + safeId + '</span>' +
+      '<div><button class="settings-btn blue settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="generateKey(this.getAttribute(\'data-id\'))">Generate Key</button> ' +
+      '<button class="settings-btn danger settings-btn-sm" data-id="' + encodeURIComponent(t.id) + '" onclick="deleteTarget(this.getAttribute(\'data-id\'))">Delete</button></div>' +
+      '</div>' +
+      '<div class="settings-grid" style="margin-bottom:8px;">' +
+      '<span class="settings-label">Host</span><span style="color:var(--lcars-text-light);font-size:13px;">' + safeHost + '</span>' +
+      '</div>' +
+      '<div class="settings-key-list" id="key-list-' + encodeURIComponent(t.id) + '">' +
+      keysHtml +
+      '</div>' +
+      '</div>';
+  }
+  container.innerHTML = htmlParts.join('');
 }
 
 function addNewTarget() {

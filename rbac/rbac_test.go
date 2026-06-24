@@ -95,6 +95,18 @@ func TestHasPermission(t *testing.T) {
 	}
 }
 
+func TestAddUserLargePassword(t *testing.T) {
+	m := New(nil)
+
+	// password > 72 bytes to trigger bcrypt error
+	largePassword := "thisisaverylargepasswordthisisaverylargepasswordthisisaverylargepassword123"
+
+	err := m.AddUser(User{Username: "new-user-large-pass", Password: largePassword, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error when adding user with password > 72 bytes, got nil")
+	}
+}
+
 func TestAddRemoveUser(t *testing.T) {
 	m := New(nil)
 

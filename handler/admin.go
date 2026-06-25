@@ -680,6 +680,10 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		Role:     role,
 	}); err != nil {
 		slog.Error("RBAC: failed to persist user", "error", err)
+		if strings.Contains(err.Error(), "bcrypt: password length exceeds 72 bytes") {
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password exceeds maximum length of 72 bytes"})
+			return
+		}
 		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save user"})
 		return
 	}

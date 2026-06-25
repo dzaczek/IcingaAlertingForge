@@ -4410,7 +4410,7 @@ function switchIPTab(source, tab, btn) {
         container.innerHTML = html;
         if (prevFilter) {
           var fi = document.getElementById('filterAlerts');
-          if (fi) { fi.value = prevFilter; debouncedFilterTable('alertsTable', prevFilter, 'filterAlertsCount'); }
+          if (fi) { fi.value = prevFilter; filterTable('alertsTable', prevFilter, 'filterAlertsCount'); }
         }
         applyFrozenHighlight();
       } catch(err) {}

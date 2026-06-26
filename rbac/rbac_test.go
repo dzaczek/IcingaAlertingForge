@@ -136,6 +136,27 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 }
 
+func TestAddUserPasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	// Create a password > 72 bytes to trigger bcrypt.GenerateFromPassword error
+	longPassword := ""
+	for i := 0; i < 75; i++ {
+		longPassword += "a"
+	}
+
+	err := m.AddUser(User{Username: "long-pass-user", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Error("expected AddUser to fail with password > 72 bytes")
+	}
+
+	// Verify user was not added
+	_, ok := m.GetUser("long-pass-user")
+	if ok {
+		t.Error("expected user not to exist after failed AddUser")
+	}
+}
+
 func TestPrimaryCannotBeDeleted(t *testing.T) {
 	m := New([]User{
 		{Username: "admin", Password: "pass", Role: RoleAdmin},

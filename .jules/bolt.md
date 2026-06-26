@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-06-26 - Add Debouncing to DOM Input Interactions
+**Learning:** Performing synchronous DOM reads and style updates (e.g. searching through table rows and showing/hiding them) inside high-frequency event handlers like `oninput` can block the main thread and degrade the UI experience, especially on larger datasets.
+**Action:** When filtering tables or manipulating DOM nodes based on fast user input, always use a debounce function to batch the updates, reducing expensive render cycles.

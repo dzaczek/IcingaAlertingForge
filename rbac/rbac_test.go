@@ -136,6 +136,22 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 }
 
+func TestAddUser_PasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	// Create a password > 72 bytes to trigger bcrypt error
+	longPass := make([]byte, 73)
+	for i := range longPass {
+		longPass[i] = 'a'
+	}
+
+	// Ensure it returns an error instead of panicking
+	err := m.AddUser(User{Username: "dos-user", Password: string(longPass), Role: RoleViewer})
+	if err == nil {
+		t.Error("expected error for password > 72 bytes, got nil")
+	}
+}
+
 func TestPrimaryCannotBeDeleted(t *testing.T) {
 	m := New([]User{
 		{Username: "admin", Password: "pass", Role: RoleAdmin},

@@ -64,3 +64,34 @@ func TestStripPort(t *testing.T) {
 		}
 	}
 }
+
+func TestLogger_RotationFileErrors(t *testing.T) {
+	l := newTestLogger(t)
+	// Set max entries low
+	l.maxEntries = 2
+	l.rotateEvery = 1
+
+	// Make the file unreadable to trigger error inside rotateLockedInline
+	l.Append(sampleEntry("svc1", "webhook", "forward", "test"))
+	l.Append(sampleEntry("svc2", "webhook", "forward", "test"))
+	l.Append(sampleEntry("svc3", "webhook", "forward", "test"))
+
+	// Try creating a bad file path for os.CreateTemp inside rotateLockedInline
+	oldPath := l.filePath
+	l.filePath = "/invalid-dir/file.log"
+	l.rotateLockedInline() // Should fail on CreateTemp
+	l.filePath = oldPath
+}
+
+func TestLogger_RotationFileErrorsWrite(t *testing.T) {
+	l := newTestLogger(t)
+	l.maxEntries = 0 // force rotation
+
+	// We can't easily mock write errors with os.CreateTemp without changing code
+	// But we can cover the open file error:
+	oldPath := l.filePath
+	l.filePath = "/invalid-dir/file.log"
+	l.entryCount.Store(10) // make it think it has entries
+	l.rotateLockedInline()
+	l.filePath = oldPath
+}

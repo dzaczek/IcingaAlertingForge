@@ -206,3 +206,17 @@ func TestLoadOrCreateKey_CorruptKeyFile(t *testing.T) {
 		t.Errorf("expected 32-byte key, got %d", len(s.encKey))
 	}
 }
+
+func TestStore_SaveTempFileError(t *testing.T) {
+	tmpDir := t.TempDir()
+	store, _ := New(tmpDir + "/test_config.json", tmpDir + "/test_key.key")
+
+	// Create an invalid path to force CreateTemp to fail
+	store.current = &StoredConfig{}
+	store.filePath = "/invalid/path/config.json"
+
+	err := store.Save()
+	if err == nil {
+		t.Error("expected error on save due to invalid temp file path")
+	}
+}

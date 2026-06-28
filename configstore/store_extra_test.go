@@ -209,7 +209,7 @@ func TestLoadOrCreateKey_CorruptKeyFile(t *testing.T) {
 
 func TestStore_SaveTempFileError(t *testing.T) {
 	tmpDir := t.TempDir()
-	store, _ := New(tmpDir + "/test_config.json", tmpDir + "/test_key.key")
+	store, _ := New(tmpDir+"/test_config.json", tmpDir+"/test_key.key")
 
 	// Create an invalid path to force CreateTemp to fail
 	store.current = &StoredConfig{}

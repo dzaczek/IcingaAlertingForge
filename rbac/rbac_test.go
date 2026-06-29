@@ -136,6 +136,23 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 }
 
+func TestAddUserPasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	// bcrypt max length is 72 bytes. This is 73 bytes.
+	longPassword := string(make([]byte, 73))
+
+	err := m.AddUser(User{Username: "long-pass-user", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error when adding user with password > 72 bytes, got nil")
+	}
+
+	// verify the mutex is unlocked by trying to add another user
+	if err := m.AddUser(User{Username: "valid-user", Password: "valid", Role: RoleViewer}); err != nil {
+		t.Fatalf("mutex may be locked: failed to add valid user after error: %v", err)
+	}
+}
+
 func TestPrimaryCannotBeDeleted(t *testing.T) {
 	m := New([]User{
 		{Username: "admin", Password: "pass", Role: RoleAdmin},

@@ -134,6 +134,13 @@ func TestAddRemoveUser(t *testing.T) {
 	if removed {
 		t.Error("expected false for non-existent user")
 	}
+
+	// Test long password (DoS prevention)
+	longPass := string(make([]byte, 73))
+	err = m.AddUser(User{Username: "long-pass-user", Password: longPass, Role: RoleViewer})
+	if err == nil {
+		t.Error("expected error when adding user with password > 72 bytes")
+	}
 }
 
 func TestPrimaryCannotBeDeleted(t *testing.T) {

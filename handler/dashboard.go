@@ -2371,7 +2371,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .RecentAlerts}}
           <div class="table-filter">
-            <input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable('alertsTable', this.value, 'filterAlertsCount')">
+            <input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="debounceFilterTable('alertsTable', this.value, 'filterAlertsCount')">
             <span class="table-filter-count" id="filterAlertsCount"></span>
           </div>
           <table id="alertsTable">
@@ -2471,7 +2471,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .CachedServices}}
           <div class="table-filter">
-            <input type="text" id="filterServices" placeholder="Filter services..." oninput="filterTable('svcRegistryTable', this.value, 'filterServicesCount')">
+            <input type="text" id="filterServices" placeholder="Filter services..." oninput="debounceFilterTable('svcRegistryTable', this.value, 'filterServicesCount')">
             <span class="table-filter-count" id="filterServicesCount">{{len .CachedServices}} registered</span>
           </div>
           <table class="svc-registry-table" id="svcRegistryTable">
@@ -2855,7 +2855,7 @@ const dashboardHTML = `<!DOCTYPE html>
         <div class="lcars-panel-body">
           {{if .IcingaServices}}
           <div class="table-filter">
-            <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="filterTable('servicesTable', this.value, 'filterIcingaCount')">
+            <input type="text" id="filterIcinga" placeholder="Filter Icinga services..." oninput="debounceFilterTable('servicesTable', this.value, 'filterIcingaCount')">
             <span class="table-filter-count" id="filterIcingaCount">{{len .IcingaServices}} registered</span>
           </div>
           {{if .CanDeleteService}}<div class="toolbar">
@@ -4365,7 +4365,7 @@ function switchIPTab(source, tab, btn) {
         }
 
         var prevFilter = (document.getElementById('filterAlerts') || {}).value || '';
-        var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="filterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
+        var html = '<div class="table-filter"><input type="text" id="filterAlerts" placeholder="Filter alerts..." oninput="debounceFilterTable(\'alertsTable\', this.value, \'filterAlertsCount\')"><span class="table-filter-count" id="filterAlertsCount"></span></div>';
         html += '<table id="alertsTable"><thead><tr>';
         html += '<th onclick="sortTable(0,\'date\',this.closest(\'table\'))">Stardate <span class="sort-arrow"></span></th>';
         html += '<th onclick="sortTable(1,\'string\',this.closest(\'table\'))">Status <span class="sort-arrow"></span></th>';
@@ -4586,6 +4586,14 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Table Filter ──
+var _filterTimer = null;
+function debounceFilterTable(tableId, query, countId) {
+  if (_filterTimer) clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(function() {
+    filterTable(tableId, query, countId);
+  }, 300);
+}
+
 function filterTable(tableId, query, countId) {
   var table = document.getElementById(tableId);
   if (!table) return;

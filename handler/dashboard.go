@@ -4586,10 +4586,14 @@ document.addEventListener('click', function(e) {
 });
 
 // ── Table Filter ──
+// ⚡ Bolt: Debounce table filtering to prevent main thread blocking during fast typing
+var _filterTimeouts = {};
 function filterTable(tableId, query, countId) {
-  var table = document.getElementById(tableId);
-  if (!table) return;
-  var rows = table.querySelectorAll('tbody tr');
+  if (_filterTimeouts[tableId]) clearTimeout(_filterTimeouts[tableId]);
+  _filterTimeouts[tableId] = setTimeout(function() {
+    var table = document.getElementById(tableId);
+    if (!table) return;
+    var rows = table.querySelectorAll('tbody tr');
   var q = query.toLowerCase();
   var visible = 0;
   var total = 0;
@@ -4621,14 +4625,15 @@ function filterTable(tableId, query, countId) {
       dividers[d].style.display = hasVisible ? '' : 'none';
     }
   }
-  var countEl = document.getElementById(countId);
-  if (countEl) {
-    if (q) {
-      countEl.textContent = visible + ' / ' + total + ' matching';
-    } else {
-      countEl.textContent = total + ' registered';
+    var countEl = document.getElementById(countId);
+    if (countEl) {
+      if (q) {
+        countEl.textContent = visible + ' / ' + total + ' matching';
+      } else {
+        countEl.textContent = total + ' registered';
+      }
     }
-  }
+  }, 300);
 }
 
 // ── Session Timeout (30 min, 3 min warning) ──

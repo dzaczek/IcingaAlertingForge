@@ -249,3 +249,36 @@ func TestAdmin_HandleDebugToggle(t *testing.T) {
 		}
 	})
 }
+
+func TestAdmin_HandleCreateUser_PasswordTooLong(t *testing.T) {
+	h, _ := testAdminHandler(t, nil)
+
+	// Create a password > 72 bytes
+	longPass := ""
+	for i := 0; i < 80; i++ {
+		longPass += "A"
+	}
+
+	payload := map[string]string{
+		"username": "new-user",
+		"password": longPass,
+		"role":     "viewer",
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/users", bytes.NewBuffer(body))
+	req.SetBasicAuth("admin", "secret")
+	rr := httptest.NewRecorder()
+
+	h.HandleCreateUser(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request, got %d", rr.Code)
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rr.Body).Decode(&resp)
+	if resp["error"] != "password too long (max 72 bytes)" {
+		t.Errorf("unexpected error message: %q", resp["error"])
+	}
+}

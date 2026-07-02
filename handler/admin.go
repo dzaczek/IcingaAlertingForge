@@ -21,6 +21,8 @@ import (
 	"icinga-webhook-bridge/rbac"
 
 	"icinga-webhook-bridge/auth"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // AdminHandler serves admin API endpoints for service management.
@@ -679,6 +681,10 @@ func (h *AdminHandler) HandleCreateUser(w http.ResponseWriter, r *http.Request) 
 		Password: body.Password,
 		Role:     role,
 	}); err != nil {
+		if errors.Is(err, bcrypt.ErrPasswordTooLong) || strings.Contains(err.Error(), "bcrypt: password length exceeds") || strings.Contains(err.Error(), "bcrypt: password exceeds") {
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "password too long (max 72 bytes)"})
+			return
+		}
 		slog.Error("RBAC: failed to persist user", "error", err)
 		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save user"})
 		return

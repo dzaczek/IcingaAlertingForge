@@ -1,8 +1,9 @@
 package cache
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -214,8 +215,10 @@ func (c *ServiceCache) AllFrozen() []FrozenEntry {
 	// Lexicographical sorting on the composite Key is faster than multi-field
 	// comparisons (Host then Service) because it avoids branching and relies
 	// directly on the stable `\x1f` separator built into the key.
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].key < out[j].key
+	// We use slices.SortFunc and cmp.Compare as they use generics, avoiding
+	// the reflection overhead and allocations of sort.Slice.
+	slices.SortFunc(out, func(a, b FrozenEntry) int {
+		return cmp.Compare(a.key, b.key)
 	})
 
 	return out
@@ -254,8 +257,10 @@ func (c *ServiceCache) AllEntries() []CacheEntry {
 	// Lexicographical sorting on the composite Key is faster than multi-field
 	// comparisons (Host then Service) because it avoids branching and relies
 	// directly on the stable `\x1f` separator built into the key.
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Key < entries[j].Key
+	// We use slices.SortFunc and cmp.Compare as they use generics, avoiding
+	// the reflection overhead and allocations of sort.Slice.
+	slices.SortFunc(entries, func(a, b CacheEntry) int {
+		return cmp.Compare(a.Key, b.Key)
 	})
 
 	return entries

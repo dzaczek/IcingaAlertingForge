@@ -35,6 +35,20 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 {"results":[{"status":"processed","host":"host-a","service":"CPU","exit_status":2,"label":"CRITICAL","icinga_ok":true}]}
 ```
 
+## Authentication Endpoints
+
+### `GET /login`
+
+**Fast Track:** Form-based login page.
+
+**Deep Dive:** Serves the HTML for the login page, replacing the native browser Basic Auth prompt to allow password managers to autofill. Takes an optional `next` query parameter for safe redirection after login.
+
+### `POST /login`
+
+**Fast Track:** Processes form-based login submissions.
+
+**Deep Dive:** Authenticates a user using form credentials (`username`, `password`) against admin or RBAC settings. Issues an opaque session cookie on success and redirects the user (to `/status/beauty?admin=1` or the safe `next` path).
+
 ## Health & Status
 
 ### `GET /health`
@@ -59,6 +73,12 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 **Fast Track:** The beauty dashboard interface.
 
 **Deep Dive:** Serves the HTML, JS, and CSS for the main dashboard. Supports an optional `?admin=1` query parameter for the admin panel.
+
+### `GET /status/beauty/stats`
+
+**Fast Track:** Dashboard statistics snapshot.
+
+**Deep Dive:** Returns a JSON snapshot of the system's current statistics from the history store, including `total_entries`, `errors`, `avg_duration_ms`, and `last_received`. Used by the beauty dashboard.
 
 ### `GET /status/beauty/logout`
 

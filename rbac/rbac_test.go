@@ -136,6 +136,19 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 }
 
+func TestAddUserBcryptLimit(t *testing.T) {
+	m := New(nil)
+	longPass := ""
+	for i := 0; i < 100; i++ {
+		longPass += "a"
+	}
+
+	err := m.AddUser(User{Username: "long-pass-user", Password: longPass, Role: RoleViewer})
+	if err == nil {
+		t.Error("expected error when adding user with password > 72 bytes, got nil")
+	}
+}
+
 func TestPrimaryCannotBeDeleted(t *testing.T) {
 	m := New([]User{
 		{Username: "admin", Password: "pass", Role: RoleAdmin},

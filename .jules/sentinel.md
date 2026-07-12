@@ -45,3 +45,8 @@
 **Vulnerability:** The SSE broker in `handler/sse.go` was directly writing raw unescaped JSON messages to clients via `fmt.Fprint(w, event.rawMessage)`. If an attacker injected HTML tags (e.g., `<script>`) into a JSON payload handled by this endpoint, it could lead to XSS depending on how the client processed the SSE stream.
 **Learning:** Directly outputting strings into an HTTP stream without sanitization is risky, especially for debug or log data that may contain user-supplied content. For JSON data specifically, using standard `html.EscapeString` breaks JSON syntax by replacing `<` with `&lt;`.
 **Prevention:** Use `json.HTMLEscape` on raw strings that contain JSON before outputting them to a browser-readable stream. This correctly converts dangerous HTML characters into valid JSON unicode escapes (e.g. `\u003c`), neutralizing the HTML while preserving valid JSON syntax for `JSON.parse()` on the client.
+
+## 2024-07-12 - [Denial of Service via bcrypt length limit panic]
+**Vulnerability:** The `hashPassword` function in `rbac/rbac.go` used `panic` to handle errors from `bcrypt.GenerateFromPassword`. Because bcrypt restricts passwords to 72 bytes, providing an overly long password would trigger this panic, leading to a Denial of Service (DoS) when attempting to add or update users.
+**Learning:** Functions handling user input should never use `panic` for error control flow, especially when underlying cryptographic functions like bcrypt have strict, reachable failure conditions (like the 72-byte limit).
+**Prevention:** Always propagate errors back to the caller instead of panicking. Ensure any error paths in lock-protected methods explicitly unlock mutexes before returning to prevent deadlocks.

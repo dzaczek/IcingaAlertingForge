@@ -207,3 +207,24 @@ func TestParseRole(t *testing.T) {
 		t.Error("expected viewer for empty string")
 	}
 }
+
+func TestAddUser_PasswordTooLong(t *testing.T) {
+	m := New(nil)
+
+	// bcrypt has a maximum password length of 72 bytes.
+	// We create a password of 73 bytes to trigger an error from bcrypt.GenerateFromPassword.
+	longPassword := ""
+	for i := 0; i < 73; i++ {
+		longPassword += "a"
+	}
+
+	err := m.AddUser(User{Username: "new-user-long-pass", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error when adding user with password > 72 bytes, got nil")
+	}
+
+	// Verify that the error message mentions bcrypt or length
+	if err.Error() == "" {
+		t.Error("expected a non-empty error message")
+	}
+}

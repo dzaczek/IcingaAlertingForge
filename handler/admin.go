@@ -243,7 +243,9 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleBulkDelete deletes multiple services.
-// POST /admin/services/bulk-delete  body: {"services": ["svc1", "svc2"]}
+// Fast Track: Deletes multiple services in a single request.
+// Deep Dive: Accepts a JSON body with a list of service references. In a multi-host setup, each reference must be an object with "host" and "service". For backwards compatibility in single-host setups, a simple string array of service names is also accepted.
+// POST /admin/services/bulk-delete
 func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})

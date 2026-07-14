@@ -280,6 +280,10 @@ Response example:
 
 #### `POST /admin/services/bulk-delete`
 
+**Fast Track:** Deletes multiple services in a single request.
+
+**Deep Dive:** Accepts a JSON body with a list of service references. In a multi-host setup, each reference must be an object specifying both `host` and `service`. For backwards compatibility in single-host setups, a simple string array of service names is also accepted.
+
 <!-- LANG: hyphenation -->
 Preferred request body in a multi-host setup:
 

@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-05-30 - Replace sort.Slice with slices.SortFunc for cache entry sorting
+**Learning:** In Go 1.21+, `slices.SortFunc` combined with `cmp.Compare` uses generics and avoids the reflection overhead and interface allocations of `sort.Slice`, making it significantly faster and allocation-free for performance-critical sorting paths, such as serving large cache lists.
+**Action:** When sorting slices in hot paths, avoid `sort.Slice` and instead use `slices.SortFunc` with `cmp.Compare`.

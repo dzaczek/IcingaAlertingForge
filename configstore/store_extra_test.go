@@ -206,3 +206,91 @@ func TestLoadOrCreateKey_CorruptKeyFile(t *testing.T) {
 		t.Errorf("expected 32-byte key, got %d", len(s.encKey))
 	}
 }
+
+func TestStore_Save_CreateTempFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	s, err := New(configPath, "test-key")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	// Must initialize s.current so Save() doesn't panic
+	s.Update(StoredConfig{Version: 1})
+
+	// Use an invalid path to force os.CreateTemp to fail.
+	// Using a null byte or an incredibly long path usually triggers a failure.
+	s.filePath = string([]byte{0}) + "invalid-path/config.json"
+
+	err = s.Save()
+	if err == nil {
+		t.Error("expected error when saving to invalid directory")
+	}
+}
+
+func TestStore_Exists(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	s, err := New(configPath, "test-key")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	if s.Exists() {
+		t.Error("expected Exists() to be false before saving")
+	}
+
+	s.Update(StoredConfig{Version: 1})
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	if !s.Exists() {
+		t.Error("expected Exists() to be true after saving")
+	}
+}
+
+func TestStore_SetUsersGetUsers(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	s, err := New(configPath, "test-key")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	s.Update(StoredConfig{Version: 1})
+
+	users := []StoredUser{{Username: "testuser", Password: "testpass", Role: "admin"}}
+	if err := s.SetUsers(users); err != nil {
+		t.Fatalf("SetUsers failed: %v", err)
+	}
+
+	retrieved := s.GetUsers()
+	if len(retrieved) != 1 {
+		t.Fatalf("expected 1 user, got %d", len(retrieved))
+	}
+	if retrieved[0].Username != "testuser" {
+		t.Errorf("expected testuser, got %s", retrieved[0].Username)
+	}
+}
+
+func TestStore_Export(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.json")
+	s, err := New(configPath, "test-key")
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+
+	s.Update(StoredConfig{Icinga2Pass: "secret", Targets: []TargetStore{{ID: "t1"}}})
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save failed: %v", err)
+	}
+
+	exported, err := s.Export()
+	if err != nil {
+		t.Fatalf("Export failed: %v", err)
+	}
+	if string(exported) == "" {
+		t.Error("expected non-empty export")
+	}
+}

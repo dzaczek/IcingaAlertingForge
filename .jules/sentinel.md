@@ -49,3 +49,7 @@
 **Vulnerability:** Atomic writes to `configstore/store.go` and `history/logger.go` used predictable temporary file names like `filepath + ".tmp"` rather than securely generated randomized paths. If these temp files are created in shared directories or `/tmp`, an attacker could pre-create a symlink at the predictable `.tmp` path pointing to a sensitive system file, leading to a symlink attack (CWE-377) and potential file overwrite when the application saves data.
 **Learning:** Hardcoding static suffixes like `.tmp` for temporary files creates a race condition window where an attacker can replace the file with a symlink before the application writes to it.
 **Prevention:** Always use `os.CreateTemp` to generate secure, randomized, and unpredictable temporary files. Create these files in the same directory as the target destination to ensure `os.Rename` stays atomic and does not fail across different mount points.
+## 2026-07-16 - [crypto/tls Client Hello Privacy Leak]
+**Vulnerability:** A vulnerability in `crypto/tls` (GO-2026-5856) prior to Go 1.26.5 leads to a privacy leak involving Encrypted Client Hello (ECH) messages during TLS handshakes.
+**Learning:** `govulncheck` explicitly flagged standard library vulnerabilities in functions relying on TLS, pointing to out-of-date Go runtimes configured in CI workflows.
+**Prevention:** Always bump Go runtime versions symmetrically in test matrices (`ci.yml`) and security scanning steps (`security.yml`) when addressing standard library CVEs.

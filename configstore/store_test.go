@@ -39,6 +39,21 @@ func TestNew(t *testing.T) {
 	})
 }
 
+func TestSaveErrorCreateTemp(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "nested", "config.json")
+	s, _ := New(configPath, "test-key")
+	s.Update(StoredConfig{Version: 1})
+
+	// Create an invalid path for temp creation
+	s.filePath = string([]byte{0}) + "invalid-path"
+
+	err := s.Save()
+	if err == nil {
+		t.Error("expected error when os.CreateTemp fails, got nil")
+	}
+}
+
 func TestSaveLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.json")

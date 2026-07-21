@@ -249,6 +249,12 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 
 **Deep Dive:** Deletes the target mapping and revokes all its API keys.
 
+### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+**Fast Track:** Removes an API key from a target.
+
+**Deep Dive:** Deletes an API key from a target at the specified index.
+
 ### `POST /admin/settings/targets/{id}/generate-key`
 
 **Fast Track:** Generates a new API key for a target.

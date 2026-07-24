@@ -220,10 +220,23 @@ func (s *Store) Save() error {
 	}
 
 	// Atomic write: write to temp file, then rename
-	tmp := s.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return fmt.Errorf("configstore: write tmp: %w", err)
+	dir := filepath.Dir(s.filePath)
+	out, err := os.CreateTemp(dir, filepath.Base(s.filePath)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("configstore: create temp file: %w", err)
 	}
+	tmp := out.Name()
+
+	if _, err := out.Write(data); err != nil {
+		out.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("configstore: write temp file: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("configstore: close temp file: %w", err)
+	}
+
 	if err := os.Rename(tmp, s.filePath); err != nil {
 		if rmErr := os.Remove(tmp); rmErr != nil {
 			slog.Warn("configstore: failed to remove temp file", "error", rmErr)

@@ -45,3 +45,8 @@
 **Vulnerability:** The SSE broker in `handler/sse.go` was directly writing raw unescaped JSON messages to clients via `fmt.Fprint(w, event.rawMessage)`. If an attacker injected HTML tags (e.g., `<script>`) into a JSON payload handled by this endpoint, it could lead to XSS depending on how the client processed the SSE stream.
 **Learning:** Directly outputting strings into an HTTP stream without sanitization is risky, especially for debug or log data that may contain user-supplied content. For JSON data specifically, using standard `html.EscapeString` breaks JSON syntax by replacing `<` with `&lt;`.
 **Prevention:** Use `json.HTMLEscape` on raw strings that contain JSON before outputting them to a browser-readable stream. This correctly converts dangerous HTML characters into valid JSON unicode escapes (e.g. `\u003c`), neutralizing the HTML while preserving valid JSON syntax for `JSON.parse()` on the client.
+
+## 2026-07-26 - [Predictable Temp File Vulnerability (CWE-377)]
+**Vulnerability:** When performing atomic file updates (in config store and history logger), predictable temporary file paths were formed via string concatenation (e.g., `filepath + ".tmp"`). This creates a symlink attack (CWE-377) and race condition vulnerabilities, as local attackers can predict the file path.
+**Learning:** Hardcoding or deterministically computing temporary file paths is insecure and vulnerable to race conditions or symlink attacks.
+**Prevention:** Always use `os.CreateTemp` to generate secure, randomized temporary filenames. Create the temporary file in the same directory as the target destination to ensure they are on the same filesystem for atomic renames (`os.Rename`), and use `defer os.Remove(tmpFile.Name())` to prevent resource leaks.

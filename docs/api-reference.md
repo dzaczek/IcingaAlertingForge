@@ -72,6 +72,12 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 **Deep Dive:** Server-Sent Events stream providing real-time dashboard updates. Emits `webhook` and `debug` events.
 
+### `GET /status/beauty/stats`
+
+**Fast Track:** Returns a JSON snapshot of dashboard statistics.
+
+**Deep Dive:** Returns current dashboard statistics including total alerts, queued webhooks, services, firing criticals/warnings, and uptime in JSON format.
+
 ### `GET /status/{service_name}`
 
 **Fast Track:** Queries one service state from cache and Icinga2.

@@ -220,14 +220,27 @@ func (s *Store) Save() error {
 	}
 
 	// Atomic write: write to temp file, then rename
-	tmp := s.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	tmpFile, err := os.CreateTemp(filepath.Dir(s.filePath), "config-*.json.tmp")
+	if err != nil {
+		return fmt.Errorf("configstore: create tmp: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	defer os.Remove(tmpPath) // Cleanup on error paths
+
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
 		return fmt.Errorf("configstore: write tmp: %w", err)
 	}
-	if err := os.Rename(tmp, s.filePath); err != nil {
-		if rmErr := os.Remove(tmp); rmErr != nil {
-			slog.Warn("configstore: failed to remove temp file", "error", rmErr)
-		}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("configstore: close tmp: %w", err)
+	}
+
+	// Ensure the temp file has the correct permissions (CreateTemp uses 0600 by default, but making it explicit)
+	if err := os.Chmod(tmpPath, 0600); err != nil {
+		return fmt.Errorf("configstore: chmod tmp: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, s.filePath); err != nil {
 		return fmt.Errorf("configstore: rename: %w", err)
 	}
 

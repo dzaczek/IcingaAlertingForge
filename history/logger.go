@@ -302,13 +302,15 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
-	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	tmpFile, err := os.CreateTemp(filepath.Dir(l.filePath), filepath.Base(l.filePath)+".*.tmp")
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)
 		return
 	}
+	tempPath := tmpFile.Name()
+	defer os.Remove(tempPath)
+	out := tmpFile
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)

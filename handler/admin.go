@@ -1,12 +1,12 @@
 package handler
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
-	"cmp"
 	"slices"
 	"strings"
 	"sync"

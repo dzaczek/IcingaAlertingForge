@@ -1,8 +1,8 @@
 package handler
 
 import (
-	"fmt"
 	"cmp"
+	"fmt"
 	"slices"
 
 	"icinga-webhook-bridge/config"

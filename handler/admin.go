@@ -6,7 +6,8 @@ import (
 	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
-	"sort"
+	"cmp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -152,11 +153,12 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		services = append(services, res...)
 	}
 
-	sort.Slice(services, func(i, j int) bool {
-		if services[i].HostName == services[j].HostName {
-			return services[i].Name < services[j].Name
+	// ⚡ Bolt: slices.SortFunc is faster and produces fewer allocations than sort.Slice for struct slices
+	slices.SortFunc(services, func(a, b icinga.ServiceInfo) int {
+		if n := cmp.Compare(a.HostName, b.HostName); n != 0 {
+			return n
 		}
-		return services[i].HostName < services[j].HostName
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	hostNames := make([]string, 0, len(targets))

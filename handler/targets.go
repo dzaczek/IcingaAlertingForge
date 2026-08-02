@@ -2,7 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"sort"
+	"cmp"
+	"slices"
 
 	"icinga-webhook-bridge/config"
 )
@@ -13,11 +14,12 @@ func sortedTargets(targets map[string]config.TargetConfig) []config.TargetConfig
 		list = append(list, target)
 	}
 
-	sort.Slice(list, func(i, j int) bool {
-		if list[i].HostName == list[j].HostName {
-			return list[i].ID < list[j].ID
+	// ⚡ Bolt: slices.SortFunc is faster and produces fewer allocations than sort.Slice for struct slices
+	slices.SortFunc(list, func(a, b config.TargetConfig) int {
+		if n := cmp.Compare(a.HostName, b.HostName); n != 0 {
+			return n
 		}
-		return list[i].HostName < list[j].HostName
+		return cmp.Compare(a.ID, b.ID)
 	})
 
 	return list

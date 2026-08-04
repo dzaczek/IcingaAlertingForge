@@ -507,6 +507,12 @@ Public panel.
 
 Admin panel.
 
+#### `GET /status/beauty/stats`
+
+**Fast Track:** Returns a JSON snapshot of dashboard statistics.
+
+**Deep Dive:** Returns metrics such as total entries, active alerts, uptime, and average processing duration.
+
 #### `GET /status/{service_name}`
 
 Queries one service from the cache and from Icinga.

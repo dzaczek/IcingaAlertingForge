@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"cmp"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -50,8 +52,9 @@ func BenchmarkSortNew(b *testing.B) {
 		temp := make([]CacheEntry, len(entries))
 		copy(temp, entries)
 		b.StartTimer()
-		sort.Slice(temp, func(i, j int) bool {
-			return temp[i].Key < temp[j].Key
+		// ⚡ Bolt: Use slices.SortFunc with cmp.Compare for faster, zero-allocation sorting.
+		slices.SortFunc(temp, func(a, b CacheEntry) int {
+			return cmp.Compare(a.Key, b.Key)
 		})
 	}
 }

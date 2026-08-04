@@ -302,11 +302,17 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
-	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	out, err := os.CreateTemp(filepath.Dir(l.filePath), "history-*.jsonl.tmp")
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)
+		return
+	}
+	tempPath := out.Name()
+	if err := os.Chmod(tempPath, 0600); err != nil {
+		out.Close()
+		f.Close()
+		slog.Error("history: failed to chmod temp file", "error", err)
 		return
 	}
 

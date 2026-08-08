@@ -302,13 +302,14 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
-	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	out, err := os.CreateTemp(filepath.Dir(l.filePath), "history-*.jsonl.tmp")
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)
 		return
 	}
+	tempPath := out.Name()
+	defer os.Remove(tempPath)
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -324,18 +325,12 @@ func (l *Logger) rotateLockedInline() {
 		if _, err := writer.Write(scanner.Bytes()); err != nil {
 			out.Close()
 			f.Close()
-			if rmErr := os.Remove(tempPath); rmErr != nil {
-				slog.Warn("history: failed to remove temp file", "error", rmErr)
-			}
 			slog.Error("history: write error during rotation", "error", err)
 			return
 		}
 		if err := writer.WriteByte('\n'); err != nil {
 			out.Close()
 			f.Close()
-			if rmErr := os.Remove(tempPath); rmErr != nil {
-				slog.Warn("history: failed to remove temp file", "error", rmErr)
-			}
 			slog.Error("history: write error during rotation", "error", err)
 			return
 		}
@@ -345,9 +340,6 @@ func (l *Logger) rotateLockedInline() {
 	if err := scanner.Err(); err != nil {
 		out.Close()
 		f.Close()
-		if rmErr := os.Remove(tempPath); rmErr != nil {
-			slog.Warn("history: failed to remove temp file", "error", rmErr)
-		}
 		slog.Error("history: scanner error during rotation", "error", err)
 		return
 	}
@@ -355,18 +347,12 @@ func (l *Logger) rotateLockedInline() {
 	if err := writer.Flush(); err != nil {
 		out.Close()
 		f.Close()
-		if rmErr := os.Remove(tempPath); rmErr != nil {
-			slog.Warn("history: failed to remove temp file", "error", rmErr)
-		}
 		slog.Error("history: failed to flush temp file", "error", err)
 		return
 	}
 	if err := out.Close(); err != nil {
 		if closeErr := f.Close(); closeErr != nil {
 			slog.Warn("history: failed to close read file", "error", closeErr)
-		}
-		if rmErr := os.Remove(tempPath); rmErr != nil {
-			slog.Warn("history: failed to remove temp file", "error", rmErr)
 		}
 		slog.Error("history: failed to close temp file", "error", err)
 		return

@@ -219,15 +219,22 @@ func (s *Store) Save() error {
 		return fmt.Errorf("configstore: marshal: %w", err)
 	}
 
-	// Atomic write: write to temp file, then rename
-	tmp := s.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	// 🛡️ Sentinel: Atomic write to secure temp file to prevent symlink attacks (CWE-377)
+	tmpFile, err := os.CreateTemp(filepath.Dir(s.filePath), "config-*.tmp")
+	if err != nil {
+		return fmt.Errorf("configstore: create tmp: %w", err)
+	}
+	tmp := tmpFile.Name()
+	defer os.Remove(tmp) // Ensures cleanup on error paths
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close() // #nosec G104 -- intentionally ignoring close error on error path
 		return fmt.Errorf("configstore: write tmp: %w", err)
 	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("configstore: close tmp: %w", err)
+	}
 	if err := os.Rename(tmp, s.filePath); err != nil {
-		if rmErr := os.Remove(tmp); rmErr != nil {
-			slog.Warn("configstore: failed to remove temp file", "error", rmErr)
-		}
 		return fmt.Errorf("configstore: rename: %w", err)
 	}
 

@@ -507,6 +507,10 @@ Public panel.
 
 Admin panel.
 
+#### `GET /status/beauty/stats`
+
+Returns a JSON snapshot of dashboard statistics (used by the panel).
+
 #### `GET /status/{service_name}`
 
 Queries one service from the cache and from Icinga.

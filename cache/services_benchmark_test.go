@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"cmp"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -52,6 +54,30 @@ func BenchmarkSortNew(b *testing.B) {
 		b.StartTimer()
 		sort.Slice(temp, func(i, j int) bool {
 			return temp[i].Key < temp[j].Key
+		})
+	}
+}
+
+func BenchmarkSortFunc(b *testing.B) {
+	entries := make([]CacheEntry, 1000)
+	for i := 0; i < 1000; i++ {
+		host := fmt.Sprintf("host-%d", rand.Intn(100))
+		svc := fmt.Sprintf("service-%d", rand.Intn(100))
+		entries[i] = CacheEntry{
+			Key:     ServiceKey(host, svc),
+			Host:    host,
+			Service: svc,
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		temp := make([]CacheEntry, len(entries))
+		copy(temp, entries)
+		b.StartTimer()
+		slices.SortFunc(temp, func(a, b CacheEntry) int {
+			return cmp.Compare(a.Key, b.Key)
 		})
 	}
 }

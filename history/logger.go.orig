@@ -302,15 +302,13 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tmpFile, err := os.CreateTemp(filepath.Dir(l.filePath), "history-*.tmp")
+	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
+	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
 	if err != nil {
-		_ = f.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)
 		return
 	}
-	tempPath := tmpFile.Name()
-	defer os.Remove(tempPath)
-	out := tmpFile
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
@@ -324,14 +322,20 @@ func (l *Logger) rotateLockedInline() {
 			continue
 		}
 		if _, err := writer.Write(scanner.Bytes()); err != nil {
-			_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
-			_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
+			out.Close()
+			f.Close()
+			if rmErr := os.Remove(tempPath); rmErr != nil {
+				slog.Warn("history: failed to remove temp file", "error", rmErr)
+			}
 			slog.Error("history: write error during rotation", "error", err)
 			return
 		}
 		if err := writer.WriteByte('\n'); err != nil {
-			_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
-			_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
+			out.Close()
+			f.Close()
+			if rmErr := os.Remove(tempPath); rmErr != nil {
+				slog.Warn("history: failed to remove temp file", "error", rmErr)
+			}
 			slog.Error("history: write error during rotation", "error", err)
 			return
 		}
@@ -339,24 +343,37 @@ func (l *Logger) rotateLockedInline() {
 	}
 
 	if err := scanner.Err(); err != nil {
-		_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
-		_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
+		out.Close()
+		f.Close()
+		if rmErr := os.Remove(tempPath); rmErr != nil {
+			slog.Warn("history: failed to remove temp file", "error", rmErr)
+		}
 		slog.Error("history: scanner error during rotation", "error", err)
 		return
 	}
 
 	if err := writer.Flush(); err != nil {
-		_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
-		_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
+		out.Close()
+		f.Close()
+		if rmErr := os.Remove(tempPath); rmErr != nil {
+			slog.Warn("history: failed to remove temp file", "error", rmErr)
+		}
 		slog.Error("history: failed to flush temp file", "error", err)
 		return
 	}
 	if err := out.Close(); err != nil {
-		_ = f.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		if closeErr := f.Close(); closeErr != nil {
+			slog.Warn("history: failed to close read file", "error", closeErr)
+		}
+		if rmErr := os.Remove(tempPath); rmErr != nil {
+			slog.Warn("history: failed to remove temp file", "error", rmErr)
+		}
 		slog.Error("history: failed to close temp file", "error", err)
 		return
 	}
-	_ = f.Close() // #nosec G104 -- optionally ignore close error here since we read it completely
+	if err := f.Close(); err != nil {
+		slog.Warn("history: failed to close read file during rotation", "error", err)
+	}
 
 	if err := os.Rename(tempPath, l.filePath); err != nil {
 		slog.Error("history: failed to rename rotated file", "error", err)

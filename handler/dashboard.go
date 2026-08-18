@@ -2,13 +2,12 @@ package handler
 
 import (
 	"bytes"
-	"cmp"
 	"html/template"
 	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
 	"net/url"
-	"slices"
+	"sort"
 	"sync"
 	"time"
 
@@ -189,7 +188,7 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 		// Top 10 by count (descending)
 		top := make([]ipEntry, len(entries))
 		copy(top, entries)
-		slices.SortFunc(top, func(a, b ipEntry) int { return cmp.Compare(b.Count, a.Count) })
+		sort.Slice(top, func(i, j int) bool { return top[i].Count > top[j].Count })
 		if len(top) > 10 {
 			top = top[:10]
 		}
@@ -198,7 +197,7 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 		// Last 10 by time (most recent first)
 		last := make([]ipEntry, len(entries))
 		copy(last, entries)
-		slices.SortFunc(last, func(a, b ipEntry) int { return cmp.Compare(b.LastSeen, a.LastSeen) })
+		sort.Slice(last, func(i, j int) bool { return last[i].LastSeen > last[j].LastSeen })
 		if len(last) > 10 {
 			last = last[:10]
 		}
@@ -338,11 +337,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			icingaServices = append(icingaServices, res...)
 		}
 
-		slices.SortFunc(icingaServices, func(a, b icinga.ServiceInfo) int {
-			if a.HostName == b.HostName {
-				return cmp.Compare(a.Name, b.Name)
+		sort.Slice(icingaServices, func(i, j int) bool {
+			if icingaServices[i].HostName == icingaServices[j].HostName {
+				return icingaServices[i].Name < icingaServices[j].Name
 			}
-			return cmp.Compare(a.HostName, b.HostName)
+			return icingaServices[i].HostName < icingaServices[j].HostName
 		})
 	}
 

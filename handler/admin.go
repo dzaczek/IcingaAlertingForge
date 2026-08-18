@@ -1,13 +1,12 @@
 package handler
 
 import (
-	"cmp"
 	"encoding/json"
 	"errors"
 	"icinga-webhook-bridge/httputil"
 	"log/slog"
 	"net/http"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -153,11 +152,11 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 		services = append(services, res...)
 	}
 
-	slices.SortFunc(services, func(a, b icinga.ServiceInfo) int {
-		if a.HostName == b.HostName {
-			return cmp.Compare(a.Name, b.Name)
+	sort.Slice(services, func(i, j int) bool {
+		if services[i].HostName == services[j].HostName {
+			return services[i].Name < services[j].Name
 		}
-		return cmp.Compare(a.HostName, b.HostName)
+		return services[i].HostName < services[j].HostName
 	})
 
 	hostNames := make([]string, 0, len(targets))

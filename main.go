@@ -1,7 +1,6 @@
 package main
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,15 +9,14 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 
-	"syscall"
-	"time"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"syscall"
+	"time"
 
 	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/auth"
@@ -1021,11 +1019,11 @@ func sortedTargets(targets map[string]config.TargetConfig) []config.TargetConfig
 		list = append(list, target)
 	}
 
-	slices.SortFunc(list, func(a, b config.TargetConfig) int {
-		if a.HostName == b.HostName {
-			return cmp.Compare(a.ID, b.ID)
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].HostName == list[j].HostName {
+			return list[i].ID < list[j].ID
 		}
-		return cmp.Compare(a.HostName, b.HostName)
+		return list[i].HostName < list[j].HostName
 	})
 
 	return list

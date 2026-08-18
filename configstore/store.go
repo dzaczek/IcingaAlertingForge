@@ -15,6 +15,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -365,7 +366,7 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 		sort.Strings(ts.APIKeys)
 		sc.Targets = append(sc.Targets, ts)
 	}
-	sort.Slice(sc.Targets, func(i, j int) bool { return sc.Targets[i].ID < sc.Targets[j].ID })
+	slices.SortFunc(sc.Targets, func(a, b TargetStore) int { return strings.Compare(a.ID, b.ID) })
 
 	s.mu.Lock()
 	s.current = &sc

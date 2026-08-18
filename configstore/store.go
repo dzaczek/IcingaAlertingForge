@@ -219,10 +219,27 @@ func (s *Store) Save() error {
 		return fmt.Errorf("configstore: marshal: %w", err)
 	}
 
-	// Atomic write: write to temp file, then rename
-	tmp := s.filePath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
+	// Atomic write: write to a randomly-named temp file (os.CreateTemp uses
+	// O_EXCL, which avoids following a pre-planted symlink at a predictable
+	// path — CWE-377), then rename over the target.
+	tmpFile, err := os.CreateTemp(filepath.Dir(s.filePath), filepath.Base(s.filePath)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("configstore: create tmp: %w", err)
+	}
+	tmp := tmpFile.Name()
+	if err := tmpFile.Chmod(0600); err != nil {
+		tmpFile.Close()
+		os.Remove(tmp)
+		return fmt.Errorf("configstore: chmod tmp: %w", err)
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmp)
 		return fmt.Errorf("configstore: write tmp: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("configstore: close tmp: %w", err)
 	}
 	if err := os.Rename(tmp, s.filePath); err != nil {
 		if rmErr := os.Remove(tmp); rmErr != nil {

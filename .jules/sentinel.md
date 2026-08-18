@@ -45,3 +45,8 @@
 **Vulnerability:** The SSE broker in `handler/sse.go` was directly writing raw unescaped JSON messages to clients via `fmt.Fprint(w, event.rawMessage)`. If an attacker injected HTML tags (e.g., `<script>`) into a JSON payload handled by this endpoint, it could lead to XSS depending on how the client processed the SSE stream.
 **Learning:** Directly outputting strings into an HTTP stream without sanitization is risky, especially for debug or log data that may contain user-supplied content. For JSON data specifically, using standard `html.EscapeString` breaks JSON syntax by replacing `<` with `&lt;`.
 **Prevention:** Use `json.HTMLEscape` on raw strings that contain JSON before outputting them to a browser-readable stream. This correctly converts dangerous HTML characters into valid JSON unicode escapes (e.g. `\u003c`), neutralizing the HTML while preserving valid JSON syntax for `JSON.parse()` on the client.
+
+## 2026-08-18 - [Unhandled Errors on Temporary File Cleanup]
+**Vulnerability:** The application was ignoring returned errors from functions like `os.Remove` and `file.Close()` during error recovery paths (e.g., when a write to a temp file failed and the temp file needed to be removed and closed). This triggers security linters (like gosec G104) due to potentially missing critical I/O errors.
+**Learning:** Security linters strictly enforce checking return values for all I/O operations, including those executed during cleanup or error handling phases.
+**Prevention:** For operations where the error is genuinely non-actionable or expected to fail sometimes during cleanup (like removing a temp file on an error path), explicitly assign the return value to `_` and append a `// #nosec G104` comment to document the deliberate suppression.

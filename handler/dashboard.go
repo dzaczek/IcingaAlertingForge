@@ -4325,17 +4325,9 @@ function switchIPTab(source, tab, btn) {
     orb.addEventListener('animationend', function() { orb.remove(); });
   }
 
-  // Spawn initial orbs from page data (last alerts)
-  var recentAlerts = [
-    {{range .RecentAlerts}}{status: "{{.StatusClass}}"},
-    {{end}}
-  ];
-  var initCount = Math.min(recentAlerts.length, 5);
-  for (var i = 0; i < initCount; i++) {
-    (function(idx) {
-      setTimeout(function() { spawnOrb(recentAlerts[idx].status); }, idx * 600);
-    })(i);
-  }
+  // Orbs are only spawned for live events arriving over SSE — we deliberately
+  // do NOT replay recent history on page load, otherwise old (already-sent)
+  // packets would animate again on every refresh.
 
   // SSE real-time connection
   function incCounter(id) {

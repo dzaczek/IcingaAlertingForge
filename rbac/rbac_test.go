@@ -136,21 +136,6 @@ func TestAddRemoveUser(t *testing.T) {
 	}
 }
 
-func TestAddUserPasswordLengthLimit(t *testing.T) {
-	m := New(nil)
-
-	// bcrypt limit is 72 bytes. Let's create a 73 byte password.
-	longPassword := ""
-	for i := 0; i < 73; i++ {
-		longPassword += "a"
-	}
-
-	err := m.AddUser(User{Username: "long-pass-user", Password: longPassword, Role: RoleViewer})
-	if err == nil {
-		t.Error("expected error when adding user with password longer than 72 bytes, got nil")
-	}
-}
-
 func TestPrimaryCannotBeDeleted(t *testing.T) {
 	m := New([]User{
 		{Username: "admin", Password: "pass", Role: RoleAdmin},

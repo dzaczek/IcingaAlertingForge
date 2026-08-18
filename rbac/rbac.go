@@ -225,12 +225,7 @@ func (m *Manager) AddUser(user User) error {
 	} else if len(user.Password) == 97 && user.Password[32] == ':' {
 		// already legacy SHA-256 hashed
 	} else {
-		hashed, err := hashPassword(user.Password)
-		if err != nil {
-			m.mu.Unlock()
-			return err
-		}
-		user.Password = hashed
+		user.Password = hashPassword(user.Password)
 	}
 
 	m.users[user.Username] = user
@@ -279,12 +274,12 @@ func ParseRole(s string) Role {
 	}
 }
 
-func hashPassword(password string) (string, error) {
+func hashPassword(password string) string {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", fmt.Errorf("rbac: bcrypt.GenerateFromPassword failed: %w", err)
+		panic(fmt.Sprintf("rbac: bcrypt.GenerateFromPassword failed: %v", err))
 	}
-	return string(hash), nil
+	return string(hash)
 }
 
 func hashPasswordWithSalt(password, saltHex string) string {

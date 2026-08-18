@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -133,6 +134,22 @@ func TestAddRemoveUser(t *testing.T) {
 	removed, _ = m.RemoveUser("new-user")
 	if removed {
 		t.Error("expected false for non-existent user")
+	}
+}
+
+func TestAddUserOversizedPasswordReturnsError(t *testing.T) {
+	m := New(nil)
+
+	// bcrypt rejects passwords over 72 bytes; AddUser must return an error
+	// instead of panicking (CWE-248: DoS via unhandled exception).
+	longPassword := strings.Repeat("a", 73)
+	err := m.AddUser(User{Username: "new-user", Password: longPassword, Role: RoleViewer})
+	if err == nil {
+		t.Fatal("expected error for oversized password, got nil")
+	}
+
+	if _, ok := m.GetUser("new-user"); ok {
+		t.Error("user should not be added when password hashing fails")
 	}
 }
 

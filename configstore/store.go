@@ -175,6 +175,10 @@ func (s *Store) Load() error {
 // Save writes the current config to disk with secrets encrypted.
 func (s *Store) Save() error {
 	s.mu.RLock()
+	if s.current == nil {
+		s.mu.RUnlock()
+		return nil
+	}
 	sc := *s.current
 	// Deep-copy slices so encryption does not mutate in-memory data.
 	sc.Targets = make([]TargetStore, len(s.current.Targets))

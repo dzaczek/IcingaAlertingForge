@@ -127,7 +127,7 @@ jobs:
         with:
           name: coverage-1.26.4
           path: .
-      - uses: codecov/codecov-action@v6
+      - uses: codecov/codecov-action@v7
         with:
           files: ./coverage-1.26.4.out
           fail_ci_if_error: false

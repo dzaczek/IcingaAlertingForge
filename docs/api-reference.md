@@ -60,6 +60,12 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 **Deep Dive:** Serves the HTML, JS, and CSS for the main dashboard. Supports an optional `?admin=1` query parameter for the admin panel.
 
+### `GET /status/beauty/stats`
+
+**Fast Track:** Returns a JSON snapshot of dashboard statistics.
+
+**Deep Dive:** Returns current dashboard overview metrics including total webhooks processed, error counts, active alerts by severity, test mode statistics, and server uptime.
+
 ### `GET /status/beauty/logout`
 
 **Fast Track:** Logs out of the admin session.

@@ -302,11 +302,22 @@ func (l *Logger) rotateLockedInline() {
 		return
 	}
 
-	tempPath := l.filePath + ".tmp"                                            // l.filePath is absolute and cleaned at construction
-	out, err := os.OpenFile(tempPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304
+	// os.CreateTemp uses O_EXCL with a random suffix, which avoids following
+	// a pre-planted symlink at a predictable path (CWE-377).
+	out, err := os.CreateTemp(filepath.Dir(l.filePath), filepath.Base(l.filePath)+".tmp-*")
 	if err != nil {
 		f.Close()
 		slog.Error("history: failed to create temp file for rotation", "error", err)
+		return
+	}
+	tempPath := out.Name()
+	if err := out.Chmod(0o600); err != nil {
+		out.Close()
+		f.Close()
+		if rmErr := os.Remove(tempPath); rmErr != nil {
+			slog.Warn("history: failed to remove temp file", "error", rmErr)
+		}
+		slog.Error("history: failed to chmod temp file for rotation", "error", err)
 		return
 	}
 

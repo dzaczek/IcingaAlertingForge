@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -80,6 +81,11 @@ func New(cfg Config) (*Logger, error) {
 
 	if !cfg.Enabled {
 		return l, nil
+	}
+
+	dir := filepath.Dir(cfg.File)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, fmt.Errorf("audit: create directory %s: %w", dir, err)
 	}
 
 	f, err := os.OpenFile(cfg.File, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)

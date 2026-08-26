@@ -7,3 +7,6 @@
 ## 2026-05-29 - Optimize SSE PublishRaw string formatting
 **Learning:** In Go, repeated string concatenation using `fmt.Sprintf` is slower and creates more memory allocations because of reflection overhead. When building strings in hot loops or high-throughput event paths (like SSE broadcasting), using `strings.Builder` with a pre-allocated buffer (`Grow()`) significantly reduces allocations and speeds up execution.
 **Action:** When constructing strings in performance-critical code paths, avoid `fmt.Sprintf` and instead use `strings.Builder` with a known or calculated capacity.
+## 2026-08-26 - Pre-allocate slice capacity when flattening nested slices
+**Learning:** When aggregating or flattening multiple arrays/slices into a single slice inside a loop using `append()`, failing to pre-allocate capacity forces Go to re-allocate underlying arrays and incurs garbage collection overhead.
+**Action:** Always pre-calculate the total required capacity from the nested slices and allocate the destination slice using `make([]T, 0, capacity)` before appending elements.

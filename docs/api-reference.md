@@ -72,27 +72,6 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 **Deep Dive:** Server-Sent Events stream providing real-time dashboard updates. Emits `webhook` and `debug` events.
 
-### `GET /status/beauty/stats`
-
-**Fast Track:** Returns dashboard statistics.
-
-**Deep Dive:** Returns a JSON snapshot of dashboard statistics including total entries, active alerts, uptime, and average processing duration.
-
-**Response:** `200 OK`
-```json
-{
-  "total_entries": 125,
-  "errors": 2,
-  "avg_duration_ms": 45,
-  "firing": 10,
-  "resolved": 115,
-  "test_mode": 5,
-  "critical_firing": 8,
-  "warning_firing": 2,
-  "uptime": "5h30m10s"
-}
-```
-
 ### `GET /status/{service_name}`
 
 **Fast Track:** Queries one service state from cache and Icinga2.
@@ -162,11 +141,16 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 
 **Fast Track:** Bulk deletes services from Icinga2.
 
-**Deep Dive:** Accepts a list of objects specifying `host` and `service` and deletes all matching services from Icinga2 and local cache.
+**Deep Dive:** Deletes matching services from Icinga2 and the local cache. The request payload varies by deployment: in single-host setups, a simple string array of service names is accepted; in multi-host setups, an array of objects explicitly specifying `host` and `service` is required.
 
-**Body:**
+**Body (Multi-host):**
 ```json
 {"services": [{"host": "host-a", "service": "svc1"}, {"host": "host-b", "service": "svc2"}]}
+```
+
+**Body (Single-host):**
+```json
+{"services": ["svc1", "svc2"]}
 ```
 
 ### `POST /admin/services/{name}/freeze`

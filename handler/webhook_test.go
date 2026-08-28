@@ -530,3 +530,163 @@ func TestWebhook_WorkModeDoesNotCacheFailedAutoCreate(t *testing.T) {
 		t.Fatalf("expected failed auto-create to be retried, got %d create attempt(s)", createCallCount)
 	}
 }
+
+func TestWebhook_Authenticate_AuthorizationHeader_WithScheme(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "ApiKey valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected auth to pass with a schemed Authorization header, got 401")
+	}
+}
+
+func TestWebhook_Authenticate_AuthorizationHeader_NoScheme(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected auth to pass with a schemeless Authorization header, got 401")
+	}
+}
+
+func TestWebhook_Authenticate_XAPIKey(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	payload := `{"status": "firing", "alerts": [{"labels": {"alertname": "Test"}, "status": "firing"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(payload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusUnauthorized {
+		t.Errorf("expected auth to pass with X-API-Key, got 401")
+	}
+}
+
+func TestWebhook_Authenticate_UnknownTarget(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+	// A valid key whose route points at a target that no longer exists.
+	h.Targets = map[string]config.TargetConfig{}
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for a route with a missing target, got %d", rr.Code)
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_GrafanaFallback(t *testing.T) {
+	// No "status", "alerts", or Alertmanager fields at all — falls through
+	// to the final "try Grafana format" branch, which succeeds trivially
+	// (unknown fields are ignored) rather than erroring.
+	rawBody := []byte(`{"invalid": "data"}`)
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Fatalf("expected no error for the fallback path, got %v", err)
+	}
+	if format != "grafana" {
+		t.Errorf("expected fallback format 'grafana', got %s", format)
+	}
+	if len(payload.Alerts) != 0 {
+		t.Errorf("expected no alerts, got %d", len(payload.Alerts))
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_Alertmanager(t *testing.T) {
+	rawBody := []byte(`{"version": "4", "groupKey": "key", "receiver": "web", "alerts": [{"status": "firing", "labels": {"alertname": "Test"}}]}`)
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if format != "alertmanager" {
+		t.Errorf("expected format 'alertmanager', got %s", format)
+	}
+	if len(payload.Alerts) != 1 {
+		t.Errorf("expected 1 alert, got %d", len(payload.Alerts))
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_Universal(t *testing.T) {
+	rawBody := []byte(`{"alerts": [{"status": "firing", "labels": {"alertname": "Test"}}]}`)
+	payload, format, err := parseWebhookPayload(rawBody)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if format != "universal" {
+		t.Errorf("expected format 'universal', got %s", format)
+	}
+	if len(payload.Alerts) != 1 {
+		t.Errorf("expected 1 alert, got %d", len(payload.Alerts))
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_InvalidJSON(t *testing.T) {
+	rawBody := []byte(`{"version": "4", "groupKey": `)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error for invalid json, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_AlertmanagerInvalid(t *testing.T) {
+	// "version" triggers the Alertmanager branch, but "alerts" is the wrong type.
+	rawBody := []byte(`{"version": "4", "groupKey": "key", "receiver": "web", "alerts": "not-an-array"}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when alertmanager unmarshal fails, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_GrafanaInvalid(t *testing.T) {
+	// "status" triggers the Grafana branch, but "alerts" is the wrong type.
+	rawBody := []byte(`{"status": "firing", "alerts": "not-an-array"}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when grafana unmarshal fails, got nil")
+	}
+}
+
+func TestWebhook_ParseWebhookPayload_UniversalInvalid(t *testing.T) {
+	// "alerts" triggers the Universal branch, but the payload is structurally invalid JSON.
+	rawBody := []byte(`{"alerts": [{"invalid"}]}`)
+	_, _, err := parseWebhookPayload(rawBody)
+	if err == nil {
+		t.Errorf("expected error when universal unmarshal fails, got nil")
+	}
+}
+
+func TestWebhook_ResultHasError(t *testing.T) {
+	if !resultHasError(map[string]any{"status": "error"}) {
+		t.Errorf("expected true for status: error")
+	}
+	if !resultHasError(map[string]any{"icinga_ok": false}) {
+		t.Errorf("expected true for icinga_ok: false")
+	}
+	if !resultHasError(map[string]any{"error": "some error"}) {
+		t.Errorf("expected true for error string")
+	}
+	if resultHasError(map[string]any{"status": "success", "icinga_ok": true}) {
+		t.Errorf("expected false for success")
+	}
+}

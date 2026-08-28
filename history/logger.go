@@ -306,14 +306,14 @@ func (l *Logger) rotateLockedInline() {
 	// a pre-planted symlink at a predictable path (CWE-377).
 	out, err := os.CreateTemp(filepath.Dir(l.filePath), filepath.Base(l.filePath)+".tmp-*")
 	if err != nil {
-		f.Close()
+		_ = f.Close() // #nosec G104 -- intentionally ignoring close error on error path
 		slog.Error("history: failed to create temp file for rotation", "error", err)
 		return
 	}
 	tempPath := out.Name()
 	if err := out.Chmod(0o600); err != nil {
-		out.Close()
-		f.Close()
+		_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
 		if rmErr := os.Remove(tempPath); rmErr != nil {
 			slog.Warn("history: failed to remove temp file", "error", rmErr)
 		}
@@ -333,8 +333,8 @@ func (l *Logger) rotateLockedInline() {
 			continue
 		}
 		if _, err := writer.Write(scanner.Bytes()); err != nil {
-			out.Close()
-			f.Close()
+			_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
+			_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
 			if rmErr := os.Remove(tempPath); rmErr != nil {
 				slog.Warn("history: failed to remove temp file", "error", rmErr)
 			}
@@ -342,8 +342,8 @@ func (l *Logger) rotateLockedInline() {
 			return
 		}
 		if err := writer.WriteByte('\n'); err != nil {
-			out.Close()
-			f.Close()
+			_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
+			_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
 			if rmErr := os.Remove(tempPath); rmErr != nil {
 				slog.Warn("history: failed to remove temp file", "error", rmErr)
 			}
@@ -354,8 +354,8 @@ func (l *Logger) rotateLockedInline() {
 	}
 
 	if err := scanner.Err(); err != nil {
-		out.Close()
-		f.Close()
+		_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
 		if rmErr := os.Remove(tempPath); rmErr != nil {
 			slog.Warn("history: failed to remove temp file", "error", rmErr)
 		}
@@ -364,8 +364,8 @@ func (l *Logger) rotateLockedInline() {
 	}
 
 	if err := writer.Flush(); err != nil {
-		out.Close()
-		f.Close()
+		_ = out.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		_ = f.Close()   // #nosec G104 -- intentionally ignoring close error on error path
 		if rmErr := os.Remove(tempPath); rmErr != nil {
 			slog.Warn("history: failed to remove temp file", "error", rmErr)
 		}

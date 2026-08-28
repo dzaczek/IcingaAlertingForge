@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -362,8 +363,7 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 				ts.APIKeys = append(ts.APIKeys, key)
 			}
 		}
-		// ⚡ Bolt: Replaced sort.Strings with slices.Sort for better performance (generic implementation is faster and allocation-free)
-		slices.Sort(ts.APIKeys)
+		sort.Strings(ts.APIKeys)
 		sc.Targets = append(sc.Targets, ts)
 	}
 	slices.SortFunc(sc.Targets, func(a, b TargetStore) int { return strings.Compare(a.ID, b.ID) })
@@ -422,8 +422,7 @@ func (s *Store) ToConfig(serverPort, serverHost string) *config.Config {
 	for id := range targets {
 		ids = append(ids, id)
 	}
-	// ⚡ Bolt: Replaced sort.Strings with slices.Sort for better performance (generic implementation is faster and allocation-free)
-	slices.Sort(ids)
+	sort.Strings(ids)
 	if len(ids) > 0 {
 		defaultID = ids[0]
 	}

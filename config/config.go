@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -362,8 +362,7 @@ func loadTargetsAndRoutes() (map[string]TargetConfig, map[string]WebhookRoute, s
 		return nil, nil, "", fmt.Errorf("config: at least one IAF_TARGET_*_API_KEYS value is required")
 	}
 
-	// ⚡ Bolt: Replaced sort.Strings with slices.Sort for better performance (generic implementation is faster and allocation-free)
-	slices.Sort(ids)
+	sort.Strings(ids)
 	return targets, routes, ids[0], nil
 }
 

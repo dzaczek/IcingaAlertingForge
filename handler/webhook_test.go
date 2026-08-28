@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"icinga-webhook-bridge/audit"
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/cache"
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/history"
 	"icinga-webhook-bridge/icinga"
+	"icinga-webhook-bridge/metrics"
 	"icinga-webhook-bridge/ratelimit"
 )
 
@@ -593,6 +597,48 @@ func TestWebhook_Authenticate_UnknownTarget(t *testing.T) {
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for a route with a missing target, got %d", rr.Code)
+	}
+}
+
+// TestWebhook_Unauthorized_RecordsMetricsAndAudit exercises authenticate()'s
+// h.Metrics and h.Audit nil-guards on the failure path, which testWebhookHandler
+// otherwise leaves nil (and so untested) for every other auth test.
+func TestWebhook_Unauthorized_RecordsMetricsAndAudit(t *testing.T) {
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {})
+	h.Metrics = metrics.NewCollector()
+
+	auditPath := filepath.Join(t.TempDir(), "audit.jsonl")
+	auditLogger, err := audit.New(audit.Config{Enabled: true, File: auditPath, Format: "json"})
+	if err != nil {
+		t.Fatalf("failed to create audit logger: %v", err)
+	}
+	h.Audit = auditLogger
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "INVALID-KEY")
+	req.RemoteAddr = "203.0.113.5:5555"
+	rr := httptest.NewRecorder()
+
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+
+	if got := h.Metrics.Snapshot().FailedAuthTotal; got != 1 {
+		t.Errorf("expected 1 recorded auth failure, got %d", got)
+	}
+
+	auditData, err := os.ReadFile(auditPath)
+	if err != nil {
+		t.Fatalf("failed to read audit log: %v", err)
+	}
+	if !strings.Contains(string(auditData), `"event_type":"auth.failure"`) {
+		t.Errorf("expected audit log to contain an auth.failure event, got: %s", auditData)
+	}
+	if !strings.Contains(string(auditData), `"outcome":"failure"`) {
+		t.Errorf("expected audit log entry to have outcome=failure, got: %s", auditData)
 	}
 }
 

@@ -334,6 +334,11 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		wg.Wait()
 
 		// Flatten results
+		totalServices := 0
+		for _, res := range results {
+			totalServices += len(res)
+		}
+		icingaServices = make([]icinga.ServiceInfo, 0, totalServices) // ⚡ Bolt: Pre-calculating capacity avoids underlying array reallocations during append
 		for _, res := range results {
 			icingaServices = append(icingaServices, res...)
 		}

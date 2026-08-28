@@ -148,7 +148,11 @@ func (h *AdminHandler) HandleListServices(w http.ResponseWriter, r *http.Request
 	wg.Wait()
 
 	// Flatten results
-	services := make([]icinga.ServiceInfo, 0)
+	totalServices := 0
+	for _, res := range results {
+		totalServices += len(res)
+	}
+	services := make([]icinga.ServiceInfo, 0, totalServices) // ⚡ Bolt: Pre-calculating capacity avoids underlying array reallocations during append
 	for _, res := range results {
 		services = append(services, res...)
 	}

@@ -55,14 +55,45 @@ func exitStatusLabel(exitStatus int) string {
 	}
 }
 
+// pendingCreateWaitTimeout bounds how long a duplicate request will wait for
+// another in-flight CreateService call (for the same host/service) to finish
+// before giving up and attempting to create it itself.
+const pendingCreateWaitTimeout = 10 * time.Second
+
+// needsCreate reports whether the caller should (attempt to) create the
+// service itself. If another request is already creating it (StatePending),
+// this blocks until that finishes instead of letting the caller proceed
+// straight to SendCheckResult, which could otherwise reach Icinga2 before
+// the service object exists there and get rejected with 404 "No objects
+// found". If the in-flight creation never resolves within
+// pendingCreateWaitTimeout (e.g. the other goroutine crashed), it is treated
+// as stale and the caller retries creation itself.
+func (h *WebhookHandler) needsCreate(host, service string) bool {
+	state := h.Cache.GetState(host, service)
+	if state != cache.StatePending {
+		return state == cache.StateNotFound
+	}
+
+	deadline := time.Now().Add(pendingCreateWaitTimeout)
+	for state == cache.StatePending && time.Now().Before(deadline) {
+		time.Sleep(25 * time.Millisecond)
+		state = h.Cache.GetState(host, service)
+	}
+	return state == cache.StateNotFound || state == cache.StatePending
+}
+
 // ensureServiceExists creates the service in Icinga2 when it is missing from
 // the local cache. Cache state is updated only after a successful create or a
 // confirmed "already exists" response so transient API failures do not poison
 // the cache for the full TTL window.
+//
+// A cache state of StatePending means another request is already creating
+// the service; we wait for it instead of proceeding straight to
+// SendCheckResult, otherwise the check result can reach Icinga2 before the
+// service object exists there and get rejected with 404 "No objects found".
 func (h *WebhookHandler) ensureServiceExists(requestID string, target config.TargetConfig, alert models.GrafanaAlert) {
 	serviceName := alert.AlertName()
-	state := h.Cache.GetState(target.HostName, serviceName)
-	if state != cache.StateNotFound {
+	if !h.needsCreate(target.HostName, serviceName) {
 		return
 	}
 
@@ -78,8 +109,9 @@ func (h *WebhookHandler) ensureServiceExists(requestID string, target config.Tar
 		defer h.Limiter.ReleaseMutate()
 	}
 
-	// Another request may have created the service while we were waiting.
-	if h.Cache.GetState(target.HostName, serviceName) != cache.StateNotFound {
+	// Another request may have created (or started creating) the service
+	// while we were waiting for the mutate slot.
+	if !h.needsCreate(target.HostName, serviceName) {
 		return
 	}
 

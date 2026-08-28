@@ -227,6 +227,68 @@ Loop:
 	}
 }
 
+// flakyRegisterProber simulates an Icinga2 that rejects service creation for
+// the first createFailUntil attempts (e.g. not fully warmed up yet, or a
+// transient error) and then succeeds; SendCheckResult 404s until the service
+// is actually registered, mirroring real Icinga2 behavior.
+type flakyRegisterProber struct {
+	createFailUntil int32
+	createCalls     atomic.Int32
+	sendCalls       atomic.Int32
+	registered      atomic.Bool
+}
+
+func (p *flakyRegisterProber) GetHostInfo(host string) (HostResult, error) {
+	return HostResult{Exists: true}, nil
+}
+
+func (p *flakyRegisterProber) CreateService(host, name string, labels, annotations map[string]string) error {
+	n := p.createCalls.Add(1)
+	if n <= p.createFailUntil {
+		return errors.New("mock: icinga2 not ready yet")
+	}
+	p.registered.Store(true)
+	return nil
+}
+
+func (p *flakyRegisterProber) SendCheckResult(host, service string, exitStatus int, message string) error {
+	p.sendCalls.Add(1)
+	if !p.registered.Load() {
+		return errors.New(`icinga api: unexpected status 404: {"error":404,"status":"No objects found."}`)
+	}
+	return nil
+}
+
+// TestHealthChecker_SelfHealsMissingRegistration guards against a regression
+// where the self-monitoring service was only ever registered once at
+// startup: if that attempt failed (or the service was later removed from
+// Icinga2), every subsequent SendCheckResult would 404 forever with no
+// retry. The checker must keep retrying registration on later ticks.
+func TestHealthChecker_SelfHealsMissingRegistration(t *testing.T) {
+	prober := &flakyRegisterProber{createFailUntil: 2}
+	c := New(Config{
+		Enabled:     true,
+		IntervalSec: 1,
+		TargetHost:  "test-host",
+		ServiceName: "bridge-health",
+		Register:    true,
+	}, prober)
+
+	for i := 0; i < 3; i++ {
+		c.runCheck()
+	}
+
+	if !prober.registered.Load() {
+		t.Fatal("expected the self-monitoring service to eventually be registered after retries")
+	}
+	if got := prober.createCalls.Load(); got != 3 {
+		t.Fatalf("expected 3 CreateService attempts (2 failed + 1 success), got %d", got)
+	}
+	if got := prober.sendCalls.Load(); got != 3 {
+		t.Fatalf("expected SendCheckResult to be attempted on every tick, got %d", got)
+	}
+}
+
 func TestHealthChecker_ApiErrors(t *testing.T) {
 	prober := &mockProber{
 		sendCheckErr:   errors.New("mock send error"),

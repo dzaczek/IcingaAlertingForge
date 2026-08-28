@@ -111,7 +111,7 @@ func (c *Collector) RecordAuthFailure(remoteAddr, keyUsed string) {
 	if keyUsed != "" {
 		// ⚡ Bolt: Fast-path hex encoding instead of fmt.Sprintf to reduce allocation overhead
 		h := fnv.New64a()
-		h.Write([]byte(keyUsed))
+		_, _ = h.Write([]byte(keyUsed)) // #nosec G104 -- hash.Hash.Write never returns an error
 		keyHash = hex.EncodeToString(h.Sum(nil)[:6])
 	}
 

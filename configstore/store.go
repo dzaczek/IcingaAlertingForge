@@ -229,17 +229,17 @@ func (s *Store) Save() error {
 	}
 	tmp := tmpFile.Name()
 	if err := tmpFile.Chmod(0600); err != nil {
-		tmpFile.Close()
-		os.Remove(tmp)
+		_ = tmpFile.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		_ = os.Remove(tmp)  // #nosec G104 -- intentionally ignoring remove error on error path
 		return fmt.Errorf("configstore: chmod tmp: %w", err)
 	}
 	if _, err := tmpFile.Write(data); err != nil {
-		tmpFile.Close()
-		os.Remove(tmp)
+		_ = tmpFile.Close() // #nosec G104 -- intentionally ignoring close error on error path
+		_ = os.Remove(tmp)  // #nosec G104 -- intentionally ignoring remove error on error path
 		return fmt.Errorf("configstore: write tmp: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp) // #nosec G104 -- intentionally ignoring remove error on error path
 		return fmt.Errorf("configstore: close tmp: %w", err)
 	}
 	if err := os.Rename(tmp, s.filePath); err != nil {

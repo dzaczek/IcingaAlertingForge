@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -51,8 +52,9 @@ type Checker struct {
 	api       IcingaProber
 	startedAt time.Time
 
-	mu     sync.RWMutex
-	status Status
+	mu         sync.RWMutex
+	status     Status
+	registered bool // whether the self-monitoring service is confirmed to exist in Icinga2
 }
 
 // New creates a new health checker.
@@ -159,6 +161,14 @@ func (c *Checker) runCheck() {
 
 	// Report to Icinga2 if self-registration is enabled
 	if c.cfg.Register && c.cfg.TargetHost != "" && c.cfg.ServiceName != "" {
+		// The self-monitoring service may be missing (registration failed at
+		// startup, or it was deleted/lost from Icinga2 afterwards) — retry
+		// creating it before submitting a check result, instead of 404-ing
+		// forever.
+		if !c.isRegistered() {
+			c.registerService()
+		}
+
 		var exitStatus int
 		var message string
 		if healthy {
@@ -173,8 +183,25 @@ func (c *Checker) runCheck() {
 
 		if sendErr := c.api.SendCheckResult(c.cfg.TargetHost, c.cfg.ServiceName, exitStatus, message); sendErr != nil {
 			slog.Debug("Health check: could not report status to Icinga2", "error", sendErr)
+			if strings.Contains(sendErr.Error(), "404") {
+				// The service is gone from Icinga2's point of view; try to
+				// recreate it on the next tick.
+				c.setRegistered(false)
+			}
 		}
 	}
+}
+
+func (c *Checker) isRegistered() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.registered
+}
+
+func (c *Checker) setRegistered(v bool) {
+	c.mu.Lock()
+	c.registered = v
+	c.mu.Unlock()
 }
 
 func (c *Checker) registerService() {
@@ -186,11 +213,12 @@ func (c *Checker) registerService() {
 		"summary": "IcingaAlertForge bridge health monitor",
 	}
 	err := c.api.CreateService(c.cfg.TargetHost, c.cfg.ServiceName, labels, annotations)
-	if err != nil {
-		slog.Warn("Health checker: could not register self-monitoring service (may already exist)",
+	if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "status 409") {
+		slog.Warn("Health checker: could not register self-monitoring service, will retry",
 			"host", c.cfg.TargetHost, "service", c.cfg.ServiceName, "error", err)
-	} else {
-		slog.Info("Health checker: self-monitoring service registered",
-			"host", c.cfg.TargetHost, "service", c.cfg.ServiceName)
+		return
 	}
+	c.setRegistered(true)
+	slog.Info("Health checker: self-monitoring service registered",
+		"host", c.cfg.TargetHost, "service", c.cfg.ServiceName)
 }

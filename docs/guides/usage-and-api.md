@@ -501,15 +501,27 @@ Restores configuration from a previously exported backup. Validates schema and t
 
 #### `GET /status/beauty`
 
-Public panel.
+**Fast Track:** The beauty dashboard interface (public view).
+
+**Deep Dive:** Serves the HTML for the public LCARS dashboard. No authentication is required, and administrative controls are hidden.
 
 #### `GET /status/beauty?admin=1`
 
-Admin panel.
+**Fast Track:** The beauty dashboard interface (admin view).
+
+**Deep Dive:** Serves the HTML for the admin LCARS dashboard. Provides a UI for configuration and administrative actions. Requires authentication if configured.
+
+#### `GET /status/beauty/stats`
+
+**Fast Track:** Returns a JSON snapshot of the current dashboard statistics.
+
+**Deep Dive:** Provides an aggregate overview of history entries, including total entries, errors, average duration, and counts of alerts in firing (critical/warning), resolved, and test mode states, along with application uptime. Used by the dashboard UI for live polling updates.
 
 #### `GET /status/{service_name}`
 
-Queries one service from the cache and from Icinga.
+**Fast Track:** Queries one service state from cache and Icinga2.
+
+**Deep Dive:** Checks the application's internal cache for the service state, freeze status, and attempts to fetch the latest current status from Icinga2.
 
 Single host example:
 

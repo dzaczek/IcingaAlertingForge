@@ -35,6 +35,20 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 {"results":[{"status":"processed","host":"host-a","service":"CPU","exit_status":2,"label":"CRITICAL","icinga_ok":true}]}
 ```
 
+## Authentication Endpoints
+
+### `GET /login`
+
+**Fast Track:** Form-based login page.
+
+**Deep Dive:** Serves the HTML for the login page, replacing the native browser Basic Auth prompt so password managers can autofill. Takes an optional `next` query parameter for safe redirection after login.
+
+### `POST /login`
+
+**Fast Track:** Processes form-based login submissions.
+
+**Deep Dive:** Authenticates a user using form credentials (`username`, `password`) against admin or RBAC settings. Issues an opaque session cookie on success and redirects the user (to `/status/beauty?admin=1` or the safe `next` path).
+
 ## Health & Status
 
 ### `GET /health`
@@ -64,7 +78,13 @@ All admin endpoints require HTTP Basic Auth. Webhook endpoints require an `X-API
 
 **Fast Track:** Logs out of the admin session.
 
-**Deep Dive:** Clears the Basic Auth credentials by returning a `401 Unauthorized` with a new `WWW-Authenticate` header, and redirects the user back to the dashboard interface.
+**Deep Dive:** Deletes the session and clears the session cookie, then redirects to `/login`.
+
+### `GET /status/beauty/stats`
+
+**Fast Track:** Dashboard statistics snapshot.
+
+**Deep Dive:** Returns a `DashboardStatsSnapshot` JSON payload for live-polling stat tile refreshes: `total_entries`, `errors`, `avg_duration_ms`, `firing`, `resolved`, `test_mode`, `critical_firing`, `warning_firing`, and `uptime`.
 
 ### `GET /status/beauty/events`
 
@@ -254,6 +274,12 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 **Fast Track:** Generates a new API key for a target.
 
 **Deep Dive:** Creates a new key and returns it in cleartext (shown only once).
+
+### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+**Fast Track:** Removes a specific API key from a target.
+
+**Deep Dive:** Deletes the API key at the given index (`idx`) for the specified target (`id`).
 
 ### `GET /admin/settings/targets/{id}/reveal-keys`
 

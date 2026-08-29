@@ -153,13 +153,10 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 	defer l.mu.RUnlock()
 
 	// Query is an exported method; don't trust a caller to have already
-	// clamped Limit before allocating on its behalf. Clamp into a local so
-	// every use below (allocation, ring-buffer modulo, final count) is
-	// unambiguously bounded by a fixed constant.
-	limit := filter.Limit
-	if limit > maxHistoryLimit {
-		limit = maxHistoryLimit
-	}
+	// clamped Limit before allocating on its behalf. min() bounds it by a
+	// fixed constant in one step; every use below (allocation, ring-buffer
+	// modulo, final count) reads this local instead of filter.Limit.
+	limit := min(filter.Limit, maxHistoryLimit)
 
 	var matched []models.HistoryEntry
 	var matchedPos int

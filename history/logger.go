@@ -152,6 +152,12 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	// Query is an exported method; don't trust a caller to have already
+	// clamped Limit before allocating on its behalf.
+	if filter.Limit > maxHistoryLimit {
+		filter.Limit = maxHistoryLimit
+	}
+
 	var matched []models.HistoryEntry
 	var matchedPos int
 	var totalMatched int

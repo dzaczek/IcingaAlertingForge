@@ -18,6 +18,9 @@ RUN if [ "$VERSION" = "dev" ] && command -v git >/dev/null 2>&1 && git describe 
 # ── Runtime stage ────────────────────────────────────────────────
 FROM alpine:3.24
 
+# Upgrade pre-installed base-image packages (notably libssl3) to pick up
+# security patches published after this alpine:3.24 layer was built.
+RUN apk update && apk upgrade --no-cache
 RUN apk add --no-cache ca-certificates curl tzdata
 
 RUN adduser -D -u 1000 appuser

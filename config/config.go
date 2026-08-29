@@ -346,8 +346,8 @@ func loadTargetsAndRoutes() (map[string]TargetConfig, map[string]WebhookRoute, s
 		}
 
 		for _, key := range spec.APIKeys {
-			if _, exists := routes[key]; exists {
-				return nil, nil, "", fmt.Errorf("config: duplicate webhook API key configured for multiple targets: %s", key)
+			if existing, exists := routes[key]; exists {
+				return nil, nil, "", fmt.Errorf("config: duplicate webhook API key configured for both target %q and target %q", existing.TargetID, id)
 			}
 			routes[key] = WebhookRoute{
 				Source:   source,

@@ -1,6 +1,7 @@
 package rbac
 
 import (
+	"errors"
 	"strings"
 	"testing"
 )
@@ -37,6 +38,119 @@ func TestAuthenticate(t *testing.T) {
 				t.Errorf("expected role %s, got %s", tt.wantRole, user.Role)
 			}
 		})
+	}
+}
+
+// TestAuthenticate_UpgradesLegacyHashOnSuccess guards a security fix: SHA-256
+// (used for old-format "salt:hash" passwords) is not a computationally
+// expensive hash and shouldn't be used for passwords at rest. A successful
+// legacy login must transparently re-hash with bcrypt and persist it, so the
+// weak hash self-heals instead of remaining stored indefinitely.
+func TestAuthenticate_UpgradesLegacyHashOnSuccess(t *testing.T) {
+	const password = "legacy-pass-123"
+	saltHex := strings.Repeat("ab", 16) // 32 hex chars = 16 bytes
+	stored := saltHex + ":" + hashPasswordWithSalt(password, saltHex)
+
+	m := New([]User{
+		{Username: "legacy-user", Password: stored, Role: RoleViewer},
+	})
+
+	var saved bool
+	m.SetOnSave(func() error {
+		saved = true
+		return nil
+	})
+
+	user, ok := m.Authenticate("legacy-user", password)
+	if !ok {
+		t.Fatal("expected successful legacy authentication")
+	}
+	if user.Role != RoleViewer {
+		t.Errorf("expected role viewer, got %s", user.Role)
+	}
+	if !saved {
+		t.Error("expected onSave to be called after upgrading the legacy hash")
+	}
+
+	var found bool
+	for _, u := range m.PersistableUsers() {
+		if u.Username != "legacy-user" {
+			continue
+		}
+		found = true
+		if len(u.Password) < 4 || u.Password[:4] != "$2a$" {
+			t.Errorf("expected stored password to be upgraded to bcrypt, got %q", u.Password)
+		}
+	}
+	if !found {
+		t.Fatal("legacy-user not found in PersistableUsers")
+	}
+
+	// The hash is now bcrypt — a second login should still succeed via that path.
+	if _, ok := m.Authenticate("legacy-user", password); !ok {
+		t.Error("expected second authentication (now bcrypt) to still succeed")
+	}
+}
+
+// TestAuthenticate_LegacyUpgradeHashingErrorDoesNotBreakLogin covers the
+// case where the legacy password itself is too long for bcrypt (>72 bytes,
+// same CWE-248 class as TestAddUserOversizedPasswordReturnsError). SHA-256
+// has no such length limit, so this is reachable for an old legacy password.
+// The login itself must still succeed; only the upgrade is skipped.
+func TestAuthenticate_LegacyUpgradeHashingErrorDoesNotBreakLogin(t *testing.T) {
+	password := strings.Repeat("a", 73)
+	saltHex := strings.Repeat("cd", 16)
+	stored := saltHex + ":" + hashPasswordWithSalt(password, saltHex)
+
+	m := New([]User{
+		{Username: "legacy-user", Password: stored, Role: RoleViewer},
+	})
+
+	if _, ok := m.Authenticate("legacy-user", password); !ok {
+		t.Fatal("expected login to succeed even though the upgrade-to-bcrypt step fails")
+	}
+
+	for _, u := range m.PersistableUsers() {
+		if u.Username == "legacy-user" && u.Password != stored {
+			t.Errorf("expected legacy hash to remain unchanged when the upgrade fails, got %q", u.Password)
+		}
+	}
+}
+
+// TestAuthenticate_LegacyUpgradePersistErrorDoesNotBreakLogin covers onSave
+// failing: the in-memory hash still upgrades to bcrypt (best-effort
+// persistence, matching AddUser/RemoveUser's existing SetOnSave contract),
+// and login must not fail just because the write-through failed.
+func TestAuthenticate_LegacyUpgradePersistErrorDoesNotBreakLogin(t *testing.T) {
+	const password = "legacy-pass-456"
+	saltHex := strings.Repeat("ef", 16)
+	stored := saltHex + ":" + hashPasswordWithSalt(password, saltHex)
+
+	m := New([]User{
+		{Username: "legacy-user", Password: stored, Role: RoleViewer},
+	})
+	m.SetOnSave(func() error { return errors.New("disk full") })
+
+	if _, ok := m.Authenticate("legacy-user", password); !ok {
+		t.Fatal("expected login to succeed even though persisting the upgraded hash fails")
+	}
+
+	for _, u := range m.PersistableUsers() {
+		if u.Username == "legacy-user" && (len(u.Password) < 4 || u.Password[:4] != "$2a$") {
+			t.Errorf("expected in-memory hash to still upgrade to bcrypt despite the save error, got %q", u.Password)
+		}
+	}
+}
+
+// TestUpgradeLegacyPassword_UnknownUserIsANoop covers the TOCTOU case where
+// a user is removed between Authenticate's lookup and the upgrade call —
+// must not panic or resurrect a deleted user.
+func TestUpgradeLegacyPassword_UnknownUserIsANoop(t *testing.T) {
+	m := New(nil)
+	m.upgradeLegacyPassword("ghost", "whatever")
+
+	if _, ok := m.GetUser("ghost"); ok {
+		t.Error("upgradeLegacyPassword must not create a user that doesn't exist")
 	}
 }
 

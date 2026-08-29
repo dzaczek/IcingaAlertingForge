@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -121,6 +122,37 @@ func TestLoad_NoWebhookKeys(t *testing.T) {
 	_, err := Load()
 	if err == nil {
 		t.Error("expected error for no webhook keys")
+	}
+}
+
+// TestLoad_DuplicateAPIKey_DoesNotLeakKeyInError guards against CVE-flagged
+// clear-text logging of secrets: main.go logs config.Load()'s error verbatim
+// on startup failure, so the duplicate-key error must never contain the
+// actual key value, only the (non-secret) target IDs involved.
+func TestLoad_DuplicateAPIKey_DoesNotLeakKeyInError(t *testing.T) {
+	const sharedKey = "super-secret-shared-key"
+	envVars := map[string]string{
+		"ICINGA2_HOST":                "https://icinga2.test:5665",
+		"ICINGA2_USER":                "apiuser",
+		"ICINGA2_PASS":                "apipass",
+		"IAF_TARGET_TEAM_A_HOST_NAME": "a-dummy-dev",
+		"IAF_TARGET_TEAM_A_API_KEYS":  sharedKey,
+		"IAF_TARGET_TEAM_B_HOST_NAME": "b-dummy-device",
+		"IAF_TARGET_TEAM_B_API_KEYS":  sharedKey,
+	}
+	for k, v := range envVars {
+		t.Setenv(k, v)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for duplicate API key across targets")
+	}
+	if strings.Contains(err.Error(), sharedKey) {
+		t.Fatalf("duplicate-key error must not contain the raw key value (it gets logged on startup failure), got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "team-a") || !strings.Contains(err.Error(), "team-b") {
+		t.Fatalf("expected error to name both colliding target IDs, got: %v", err)
 	}
 }
 

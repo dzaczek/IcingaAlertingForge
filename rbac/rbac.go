@@ -120,7 +120,8 @@ func (m *Manager) SetOnSave(fn func() error) {
 func (m *Manager) PersistableUsers() []User {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var out []User
+	// ⚡ Bolt: Pre-calculate total capacity to avoid repeated allocations during slice append
+	out := make([]User, 0, len(m.users))
 	for _, u := range m.users {
 		if u.Username != m.primary {
 			out = append(out, u)

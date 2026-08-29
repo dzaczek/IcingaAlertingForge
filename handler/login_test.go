@@ -128,6 +128,8 @@ func TestSafeNext_BlocksOpenRedirect(t *testing.T) {
 		"":                 defaultLoginRedirect,
 		"//evil.com":       defaultLoginRedirect,
 		"https://evil.com": defaultLoginRedirect,
+		"/\\evil.com":      defaultLoginRedirect, // backslash variant some browsers treat as "//"
+		"/\\/evil.com":     defaultLoginRedirect,
 		"/history":         "/history",
 		"/status/beauty":   "/status/beauty",
 	}

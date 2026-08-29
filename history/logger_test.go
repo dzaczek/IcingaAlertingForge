@@ -140,6 +140,27 @@ func TestLogger_QueryLimit(t *testing.T) {
 	}
 }
 
+// TestLogger_QueryLimit_ClampsAbsurdValue guards against Query trusting a
+// caller-supplied Limit to allocate a slice: it's an exported method, so a
+// caller-side bounds mistake shouldn't be able to force an unbounded
+// allocation (or, before the fix, an index-out-of-range panic once matchedPos
+// exceeded the allocated — but un-clamped-in-the-modulo — capacity).
+func TestLogger_QueryLimit_ClampsAbsurdValue(t *testing.T) {
+	l := newTestLogger(t)
+
+	for i := 0; i < 10; i++ {
+		l.Append(sampleEntry("svc", "work", "firing", "src"))
+	}
+
+	entries, err := l.Query(QueryFilter{Limit: 1 << 40})
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	if len(entries) != 10 {
+		t.Fatalf("expected 10 entries (all appended, well under the clamp), got %d", len(entries))
+	}
+}
+
 func TestLogger_QueryNewestFirst(t *testing.T) {
 	l := newTestLogger(t)
 

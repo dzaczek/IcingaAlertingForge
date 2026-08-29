@@ -40,6 +40,57 @@ func TestAuthenticate(t *testing.T) {
 	}
 }
 
+// TestAuthenticate_UpgradesLegacyHashOnSuccess guards a security fix: SHA-256
+// (used for old-format "salt:hash" passwords) is not a computationally
+// expensive hash and shouldn't be used for passwords at rest. A successful
+// legacy login must transparently re-hash with bcrypt and persist it, so the
+// weak hash self-heals instead of remaining stored indefinitely.
+func TestAuthenticate_UpgradesLegacyHashOnSuccess(t *testing.T) {
+	const password = "legacy-pass-123"
+	saltHex := strings.Repeat("ab", 16) // 32 hex chars = 16 bytes
+	stored := saltHex + ":" + hashPasswordWithSalt(password, saltHex)
+
+	m := New([]User{
+		{Username: "legacy-user", Password: stored, Role: RoleViewer},
+	})
+
+	var saved bool
+	m.SetOnSave(func() error {
+		saved = true
+		return nil
+	})
+
+	user, ok := m.Authenticate("legacy-user", password)
+	if !ok {
+		t.Fatal("expected successful legacy authentication")
+	}
+	if user.Role != RoleViewer {
+		t.Errorf("expected role viewer, got %s", user.Role)
+	}
+	if !saved {
+		t.Error("expected onSave to be called after upgrading the legacy hash")
+	}
+
+	var found bool
+	for _, u := range m.PersistableUsers() {
+		if u.Username != "legacy-user" {
+			continue
+		}
+		found = true
+		if len(u.Password) < 4 || u.Password[:4] != "$2a$" {
+			t.Errorf("expected stored password to be upgraded to bcrypt, got %q", u.Password)
+		}
+	}
+	if !found {
+		t.Fatal("legacy-user not found in PersistableUsers")
+	}
+
+	// The hash is now bcrypt — a second login should still succeed via that path.
+	if _, ok := m.Authenticate("legacy-user", password); !ok {
+		t.Error("expected second authentication (now bcrypt) to still succeed")
+	}
+}
+
 func TestAuthorize(t *testing.T) {
 	m := New(nil)
 

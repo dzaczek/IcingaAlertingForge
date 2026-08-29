@@ -129,8 +129,16 @@ func (h *LoginHandler) render(w http.ResponseWriter, status int, next, errMsg st
 
 // safeNext returns next only if it is a safe relative path, preventing open
 // redirects. Anything else falls back to the dashboard.
+//
+// A leading "/" alone isn't enough: some browsers normalize a leading "/\"
+// or "\/" the same as "//", turning it into a scheme-relative URL that
+// redirects off-site (e.g. "/\evil.com"). Reject any second character that
+// isn't a normal path character.
 func safeNext(next string) string {
-	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
+	if next == "" || !strings.HasPrefix(next, "/") {
+		return defaultLoginRedirect
+	}
+	if len(next) > 1 && (next[1] == '/' || next[1] == '\\') {
 		return defaultLoginRedirect
 	}
 	return next

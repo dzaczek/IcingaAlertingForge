@@ -133,9 +133,8 @@ func (m *Manager) PersistableUsers() []User {
 // Authenticate validates username/password and returns the user if valid.
 func (m *Manager) Authenticate(username, password string) (User, bool) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	user, ok := m.users[username]
+	m.mu.RUnlock()
 	if !ok {
 		return User{}, false
 	}
@@ -157,6 +156,11 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 		if !auth.SecureCompare(expectedHash, hashHex) {
 			return User{}, false
 		}
+		// SHA-256 is not a computationally expensive hash and shouldn't be
+		// used for passwords at rest. Transparently upgrade to bcrypt now
+		// that we've verified the password, so legacy hashes self-heal
+		// without requiring a forced password reset.
+		m.upgradeLegacyPassword(username, password)
 		return user, true
 	}
 
@@ -166,6 +170,34 @@ func (m *Manager) Authenticate(username, password string) (User, bool) {
 	}
 
 	return user, true
+}
+
+// upgradeLegacyPassword re-hashes a successfully-authenticated legacy
+// SHA-256 password with bcrypt and persists it, so the weak hash doesn't
+// remain stored at rest after the user's next login.
+func (m *Manager) upgradeLegacyPassword(username, password string) {
+	hashed, err := hashPassword(password)
+	if err != nil {
+		slog.Warn("RBAC: failed to upgrade legacy password hash", "username", username, "error", err)
+		return
+	}
+
+	m.mu.Lock()
+	user, ok := m.users[username]
+	if !ok {
+		m.mu.Unlock()
+		return
+	}
+	user.Password = hashed
+	m.users[username] = user
+	onSave := m.onSave
+	m.mu.Unlock()
+
+	if onSave != nil {
+		if err := onSave(); err != nil {
+			slog.Warn("RBAC: failed to persist upgraded password hash", "username", username, "error", err)
+		}
+	}
 }
 
 // Authorize checks if a user with the given role has the specified permission.

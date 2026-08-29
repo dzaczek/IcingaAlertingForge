@@ -153,17 +153,20 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 	defer l.mu.RUnlock()
 
 	// Query is an exported method; don't trust a caller to have already
-	// clamped Limit before allocating on its behalf.
-	if filter.Limit > maxHistoryLimit {
-		filter.Limit = maxHistoryLimit
+	// clamped Limit before allocating on its behalf. Clamp into a local so
+	// every use below (allocation, ring-buffer modulo, final count) is
+	// unambiguously bounded by a fixed constant.
+	limit := filter.Limit
+	if limit > maxHistoryLimit {
+		limit = maxHistoryLimit
 	}
 
 	var matched []models.HistoryEntry
 	var matchedPos int
 	var totalMatched int
 
-	if filter.Limit > 0 {
-		matched = make([]models.HistoryEntry, filter.Limit)
+	if limit > 0 {
+		matched = make([]models.HistoryEntry, limit)
 	}
 
 	err := l.processAll(func(e models.HistoryEntry) error {
@@ -186,9 +189,9 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 			return nil
 		}
 
-		if filter.Limit > 0 {
+		if limit > 0 {
 			matched[matchedPos] = e
-			matchedPos = (matchedPos + 1) % filter.Limit
+			matchedPos = (matchedPos + 1) % limit
 			totalMatched++
 		} else {
 			matched = append(matched, e)
@@ -201,15 +204,15 @@ func (l *Logger) Query(filter QueryFilter) ([]models.HistoryEntry, error) {
 		return nil, err
 	}
 
-	if filter.Limit > 0 {
+	if limit > 0 {
 		count := totalMatched
-		if count > filter.Limit {
-			count = filter.Limit
+		if count > limit {
+			count = limit
 		}
 		// Unroll the ring buffer and reverse it simultaneously to get newest first
 		result := make([]models.HistoryEntry, count)
 		for i := 0; i < count; i++ {
-			idx := (matchedPos - 1 - i + filter.Limit) % filter.Limit
+			idx := (matchedPos - 1 - i + limit) % limit
 			result[i] = matched[idx]
 		}
 		return result, nil

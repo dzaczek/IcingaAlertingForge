@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,8 +226,17 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 			"error", err, "request_id", requestID)
 
 		if h.RetryQueue != nil {
+			// ⚡ Bolt: Fast-path string building instead of fmt.Sprintf to reduce allocation overhead
+			var sb strings.Builder
+			sb.Grow(len(requestID) + len(serviceName) + 25)
+			sb.WriteString(requestID)
+			sb.WriteByte('-')
+			sb.WriteString(serviceName)
+			sb.WriteByte('-')
+			sb.WriteString(strconv.FormatInt(time.Now().UnixNano(), 10))
+
 			_ = h.RetryQueue.Enqueue(queue.Item{
-				ID:         fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
+				ID:         sb.String(),
 				Host:       target.HostName,
 				Service:    serviceName,
 				ExitStatus: exitStatus,

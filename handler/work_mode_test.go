@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"icinga-webhook-bridge/queue"
+
 	"icinga-webhook-bridge/cache"
 )
 
@@ -156,5 +158,45 @@ func TestWebhook_DuplicateFiring_WaitsForInFlightCreate(t *testing.T) {
 	first, _ := resList[0].(map[string]any)
 	if ok, _ := first["icinga_ok"].(bool); !ok {
 		t.Fatalf("duplicate firing request while create was pending got a failure instead of waiting: %+v", first)
+	}
+}
+
+func TestWebhook_IcingaError_QueuesRetry(t *testing.T) {
+	const host = "team-a-host"
+	const service = "Retry Test Alert"
+
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/objects/services/"):
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/actions/process-check-result"):
+			// Simulate a transient Icinga2 failure
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":500,"status":"Internal Server Error"}`))
+		default:
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"results":[]}`))
+		}
+	})
+
+	h.RetryQueue = queue.New(queue.Config{MaxSize: 100}, nil)
+
+	body := `{
+		"status": "firing",
+		"alerts": [{
+			"status": "firing",
+			"labels": {"alertname": "` + service + `", "severity": "critical"},
+			"annotations": {"summary": "retry test"}
+		}]
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if h.RetryQueue.Depth() != 1 {
+		t.Fatalf("expected exactly 1 item in retry queue, got %d", h.RetryQueue.Depth())
 	}
 }

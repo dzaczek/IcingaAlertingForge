@@ -34,7 +34,7 @@ func TestPrometheusCollector(t *testing.T) {
 	}
 	defer res.Body.Close()
 
-	body, err := io.ReadAll(res.Body)
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
 	if err != nil {
 		t.Fatal(err)
 	}

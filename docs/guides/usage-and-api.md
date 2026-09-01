@@ -280,6 +280,10 @@ Response example:
 
 #### `POST /admin/services/bulk-delete`
 
+**Fast Track:** Bulk deletes services from Icinga2.
+
+**Deep Dive:** Accepts a list of objects specifying `host` and `service` and deletes all matching services from Icinga2 and local cache.
+
 <!-- LANG: hyphenation -->
 Preferred request body in a multi-host setup:
 

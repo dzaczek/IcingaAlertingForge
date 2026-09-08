@@ -477,6 +477,10 @@ Removes a target and all its API keys.
 
 Generates a new API key for the target. Returns the key in cleartext (shown only once).
 
+#### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+Removes a specific API key from a target by its index.
+
 #### `GET /admin/settings/targets/{id}/reveal-keys`
 
 Returns the unmasked API keys for a specific target. Admin-only.

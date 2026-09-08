@@ -1,5 +1,7 @@
 # IcingaAlertForge
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/dzaczek)
+
 [![CI](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/ci.yml/badge.svg)](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/ci.yml)
 [![Security](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml/badge.svg)](https://github.com/dzaczek/IcingaAlertingForge/actions/workflows/security.yml)
 [![codecov](https://codecov.io/gh/dzaczek/IcingaAlertingForge/branch/main/graph/badge.svg)](https://codecov.io/gh/dzaczek/IcingaAlertingForge)

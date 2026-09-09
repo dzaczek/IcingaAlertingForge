@@ -78,3 +78,12 @@ func TestValidateKey_MultipleKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateSecureCompareKey(t *testing.T) {
+	// Simple test to hit the code path and ensure it does not panic in normal conditions
+	generateSecureCompareKey()
+
+	if len(secureCompareKey) != 32 {
+		t.Errorf("expected secureCompareKey to have length 32, got %d", len(secureCompareKey))
+	}
+}

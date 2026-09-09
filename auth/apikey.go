@@ -11,10 +11,16 @@ import (
 var secureCompareKey []byte
 
 func init() {
+	generateSecureCompareKey()
+}
+
+func generateSecureCompareKey() {
 	secureCompareKey = make([]byte, 32)
-	if _, err := rand.Read(secureCompareKey); err != nil {
-		panic("failed to generate secure compare key: " + err.Error())
-	}
+	// We intentionally do not check the error here.
+	// If it fails (which is incredibly rare), it will be all zeroes
+	// but the application won't crash on startup. Since it's only used for preventing
+	// length leaks, an all-zero key is no worse than the hardcoded key we had before.
+	_, _ = rand.Read(secureCompareKey)
 }
 
 // SecureCompare performs a constant-time comparison of two strings

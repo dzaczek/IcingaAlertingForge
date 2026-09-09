@@ -50,3 +50,8 @@
 **Vulnerability:** The application was ignoring returned errors from functions like `os.Remove` and `file.Close()` during error recovery paths (e.g., when a write to a temp file failed and the temp file needed to be removed and closed). This triggers security linters (like gosec G104) due to potentially missing critical I/O errors.
 **Learning:** Security linters strictly enforce checking return values for all I/O operations, including those executed during cleanup or error handling phases.
 **Prevention:** For operations where the error is genuinely non-actionable or expected to fail sometimes during cleanup (like removing a temp file on an error path), explicitly assign the return value to `_` and append a `// #nosec G104` comment to document the deliberate suppression.
+
+## 2026-09-09 - [Hardcoded Cryptographic Secret for Timing Attack Prevention]
+**Vulnerability:** The `SecureCompare` function used a hardcoded secret key (`icinga-alert-forge-compare`) to compute HMACs before comparison. While its primary purpose is preventing timing attacks (and thus not directly exposing passwords), hardcoding cryptographic keys compromises the fundamental unpredictability required by secure hashing operations.
+**Learning:** Even when HMAC is used purely for structural security features like preventing length/timing leakage rather than direct data encryption, the key material must still be cryptographically unpredictable to prevent attackers from pre-computing hash spaces or exploiting the known algorithm state.
+**Prevention:** When a key is only needed ephemerally for in-memory operations (like runtime string comparisons), securely generate a random byte slice via `crypto/rand` during package `init()` instead of hardcoding a static string.

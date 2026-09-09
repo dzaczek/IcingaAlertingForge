@@ -2,20 +2,29 @@ package auth
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 
 	"icinga-webhook-bridge/config"
 )
 
+var secureCompareKey []byte
+
+func init() {
+	secureCompareKey = make([]byte, 32)
+	if _, err := rand.Read(secureCompareKey); err != nil {
+		panic("failed to generate secure compare key: " + err.Error())
+	}
+}
+
 // SecureCompare performs a constant-time comparison of two strings
 // by hashing them first with HMAC, preventing length leakage.
 func SecureCompare(a, b string) bool {
-	key := []byte("icinga-alert-forge-compare")
-	macA := hmac.New(sha256.New, key)
+	macA := hmac.New(sha256.New, secureCompareKey)
 	macA.Write([]byte(a))
 	hashA := macA.Sum(nil)
 
-	macB := hmac.New(sha256.New, key)
+	macB := hmac.New(sha256.New, secureCompareKey)
 	macB.Write([]byte(b))
 	hashB := macB.Sum(nil)
 

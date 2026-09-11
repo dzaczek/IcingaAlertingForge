@@ -10,3 +10,6 @@
 ## 2026-05-30 - Slice Flattening Pre-allocation
 **Learning:** Growing slices incrementally through `append()` without pre-allocating capacity triggers costly underlying array reallocations and memory copies. When flattening multidimensional slices or appending multiple arrays in a loop, pre-calculating the exact required capacity and allocating a slice with `make([]T, 0, capacity)` eliminates these allocations. Benchmarks in Go show this can reduce time per operation by ~50% in tight loops (e.g., from ~18000ns to ~9000ns) and drastically lowers garbage collection overhead.
 **Action:** When aggregating or flattening multiple arrays/slices, always calculate the total required length upfront and pre-allocate the destination slice's capacity before appending.
+## 2026-09-11 - Optimize SSE HTTP Writer Overhead
+**Learning:** Using `fmt.Fprintf` or `fmt.Fprint` with string conversion in hot I/O paths like Server-Sent Events (SSE) introduces significant reflection and memory allocation overhead. Writing directly to an `io.Writer` interface (e.g. `http.ResponseWriter`) via sequential `.Write()` calls is ~6x faster and drastically reduces garbage collection pressure.
+**Action:** In high-throughput response writers, avoid `fmt` functions. Use direct `.Write()` calls to minimize allocations.

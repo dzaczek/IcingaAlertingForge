@@ -140,16 +140,16 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
 				// ⚡ Bolt: Write string directly instead of using fmt.Fprint to reduce overhead
-				w.Write(buf.Bytes())
+				_, _ = w.Write(buf.Bytes())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
 				// ⚡ Bolt: Sequential Write calls are ~6x faster than fmt.Fprintf with reflection
-				w.Write([]byte("data: "))
-				w.Write(data)
-				w.Write([]byte("\n\n"))
+				_, _ = w.Write([]byte("data: "))
+				_, _ = w.Write(data)
+				_, _ = w.Write([]byte("\n\n"))
 			}
 			flusher.Flush()
 		}

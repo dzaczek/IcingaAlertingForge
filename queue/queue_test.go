@@ -118,6 +118,23 @@ func TestPersistenceErrors(t *testing.T) {
 	}
 }
 
+func TestSaveToDiskRenameError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.json")
+
+	// Make path a directory so os.Rename fails
+	os.MkdirAll(path, 0755)
+
+	sender := &mockSender{}
+	q := New(testConfig(path), sender)
+	_ = q.Enqueue(testItem("1", "host-a", "svc1"))
+
+	err := q.saveToDisk()
+	if err == nil {
+		t.Fatal("expected error on rename, got nil")
+	}
+}
+
 func TestPersistence(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "queue.json")

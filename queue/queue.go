@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -328,7 +329,36 @@ func (q *Queue) saveToDisk() error {
 	if err != nil {
 		return fmt.Errorf("marshal queue: %w", err)
 	}
-	return os.WriteFile(q.config.FilePath, data, 0o600)
+
+	tmpFile, err := os.CreateTemp(filepath.Dir(q.config.FilePath), filepath.Base(q.config.FilePath)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("queue: create tmp: %w", err)
+	}
+	tmp := tmpFile.Name()
+
+	success := false
+	defer func() {
+		if !success {
+			_ = tmpFile.Close() // #nosec G104
+			_ = os.Remove(tmp)  // #nosec G104
+		}
+	}()
+
+	if err := tmpFile.Chmod(0600); err != nil {
+		return fmt.Errorf("queue: chmod tmp: %w", err)
+	}
+	if _, err := tmpFile.Write(data); err != nil {
+		return fmt.Errorf("queue: write tmp: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("queue: close tmp: %w", err)
+	}
+	if err := os.Rename(tmp, q.config.FilePath); err != nil {
+		return fmt.Errorf("queue: rename: %w", err)
+	}
+
+	success = true
+	return nil
 }
 
 func (q *Queue) loadFromDisk() {

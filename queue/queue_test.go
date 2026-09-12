@@ -105,6 +105,36 @@ func TestProcessorRetries(t *testing.T) {
 	}
 }
 
+func TestPersistenceErrors(t *testing.T) {
+	// Test error when dir does not exist (CreateTemp fails)
+	badDir := filepath.Join(t.TempDir(), "nonexistent", "queue.json")
+	sender := &mockSender{}
+	q := New(testConfig(badDir), sender)
+	_ = q.Enqueue(testItem("1", "host-a", "svc1"))
+
+	err := q.saveToDisk()
+	if err == nil {
+		t.Fatal("expected error saving to nonexistent dir, got nil")
+	}
+}
+
+func TestSaveToDiskRenameError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "queue.json")
+
+	// Make path a directory so os.Rename fails
+	os.MkdirAll(path, 0755)
+
+	sender := &mockSender{}
+	q := New(testConfig(path), sender)
+	_ = q.Enqueue(testItem("1", "host-a", "svc1"))
+
+	err := q.saveToDisk()
+	if err == nil {
+		t.Fatal("expected error on rename, got nil")
+	}
+}
+
 func TestPersistence(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "queue.json")

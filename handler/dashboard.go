@@ -295,12 +295,13 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var recentAlerts []dashboardAlert
+	// ⚡ Bolt: pre-allocating slice capacity avoids underlying array reallocations and improves tight loop performance
+	recentAlerts := make([]dashboardAlert, 0, len(stats.RecentEntries))
 	for _, e := range stats.RecentEntries {
 		recentAlerts = append(recentAlerts, toDashboardAlert(e))
 	}
 
-	var recentErrors []dashboardAlert
+	recentErrors := make([]dashboardAlert, 0, len(stats.RecentErrors))
 	for _, e := range stats.RecentErrors {
 		recentErrors = append(recentErrors, toDashboardAlert(e))
 	}

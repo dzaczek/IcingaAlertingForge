@@ -168,15 +168,19 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 {"services": [{"host": "host-a", "service": "svc1"}, {"host": "host-b", "service": "svc2"}]}
 ```
 
-### `POST /admin/services/{name}/freeze`
+### `POST` / `DELETE` `/admin/services/{name}/freeze`
 
-**Fast Track:** Freezes or unfreezes a specific service to prevent it from auto-resolving.
+**Fast Track:** Freezes (POST) or unfreezes (DELETE) a specific service to prevent it from auto-resolving.
 
 **Deep Dive:** A frozen service will ignore subsequent OK check results (e.g., from an auto-resolving alert). POST to freeze, DELETE to unfreeze.
 
-**Body:**
+**Body (POST):**
 ```json
 {"host": "host-a", "duration_seconds": 3600}
+```
+**Body (DELETE):**
+```json
+{"host": "host-a"}
 ```
 
 ### `GET /admin/services/frozen`

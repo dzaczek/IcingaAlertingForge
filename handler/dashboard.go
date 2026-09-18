@@ -177,7 +177,8 @@ func buildSourceIPLists(stats history.HistoryStats) (topIPs, lastIPs map[string]
 	lastIPs = make(map[string][]ipEntry)
 
 	for source, ipCounts := range stats.BySourceIP {
-		var entries []ipEntry
+		// ⚡ Bolt: Pre-allocate capacity using len(ipCounts) to prevent underlying array reallocations during loop append
+		entries := make([]ipEntry, 0, len(ipCounts))
 		for ip, count := range ipCounts {
 			lastSeen := ""
 			if ts, ok := stats.BySourceIPLastSeen[source][ip]; ok {
@@ -295,12 +296,14 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var recentAlerts []dashboardAlert
+	// ⚡ Bolt: Pre-allocate capacity to prevent underlying array reallocations during loop append
+	recentAlerts := make([]dashboardAlert, 0, len(stats.RecentEntries))
 	for _, e := range stats.RecentEntries {
 		recentAlerts = append(recentAlerts, toDashboardAlert(e))
 	}
 
-	var recentErrors []dashboardAlert
+	// ⚡ Bolt: Pre-allocate capacity to prevent underlying array reallocations during loop append
+	recentErrors := make([]dashboardAlert, 0, len(stats.RecentErrors))
 	for _, e := range stats.RecentErrors {
 		recentErrors = append(recentErrors, toDashboardAlert(e))
 	}

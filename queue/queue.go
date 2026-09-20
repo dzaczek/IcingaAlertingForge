@@ -228,7 +228,8 @@ func (q *Queue) processReady() {
 
 	q.mu.Lock()
 	now := time.Now()
-	var ready []Item
+	// ⚡ Bolt: Pre-allocate capacity to prevent reallocation overhead when building the ready queue
+	ready := make([]Item, 0, len(q.items))
 	for _, item := range q.items {
 		if !item.NextRetry.After(now) {
 			ready = append(ready, item)

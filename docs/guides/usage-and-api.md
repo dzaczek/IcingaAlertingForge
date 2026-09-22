@@ -447,11 +447,15 @@ These endpoints are only available when `CONFIG_IN_DASHBOARD=true`. All require 
 
 #### `GET /admin/settings`
 
-Returns the full configuration with secrets masked as `***`.
+**Fast Track:** Returns the current application configuration.
+
+**Deep Dive:** Returns the full configuration with secrets masked as `***`.
 
 #### `PATCH /admin/settings`
 
-Partially updates the configuration. Only non-empty fields are applied. Password fields with value `***` are ignored (preserving the current value).
+**Fast Track:** Partially updates the configuration.
+
+**Deep Dive:** Only non-empty fields are applied. Password fields with value `***` are ignored (preserving the current value).
 
 ```bash
 curl -u admin:secret -X PATCH http://localhost:8080/admin/settings \
@@ -461,7 +465,9 @@ curl -u admin:secret -X PATCH http://localhost:8080/admin/settings \
 
 #### `POST /admin/settings/targets`
 
-Adds a new target. Auto-generates a UUID if `id` is empty and an API key if none is provided. Returns the new API key in cleartext (shown only once). Input fields are validated against HTML/script injection.
+**Fast Track:** Adds a new target host mapping.
+
+**Deep Dive:** Auto-generates a UUID if `id` is empty and an API key if none is provided. Returns the new API key in cleartext (shown only once). Input fields are validated against HTML/script injection.
 
 ```bash
 curl -u admin:secret -X POST http://localhost:8080/admin/settings/targets \
@@ -471,19 +477,33 @@ curl -u admin:secret -X POST http://localhost:8080/admin/settings/targets \
 
 #### `DELETE /admin/settings/targets/{id}`
 
-Removes a target and all its API keys.
+**Fast Track:** Removes a target.
+
+**Deep Dive:** Deletes the target mapping and revokes all its API keys.
 
 #### `POST /admin/settings/targets/{id}/generate-key`
 
-Generates a new API key for the target. Returns the key in cleartext (shown only once).
+**Fast Track:** Generates a new API key for a target.
+
+**Deep Dive:** Creates a new key and returns it in cleartext (shown only once).
+
+#### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+**Fast Track:** Removes a specific API key from a target.
+
+**Deep Dive:** Deletes the API key at the given index (`idx`) for the specified target (`id`).
 
 #### `GET /admin/settings/targets/{id}/reveal-keys`
 
-Returns the unmasked API keys for a specific target. Admin-only.
+**Fast Track:** Reveals API keys for a target.
+
+**Deep Dive:** Returns the unmasked API keys for a specific target. Admin-only.
 
 #### `POST /admin/settings/test-icinga`
 
-Tests the Icinga2 connection using stored credentials. Returns connection status and Icinga2 version.
+**Fast Track:** Tests Icinga2 connectivity.
+
+**Deep Dive:** Uses the stored Icinga2 credentials to verify connection status and fetch the Icinga2 version.
 
 ```json
 {"status": "ok", "icinga2_version": "v2.15.2"}
@@ -491,11 +511,15 @@ Tests the Icinga2 connection using stored credentials. Returns connection status
 
 #### `GET /admin/settings/export`
 
-Downloads the full configuration as a JSON backup file. Secrets are included in cleartext for restore purposes.
+**Fast Track:** Exports configuration as JSON.
+
+**Deep Dive:** Downloads the full configuration as a JSON backup file. Secrets are included in cleartext for restore purposes.
 
 #### `POST /admin/settings/import`
 
-Restores configuration from a previously exported backup. Validates schema and target structure. If secrets are masked as `***`, current values are preserved.
+**Fast Track:** Imports configuration from JSON.
+
+**Deep Dive:** Restores configuration from a previously exported backup. Validates schema and target structure. If secrets are masked as `***`, current values are preserved.
 
 ### Status Endpoints
 
@@ -614,15 +638,21 @@ Forces the browser to clear cached HTTP Basic Auth credentials. Returns `401` wi
 
 #### `GET /health`
 
+**Fast Track:** Health check endpoint.
+
+**Deep Dive:** Returns system status, version, uptime, and basic Icinga2 connectivity state.
+
 ```json
-{"status":"ok","version":"1.0.0"}
+{"status":"ok","icinga_up":true,"uptime":"2h30m15s","version":"v1.0.0"}
 ```
 
 ### Metrics Endpoint
 
 #### `GET /metrics`
 
-Exposes application and system metrics in Prometheus text format (version 0.0.4).
+**Fast Track:** Prometheus metrics endpoint.
+
+**Deep Dive:** Exposes application and system metrics in Prometheus text format (version 0.0.4).
 
 **Authentication:**
 - If `METRICS_TOKEN` is configured, it can be accessed via `Authorization: Bearer <token>`.

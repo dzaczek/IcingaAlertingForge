@@ -295,12 +295,14 @@ func (h *DashboardHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var recentAlerts []dashboardAlert
+	// ⚡ Bolt: Pre-calculate total capacity to avoid repeated allocations during slice append
+	recentAlerts := make([]dashboardAlert, 0, len(stats.RecentEntries))
 	for _, e := range stats.RecentEntries {
 		recentAlerts = append(recentAlerts, toDashboardAlert(e))
 	}
 
-	var recentErrors []dashboardAlert
+	// ⚡ Bolt: Pre-calculate total capacity to avoid repeated allocations during slice append
+	recentErrors := make([]dashboardAlert, 0, len(stats.RecentErrors))
 	for _, e := range stats.RecentErrors {
 		recentErrors = append(recentErrors, toDashboardAlert(e))
 	}

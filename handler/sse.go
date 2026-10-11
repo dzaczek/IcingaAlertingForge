@@ -140,7 +140,8 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if event.rawMessage != "" {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
-				fmt.Fprint(w, buf.String())
+				// ⚡ Bolt: Use w.Write directly instead of fmt.Fprint(w, buf.String()) to avoid reflection and string allocation overhead
+				w.Write(buf.Bytes())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {

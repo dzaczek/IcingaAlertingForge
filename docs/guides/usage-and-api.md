@@ -40,8 +40,12 @@ What happens next:
 
 1. the bridge authenticates `key-a-1`
 2. it resolves the configured host for Team A
-3. it creates the missing service if needed
+3. it creates the missing service `HighCPU - CPU usage above 95%` if needed
 4. it sends a passive `CRITICAL` result to Icinga
+
+The service name is `<alertname> - <summary>`. Put only identifiers in
+`summary` and changing values in `description`; see
+[Building Webhooks](webhook-integrations.md).
 
 ## Test Mode
 
@@ -164,7 +168,7 @@ Response example:
     {
       "status": "processed",
       "host": "a-dummy-dev",
-      "service": "HighCPU",
+      "service": "HighCPU - CPU usage above 95%",
       "exit_status": 2,
       "label": "CRITICAL",
       "icinga_ok": true,

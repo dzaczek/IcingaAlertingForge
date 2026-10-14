@@ -380,7 +380,7 @@ RESOLVED_RESP=$(curl -s -X POST "$BRIDGE_URL/webhook" \
         "alerts": [{
             "status": "resolved",
             "labels": {"alertname": "Smoke Critical", "severity": "critical"},
-            "annotations": {"summary": "Disk back to normal"}
+            "annotations": {"summary": "Disk full on /data", "description": "Disk back to normal"}
         }]
     }')
 check "Resolved alert → exit_status=0" echo "$RESOLVED_RESP" | grep -q '"exit_status":0'

@@ -100,6 +100,10 @@ func main() {
 			storedCfg.WebhookRateLimitBurst = cfg.WebhookRateLimitBurst
 			// Dashboard login session lifetime (env-only)
 			storedCfg.SessionTTLMinutes = cfg.SessionTTLMinutes
+			// Service naming: JSON wins when set, otherwise the env value/default.
+			if storedCfg.ServiceNameMode == "" {
+				storedCfg.ServiceNameMode = cfg.ServiceNameMode
+			}
 			cfg = storedCfg
 			slog.Info("Configuration loaded from dashboard store", "path", cfg.ConfigFilePath)
 		} else {
@@ -310,6 +314,8 @@ func main() {
 		DebugRing:  debugRing,
 		RetryQueue: retryQueue,
 		Audit:      auditLogger,
+
+		ServiceNameMode: cfg.ServiceNameMode,
 	}
 
 	statusHandler := &handler.StatusHandler{
@@ -544,6 +550,9 @@ func main() {
 			apiClient.UpdateCredentials(newCfg.Icinga2Host, newCfg.Icinga2User, newCfg.Icinga2Pass, newCfg.Icinga2TLSSkipVerify)
 			apiClient.ConflictPolicy = icinga.ConflictPolicy(newCfg.Icinga2ConflictPolicy)
 			apiClient.Force = newCfg.Icinga2Force
+			if newCfg.ServiceNameMode != "" {
+				webhookHandler.ServiceNameMode = newCfg.ServiceNameMode
+			}
 
 			if err := ensureConfiguredHosts(apiClient, newCfg.Targets, newCfg.Icinga2HostAutoCreate); err != nil {
 				slog.Error("Failed to prepare target hosts on config reload", "error", err)

@@ -222,11 +222,18 @@ Grafana sends labels with each alert. IcingaAlertForge uses these labels to deci
 
 | Label | Values | What it does |
 |-------|--------|-------------|
-| `alertname` | any string | **Required.** Becomes the service name in Icinga2 |
+| `alertname` | any string | **Required.** First part of the service name in Icinga2 |
 | `severity` | `critical`, `warning` | Sets the alert level. Default is `critical` if not set |
 | `mode` | `test` | Puts the alert in test mode (no real impact in Icinga2) |
 
-**Example:** If Grafana sends an alert with `alertname=HighCPU` and `severity=warning`, IcingaAlertForge creates a service called "HighCPU" with WARNING status in Icinga2.
+Two annotations matter as well:
+
+| Annotation | What it does |
+|-------|-------------|
+| `summary` | Identifies the affected object. The service name is `<alertname> - <summary>` (just `<alertname>` when empty). Keep it stable: labels only, no measured values |
+| `description` | Current details (values, durations). Shown as long output and updated on every alert without changing the service |
+
+**Example:** If Grafana sends an alert with `alertname=HighCPU`, `severity=warning` and `summary=web-01`, IcingaAlertForge creates a service called "HighCPU - web-01" with WARNING status in Icinga2. Every instance of a rule (every host, job, disk...) gets its own service. See [Building Webhooks](guides/webhook-integrations.md) for details and non-Grafana senders.
 
 ### What Happens When an Alert Fires and Resolves
 

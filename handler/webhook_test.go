@@ -427,10 +427,10 @@ func TestWebhook_MultipleKeys(t *testing.T) {
 	if len(createdPaths) != 2 {
 		t.Fatalf("expected 2 create calls on different hosts, got %d", len(createdPaths))
 	}
-	if createdPaths[0] != "/v1/objects/services/team-a-host!Multi Key Test" {
+	if createdPaths[0] != "/v1/objects/services/team-a-host!Multi Key Test - Test" {
 		t.Fatalf("expected first create on team-a-host, got %s", createdPaths[0])
 	}
-	if createdPaths[1] != "/v1/objects/services/team-b-host!Multi Key Test" {
+	if createdPaths[1] != "/v1/objects/services/team-b-host!Multi Key Test - Test" {
 		t.Fatalf("expected second create on team-b-host, got %s", createdPaths[1])
 	}
 }

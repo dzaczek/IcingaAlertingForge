@@ -16,6 +16,7 @@ import (
 	"icinga-webhook-bridge/config"
 	"icinga-webhook-bridge/configstore"
 	"icinga-webhook-bridge/metrics"
+	"icinga-webhook-bridge/models"
 	"icinga-webhook-bridge/rbac"
 
 	"github.com/google/uuid"
@@ -140,6 +141,13 @@ func (h *SettingsHandler) HandlePatchSettings(w http.ResponseWriter, r *http.Req
 
 	if patch.Icinga2ConflictPolicy != "" {
 		current.Icinga2ConflictPolicy = patch.Icinga2ConflictPolicy
+	}
+	if patch.ServiceNameMode != "" {
+		if patch.ServiceNameMode != models.ServiceNameModeAlertnameSummary && patch.ServiceNameMode != models.ServiceNameModeAlertname {
+			httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "service_name_mode must be \"alertname_summary\" or \"alertname\""})
+			return
+		}
+		current.ServiceNameMode = patch.ServiceNameMode
 	}
 
 	if patch.HistoryFile != "" {

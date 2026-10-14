@@ -66,7 +66,7 @@ send_alert() {
           \"severity\": \"$severity\"
         },
         \"annotations\": {
-          \"summary\": \"$message\"
+          \"description\": \"$message\"
         },
         \"startsAt\": \"$now\",
         \"endsAt\": \"0001-01-01T00:00:00Z\"
@@ -93,7 +93,7 @@ send_resolved() {
           \"severity\": \"warning\"
         },
         \"annotations\": {
-          \"summary\": \"Resolved\"
+          \"description\": \"Resolved\"
         },
         \"startsAt\": \"$now\",
         \"endsAt\": \"$now\"

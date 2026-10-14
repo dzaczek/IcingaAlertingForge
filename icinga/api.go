@@ -697,8 +697,10 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 		"vars":                  vars,
 	}
 
-	// Set display_name if summary is available for better readability in UI
-	if s := annotations["summary"]; s != "" {
+	// Set display_name if summary is available for better readability in UI.
+	// Only needed when the service is named after the alertname alone; in the
+	// default naming mode the summary is already part of the name.
+	if s := annotations["summary"]; s != "" && name == labels["alertname"] {
 		serviceAttrs["display_name"] = name + " - " + s
 	}
 

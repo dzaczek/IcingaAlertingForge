@@ -92,7 +92,7 @@ func (h *WebhookHandler) needsCreate(host, service string) bool {
 // SendCheckResult, otherwise the check result can reach Icinga2 before the
 // service object exists there and get rejected with 404 "No objects found".
 func (h *WebhookHandler) ensureServiceExists(requestID string, target config.TargetConfig, alert models.GrafanaAlert) {
-	serviceName := alert.AlertName()
+	serviceName := alert.ServiceName(h.ServiceNameMode)
 	if !h.needsCreate(target.HostName, serviceName) {
 		return
 	}
@@ -144,7 +144,7 @@ func (h *WebhookHandler) ensureServiceExists(requestID string, target config.Tar
 
 // handleWorkMode processes production alerts (firing/resolved).
 func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert, remoteAddr string) map[string]any {
-	serviceName := alert.AlertName()
+	serviceName := alert.ServiceName(h.ServiceNameMode)
 	severity := alert.Severity()
 	summary := alert.Summary()
 
@@ -177,6 +177,14 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 			"host":    target.HostName,
 			"service": serviceName,
 		}
+	}
+
+	// The description carries details that change between evaluations
+	// (current values etc.). It goes into the check output — Icinga2 shows
+	// lines after the first as long output — so it updates the existing
+	// service instead of becoming part of its name.
+	if d := strings.TrimSpace(alert.Description()); d != "" {
+		message += "\n" + d
 	}
 
 	// Rate limit: acquire status slot (queue up to 100 concurrent updates)

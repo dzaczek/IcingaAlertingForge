@@ -59,6 +59,7 @@ type StoredConfig struct {
 	Icinga2TLSSkipVerify  bool   `json:"icinga2_tls_skip_verify"`
 	Icinga2ConflictPolicy string `json:"icinga2_conflict_policy"`
 	Icinga2Force          bool   `json:"icinga2_force"`
+	ServiceNameMode       string `json:"service_name_mode,omitempty"`
 
 	// Targets
 	Targets []TargetStore `json:"targets"`
@@ -327,6 +328,7 @@ func (s *Store) MigrateFromEnv(cfg *config.Config) error {
 		Icinga2TLSSkipVerify:  cfg.Icinga2TLSSkipVerify,
 		Icinga2ConflictPolicy: cfg.Icinga2ConflictPolicy,
 		Icinga2Force:          cfg.Icinga2Force,
+		ServiceNameMode:       cfg.ServiceNameMode,
 
 		HistoryFile:       cfg.HistoryFile,
 		HistoryMaxEntries: cfg.HistoryMaxEntries,
@@ -442,6 +444,7 @@ func (s *Store) ToConfig(serverPort, serverHost string) *config.Config {
 		Icinga2TLSSkipVerify:  sc.Icinga2TLSSkipVerify,
 		Icinga2ConflictPolicy: sc.Icinga2ConflictPolicy,
 		Icinga2Force:          sc.Icinga2Force,
+		ServiceNameMode:       sc.ServiceNameMode,
 		HistoryFile:           sc.HistoryFile,
 		HistoryMaxEntries:     sc.HistoryMaxEntries,
 		CacheTTLMinutes:       sc.CacheTTLMinutes,

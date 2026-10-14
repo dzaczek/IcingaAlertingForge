@@ -97,6 +97,7 @@ So you do not create separate HTTP paths for each team. You keep one URL and let
 | `ICINGA2_PASS` | Yes | — | Icinga2 API password (Visible in Settings Panel) |
 | `ICINGA2_HOST_AUTO_CREATE` | No | `false` | Create configured dummy hosts if they do not exist (Visible in Settings Panel) |
 | `ICINGA2_TLS_SKIP_VERIFY` | No | `false` | Skip TLS verification (Visible in Settings Panel) |
+| `ICINGA2_SERVICE_NAME_MODE` | No | `alertname_summary` | How alerts map to service names: `alertname_summary` (`<alertname> - <summary>`) or `alertname` (legacy, one service per rule). See [Building Webhooks](webhook-integrations.md) |
 | `HISTORY_FILE` | No | `/var/log/webhook-bridge/history.jsonl` | JSONL history file (Visible in Settings Panel) |
 | `HISTORY_MAX_ENTRIES` | No | `10000` | Rotation limit for history (Visible in Settings Panel) |
 <!-- LANG: hyphenation -->

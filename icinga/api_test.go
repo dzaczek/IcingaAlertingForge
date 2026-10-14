@@ -798,3 +798,41 @@ func TestCreateHost_Error(t *testing.T) {
 		t.Error("expected error for 500 response")
 	}
 }
+
+func TestCreateService_DisplayNameOnlyForBareAlertname(t *testing.T) {
+	tests := []struct {
+		name        string
+		serviceName string
+		wantDisplay any
+	}{
+		{"bare alertname gets summary in display_name", "HighCPU", "HighCPU - web-01"},
+		{"name already containing summary keeps default display_name", "HighCPU - web-01", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gotDisplay any
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				var payload map[string]any
+				_ = json.NewDecoder(r.Body).Decode(&payload)
+				gotDisplay = payload["attrs"].(map[string]any)["display_name"]
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+			}))
+			defer server.Close()
+
+			client := &APIClient{BaseURL: server.URL, User: "test", Pass: "test", HTTPClient: server.Client()}
+			labels := map[string]string{"alertname": "HighCPU"}
+			annotations := map[string]string{"summary": "web-01"}
+			if err := client.CreateService("test-host", tt.serviceName, labels, annotations); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if gotDisplay != tt.wantDisplay {
+				t.Errorf("display_name = %v, want %v", gotDisplay, tt.wantDisplay)
+			}
+		})
+	}
+}

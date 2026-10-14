@@ -37,8 +37,8 @@ jobs:
       fail-fast: false
       matrix:
         # go directive in go.mod = 1.26; pin a patch that includes the latest
-        # stdlib security fixes (GO-2026-5856 and others fixed by 1.26.6).
-        go: ['1.26.6']
+        # stdlib security fixes (GO-2026-6599, GO-2026-6617 and others fixed by 1.26.9).
+        go: ['1.26.9']
     steps:
       - uses: actions/checkout@v7
 
@@ -125,11 +125,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: coverage-1.26.6
+          name: coverage-1.26.9
           path: .
       - uses: codecov/codecov-action@v7
         with:
-          files: ./coverage-1.26.6.out
+          files: ./coverage-1.26.9.out
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
           flags: backend

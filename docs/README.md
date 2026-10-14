@@ -42,6 +42,9 @@ If you are new to the project, start here:
 - [Building Webhooks](guides/webhook-integrations.md)
   How alerts become service names, `summary` vs `description`, and payload examples for Grafana, Alertmanager and any other tool.
 
+- [Prometheus Alertmanager Integration](guides/alertmanager-integration.md)
+  Receiver and routing configuration, API key handling, Prometheus rules that map well to Icinga2 services, testing and troubleshooting.
+
 - [Icinga Integration](guides/icinga-integration.md)
   Dynamic host creation, service creation, notification variables, cache behaviour, history, and ghost cleanup.
 

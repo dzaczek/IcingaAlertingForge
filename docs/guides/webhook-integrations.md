@@ -146,6 +146,10 @@ receivers:
 
 Keep `send_resolved: true`, otherwise services never return to OK.
 
+See the [Prometheus Alertmanager Integration](alertmanager-integration.md)
+guide for the full setup: routing, API key handling, rule examples, testing
+with `amtool` and troubleshooting.
+
 ## Any Other Tool: The Universal Format
 
 For scripts, CI pipelines, cron jobs, uptime checkers or any tool with a

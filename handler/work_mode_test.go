@@ -173,15 +173,15 @@ func TestWebhook_ServiceNamePerSummary(t *testing.T) {
 	outputs := map[string]string{}
 
 	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet:
+		switch r.Method {
+		case http.MethodGet:
 			w.WriteHeader(http.StatusNotFound)
-		case r.Method == http.MethodPut:
+		case http.MethodPut:
 			mu.Lock()
 			created[strings.TrimPrefix(r.URL.Path, "/v1/objects/services/team-a-host!")] = true
 			mu.Unlock()
 			_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
-		case r.Method == http.MethodPost:
+		case http.MethodPost:
 			var p struct {
 				Filter       string `json:"filter"`
 				PluginOutput string `json:"plugin_output"`
@@ -230,7 +230,7 @@ func TestWebhook_ServiceNamePerSummary(t *testing.T) {
 	}
 }
 
-// TestWebhook_ServiceNameModeAlertname keeps the legacy behaviour available:
+// TestWebhook_ServiceNameModeAlertname keeps the legacy behavior available:
 // all instances share one service named after the alertname.
 func TestWebhook_ServiceNameModeAlertname(t *testing.T) {
 	var paths []string

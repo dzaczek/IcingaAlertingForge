@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"icinga-webhook-bridge/cache"
+	"icinga-webhook-bridge/models"
 )
 
 func TestMapSeverityToExitStatus(t *testing.T) {
@@ -60,7 +62,9 @@ func TestExitStatusLabel(t *testing.T) {
 // See ensureServiceExists / needsCreate in work_mode.go.
 func TestWebhook_DuplicateFiring_WaitsForInFlightCreate(t *testing.T) {
 	const host = "team-a-host"
-	const service = "Race Test Alert"
+	const alertname = "Race Test Alert"
+	// Default naming mode: "<alertname> - <summary>".
+	const service = alertname + " - race regression test"
 
 	var createCalls atomic.Int32
 	var created atomic.Bool
@@ -98,7 +102,7 @@ func TestWebhook_DuplicateFiring_WaitsForInFlightCreate(t *testing.T) {
 		"status": "firing",
 		"alerts": [{
 			"status": "firing",
-			"labels": {"alertname": "` + service + `", "severity": "critical"},
+			"labels": {"alertname": "` + alertname + `", "severity": "critical"},
 			"annotations": {"summary": "race regression test"}
 		}]
 	}`
@@ -156,5 +160,101 @@ func TestWebhook_DuplicateFiring_WaitsForInFlightCreate(t *testing.T) {
 	first, _ := resList[0].(map[string]any)
 	if ok, _ := first["icinga_ok"].(bool); !ok {
 		t.Fatalf("duplicate firing request while create was pending got a failure instead of waiting: %+v", first)
+	}
+}
+
+// TestWebhook_ServiceNamePerSummary covers one alert rule firing for several
+// instances (e.g. one per Kubernetes job). Each distinct summary must get its
+// own Icinga2 service, so resolving one instance cannot clear another, and the
+// description must be forwarded in the check output.
+func TestWebhook_ServiceNamePerSummary(t *testing.T) {
+	var mu sync.Mutex
+	created := map[string]bool{}
+	outputs := map[string]string{}
+
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodPut:
+			mu.Lock()
+			created[strings.TrimPrefix(r.URL.Path, "/v1/objects/services/team-a-host!")] = true
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+		case r.Method == http.MethodPost:
+			var p struct {
+				Filter       string `json:"filter"`
+				PluginOutput string `json:"plugin_output"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&p)
+			mu.Lock()
+			outputs[p.Filter] = p.PluginOutput
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+		}
+	})
+
+	body := `{
+		"status": "firing",
+		"alerts": [
+			{"status": "firing",
+			 "labels": {"alertname": "K8s-job-active", "severity": "warning"},
+			 "annotations": {"summary": "zrh01-heidi:pbx-services-job-a", "description": "active=1 for 35m"}},
+			{"status": "resolved",
+			 "labels": {"alertname": "K8s-job-active", "severity": "warning"},
+			 "annotations": {"summary": "zrh01-heidi:pbx-services-lab-job-b"}}
+		]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("X-API-Key", "valid-key")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	svcA := "K8s-job-active - zrh01-heidi:pbx-services-job-a"
+	svcB := "K8s-job-active - zrh01-heidi:pbx-services-lab-job-b"
+	if !created[svcA] || !created[svcB] || len(created) != 2 {
+		t.Fatalf("expected services %q and %q, got %v", svcA, svcB, created)
+	}
+
+	filter := func(svc string) string {
+		return `host.name=="team-a-host" && service.name==` + strconv.Quote(svc)
+	}
+	if got, want := outputs[filter(svcA)], "WARNING: zrh01-heidi:pbx-services-job-a\nactive=1 for 35m"; got != want {
+		t.Errorf("output for A = %q, want %q", got, want)
+	}
+	if got, want := outputs[filter(svcB)], "OK: zrh01-heidi:pbx-services-lab-job-b"; got != want {
+		t.Errorf("output for B = %q, want %q", got, want)
+	}
+}
+
+// TestWebhook_ServiceNameModeAlertname keeps the legacy behaviour available:
+// all instances share one service named after the alertname.
+func TestWebhook_ServiceNameModeAlertname(t *testing.T) {
+	var paths []string
+	var mu sync.Mutex
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method == http.MethodPut {
+			mu.Lock()
+			paths = append(paths, r.URL.Path)
+			mu.Unlock()
+		}
+		_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+	})
+	h.ServiceNameMode = models.ServiceNameModeAlertname
+
+	body := `{"status":"firing","alerts":[{"status":"firing","labels":{"alertname":"HighCPU"},"annotations":{"summary":"web-01"}}]}`
+	req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+	req.Header.Set("X-API-Key", "valid-key")
+	h.ServeHTTP(httptest.NewRecorder(), req)
+
+	if len(paths) != 1 || paths[0] != "/v1/objects/services/team-a-host!HighCPU" {
+		t.Fatalf("expected single service HighCPU, got %v", paths)
 	}
 }

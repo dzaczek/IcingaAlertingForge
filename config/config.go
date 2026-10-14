@@ -57,6 +57,9 @@ type Config struct {
 	Icinga2TLSSkipVerify  bool
 	Icinga2ConflictPolicy string
 	Icinga2Force          bool
+	// ServiceNameMode selects how alerts map to Icinga2 service names:
+	// "alertname_summary" (default) or "alertname".
+	ServiceNameMode string
 
 	// History
 	HistoryFile       string
@@ -206,6 +209,10 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	cfg.Icinga2ConflictPolicy = getEnvOrDefault("ICINGA2_CONFLICT_POLICY", "warn")
+	cfg.ServiceNameMode = getEnvOrDefault("ICINGA2_SERVICE_NAME_MODE", "alertname_summary")
+	if cfg.ServiceNameMode != "alertname_summary" && cfg.ServiceNameMode != "alertname" {
+		return nil, fmt.Errorf("ICINGA2_SERVICE_NAME_MODE must be \"alertname_summary\" or \"alertname\", got %q", cfg.ServiceNameMode)
+	}
 	if cfg.Icinga2Force, err = optBool("ICINGA2_FORCE", false); err != nil {
 		return nil, err
 	}

@@ -39,6 +39,9 @@ If you are new to the project, start here:
 - [Usage and API](guides/usage-and-api.md)
   Work mode, test mode, Grafana contact points, request authentication, and the HTTP endpoints.
 
+- [Building Webhooks](guides/webhook-integrations.md)
+  How alerts become service names, `summary` vs `description`, and payload examples for Grafana, Alertmanager and any other tool.
+
 - [Icinga Integration](guides/icinga-integration.md)
   Dynamic host creation, service creation, notification variables, cache behaviour, history, and ghost cleanup.
 

@@ -200,3 +200,25 @@ func TestLoadLegacyWebhookKeys_SourceNaming(t *testing.T) {
 		t.Errorf("expected source my-grafana-instance, got %s", source)
 	}
 }
+
+func TestLoad_ServiceNameMode(t *testing.T) {
+	setLegacyTestEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.ServiceNameMode != "alertname_summary" {
+		t.Errorf("expected default ServiceNameMode alertname_summary, got %q", cfg.ServiceNameMode)
+	}
+
+	t.Setenv("ICINGA2_SERVICE_NAME_MODE", "alertname")
+	if cfg, err = Load(); err != nil || cfg.ServiceNameMode != "alertname" {
+		t.Errorf("expected ServiceNameMode alertname, got %q (err=%v)", cfg.ServiceNameMode, err)
+	}
+
+	t.Setenv("ICINGA2_SERVICE_NAME_MODE", "bogus")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "ICINGA2_SERVICE_NAME_MODE") {
+		t.Errorf("expected validation error for bogus mode, got %v", err)
+	}
+}

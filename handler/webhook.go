@@ -45,6 +45,8 @@ type WebhookHandler struct {
 	DebugRing  *icinga.DebugRing
 	RetryQueue *queue.Queue
 	Audit      *audit.Logger
+	// ServiceNameMode is passed to GrafanaAlert.ServiceName (see models.ServiceNameMode*).
+	ServiceNameMode string
 }
 
 // clientIP extracts the client IP (without port) from RemoteAddr for rate-limit

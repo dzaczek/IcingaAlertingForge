@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Simulates a firing alert from Grafana (WARNING or CRITICAL).
 # Usage: ./send_alert.sh "Alert Name" critical "Description of the problem"
+#
+# The message is sent as the description annotation, so it can change without
+# renaming the Icinga2 service. Set ALERT_SUMMARY to identify the affected
+# object (service becomes "<Alert Name> - <ALERT_SUMMARY>"); use the same value
+# with send_resolved.sh.
 
 set -euo pipefail
 
@@ -8,7 +13,8 @@ WEBHOOK_URL="${WEBHOOK_URL:-http://localhost:9080/webhook}"
 API_KEY="${API_KEY:-test-key-script-dev}"
 ALERT_NAME="${1:-Test Alert Default}"
 SEVERITY="${2:-critical}"
-SUMMARY="${3:-Problem detected by test script}"
+MESSAGE="${3:-Problem detected by test script}"
+ALERT_SUMMARY="${ALERT_SUMMARY:-}"
 
 if [[ "$SEVERITY" != "critical" && "$SEVERITY" != "warning" ]]; then
   echo "ERROR: Severity must be 'critical' or 'warning'"
@@ -18,7 +24,12 @@ fi
 echo "Sending FIRING alert"
 echo "  Alert:    $ALERT_NAME"
 echo "  Severity: $SEVERITY"
-echo "  Message:  $SUMMARY"
+echo "  Message:  $MESSAGE"
+
+ANNOTATIONS="\"description\": \"$MESSAGE\""
+if [[ -n "$ALERT_SUMMARY" ]]; then
+  ANNOTATIONS="\"summary\": \"$ALERT_SUMMARY\", $ANNOTATIONS"
+fi
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -35,7 +46,7 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
           \"severity\": \"$SEVERITY\"
         },
         \"annotations\": {
-          \"summary\": \"$SUMMARY\"
+          $ANNOTATIONS
         },
         \"startsAt\": \"$NOW\",
         \"endsAt\": \"0001-01-01T00:00:00Z\"

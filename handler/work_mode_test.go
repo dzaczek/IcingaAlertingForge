@@ -258,3 +258,47 @@ func TestWebhook_ServiceNameModeAlertname(t *testing.T) {
 		t.Fatalf("expected single service HighCPU, got %v", paths)
 	}
 }
+
+// TestWebhook_TestModeIgnoresSummary guards the create/delete pairing in test
+// mode: both requests usually carry different summaries but must address the
+// same service, named after the alertname only.
+func TestWebhook_TestModeIgnoresSummary(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	h := testWebhookHandler(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		case http.MethodPut, http.MethodDelete:
+			mu.Lock()
+			paths = append(paths, r.Method+" "+r.URL.Path)
+			mu.Unlock()
+		}
+		_, _ = w.Write([]byte(`{"results":[{"code":200}]}`))
+	})
+
+	for _, p := range []struct{ action, summary string }{
+		{"create", "Test dummy service creation"},
+		{"delete", "Test dummy service deletion"},
+	} {
+		body := `{"status":"firing","alerts":[{"status":"firing",` +
+			`"labels":{"alertname":"Sandbox","mode":"test","test_action":"` + p.action + `"},` +
+			`"annotations":{"summary":"` + p.summary + `"}}]}`
+		req := httptest.NewRequest(http.MethodPost, "/webhook", bytes.NewBufferString(body))
+		req.Header.Set("X-API-Key", "valid-key")
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d: %s", p.action, rr.Code, rr.Body.String())
+		}
+	}
+
+	want := []string{
+		"PUT /v1/objects/services/team-a-host!Sandbox",
+		"DELETE /v1/objects/services/team-a-host!Sandbox",
+	}
+	if len(paths) != len(want) || paths[0] != want[0] || paths[1] != want[1] {
+		t.Fatalf("expected %v, got %v", want, paths)
+	}
+}

@@ -11,7 +11,10 @@ import (
 
 // handleTestMode processes test mode alerts (create/delete dummy services).
 func (h *WebhookHandler) handleTestMode(requestID, source string, target config.TargetConfig, alert models.GrafanaAlert, remoteAddr string) map[string]any {
-	serviceName := alert.ServiceName(h.ServiceNameMode)
+	// Test mode always addresses the service by alertname: create and delete
+	// requests usually carry different summaries describing the action, and
+	// both must hit the same service.
+	serviceName := alert.ServiceName(models.ServiceNameModeAlertname)
 	action := alert.TestAction()
 
 	switch action {

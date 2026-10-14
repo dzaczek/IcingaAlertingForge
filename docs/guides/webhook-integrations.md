@@ -25,6 +25,17 @@ service name = "<alertname>"                 (when summary is empty)
 service name = "<alertname>"                 (legacy: ICINGA2_SERVICE_NAME_MODE=alertname)
 ```
 
+> **Breaking change for custom senders:** firing and resolved notifications
+> must carry the **same** `summary`. A sender that resolves with a different
+> text (e.g. firing `Disk full on /data`, resolved `Disk back to normal`) now
+> creates a second, OK service while the CRITICAL one stays open forever. Put
+> such messages in `description`, or omit `summary` entirely so the service is
+> named after the alertname. Grafana and Alertmanager re-render the same
+> template on resolve, so a summary built from labels is safe.
+>
+> Test mode (`mode=test`) always uses the alertname only, so `create` and
+> `delete` requests may carry different summaries.
+
 The name is sanitized before use: `!` (the Icinga2 host/service separator) is
 replaced with `_`, newlines and repeated whitespace collapse into one space,
 and names longer than 200 bytes are truncated with a short hash suffix so they

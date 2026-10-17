@@ -3,7 +3,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -140,13 +139,17 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if event.rawMessage != "" {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
-				fmt.Fprint(w, buf.String())
+				// ⚡ Bolt: Fast-path io.Writer instead of fmt.Fprint
+				_, _ = w.Write(buf.Bytes())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				// ⚡ Bolt: Fast-path sequential w.Write instead of fmt.Fprintf to reduce allocations
+				_, _ = w.Write([]byte("data: "))
+				_, _ = w.Write(data)
+				_, _ = w.Write([]byte("\n\n"))
 			}
 			flusher.Flush()
 		}

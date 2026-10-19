@@ -3,7 +3,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -140,13 +139,17 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if event.rawMessage != "" {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
-				fmt.Fprint(w, buf.String())
+				// ⚡ Bolt: Use WriteTo directly instead of fmt.Fprint(w, buf.String()) to avoid string allocation
+				_, _ = buf.WriteTo(w)
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				// ⚡ Bolt: Sequential Write calls are faster than fmt.Fprintf and reduce reflection overhead
+				_, _ = w.Write([]byte("data: "))
+				_, _ = w.Write(data)
+				_, _ = w.Write([]byte("\n\n"))
 			}
 			flusher.Flush()
 		}

@@ -148,9 +148,9 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				// ⚡ Bolt: Fast-path string building instead of fmt.Fprintf to reduce allocation overhead
-				io.WriteString(w, "data: ")
+				_, _ = io.WriteString(w, "data: ")
 				_, _ = w.Write(data)
-				io.WriteString(w, "\n\n")
+				_, _ = io.WriteString(w, "\n\n")
 			}
 			flusher.Flush()
 		}

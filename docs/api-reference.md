@@ -161,11 +161,16 @@ All admin endpoints require HTTP Basic Auth with admin credentials.
 
 **Fast Track:** Bulk deletes services from Icinga2.
 
-**Deep Dive:** Accepts a list of objects specifying `host` and `service` and deletes all matching services from Icinga2 and local cache.
+**Deep Dive:** Accepts a list of objects specifying `host` and `service` and deletes all matching services from Icinga2 and local cache. For backward compatibility in single-target deployments, a simple string array of service names is also accepted. In multi-target setups, the explicit object format is mandatory to prevent ambiguous operations.
 
-**Body:**
+**Body (Multi-target):**
 ```json
 {"services": [{"host": "host-a", "service": "svc1"}, {"host": "host-b", "service": "svc2"}]}
+```
+
+**Body (Single-target):**
+```json
+{"services": ["svc1", "svc2"]}
 ```
 
 ### `POST /admin/services/{name}/freeze`

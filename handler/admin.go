@@ -249,7 +249,7 @@ func (h *AdminHandler) HandleDeleteService(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleBulkDelete deletes multiple services.
-// POST /admin/services/bulk-delete  body: {"services": ["svc1", "svc2"]}
+// POST /admin/services/bulk-delete  body: {"services": [{"host":"host-a", "service":"svc1"}]} or {"services": ["svc1", "svc2"]}
 func (h *AdminHandler) HandleBulkDelete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httputil.WriteJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})

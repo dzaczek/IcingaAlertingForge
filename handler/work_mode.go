@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
@@ -156,8 +156,7 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	case "resolved":
 		exitStatus = 0
 		action = "resolved"
-		// ⚡ Bolt: Fast-path string building instead of fmt.Sprintf to reduce allocation overhead
-		message = "OK: " + summary
+		message = fmt.Sprintf("OK: %s", summary)
 		if message == "OK: " {
 			message = "OK: Alert resolved"
 		}
@@ -165,12 +164,9 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 	case "firing":
 		exitStatus = mapSeverityToExitStatus(severity)
 		action = "firing"
-		// ⚡ Bolt: Fast-path string building instead of fmt.Sprintf to reduce allocation overhead
-		label := exitStatusLabel(exitStatus)
+		message = fmt.Sprintf("%s: %s", exitStatusLabel(exitStatus), summary)
 		if summary == "" {
-			message = label + ": Alert firing"
-		} else {
-			message = label + ": " + summary
+			message = fmt.Sprintf("%s: Alert firing", exitStatusLabel(exitStatus))
 		}
 
 	default:
@@ -238,8 +234,7 @@ func (h *WebhookHandler) handleWorkMode(requestID, source string, target config.
 
 		if h.RetryQueue != nil {
 			_ = h.RetryQueue.Enqueue(queue.Item{
-				// ⚡ Bolt: Fast-path string building instead of fmt.Sprintf to reduce allocation overhead
-				ID:         requestID + "-" + serviceName + "-" + strconv.FormatInt(time.Now().UnixNano(), 10),
+				ID:         fmt.Sprintf("%s-%s-%d", requestID, serviceName, time.Now().UnixNano()),
 				Host:       target.HostName,
 				Service:    serviceName,
 				ExitStatus: exitStatus,

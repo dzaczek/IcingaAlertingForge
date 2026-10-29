@@ -365,6 +365,12 @@ func main() {
 	sessionTTL := time.Duration(cfg.SessionTTLMinutes) * time.Minute
 	sessionStore := auth.NewSessionStore(sessionTTL)
 	sessionStore.StartEviction(mainCtx, time.Minute)
+
+	loginLimiter := ratelimit.New(1.0, 5) // 1 attempt per second, burst 5 per IP
+	if loginLimiter != nil {
+		loginLimiter.StartEviction(mainCtx, time.Minute)
+	}
+
 	loginHandler := &handler.LoginHandler{
 		Sessions:   sessionStore,
 		AdminUser:  cfg.AdminUser,
@@ -373,6 +379,7 @@ func main() {
 		Metrics:    metricsCollector,
 		Version:    version,
 		SessionTTL: sessionTTL,
+		Limiter:    loginLimiter,
 	}
 
 	// ── Auth Middleware ─────────────────────────────────────────────

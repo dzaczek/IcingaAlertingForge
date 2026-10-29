@@ -9,6 +9,7 @@ import (
 
 	"icinga-webhook-bridge/auth"
 	"icinga-webhook-bridge/metrics"
+	"icinga-webhook-bridge/ratelimit"
 	"icinga-webhook-bridge/rbac"
 )
 
@@ -23,6 +24,7 @@ type LoginHandler struct {
 	Metrics    *metrics.Collector
 	Version    string
 	SessionTTL time.Duration
+	Limiter    *ratelimit.Limiter
 }
 
 // defaultLoginRedirect is where users land after a successful login.
@@ -40,6 +42,14 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *LoginHandler) handlePost(w http.ResponseWriter, r *http.Request) {
+	if h.Limiter != nil {
+		if allowed, _ := h.Limiter.Allow(clientIP(r.RemoteAddr)); !allowed {
+			slog.Warn("Login rate limit exceeded", "remote_addr", r.RemoteAddr)
+			h.render(w, http.StatusTooManyRequests, defaultLoginRedirect, "Too many login attempts. Please try again later.")
+			return
+		}
+	}
+
 	r.Body = http.MaxBytesReader(w, r.Body, 4<<10) // 4 KiB is plenty for a login form
 	if err := r.ParseForm(); err != nil {
 		h.render(w, http.StatusBadRequest, defaultLoginRedirect, "Invalid form submission.")

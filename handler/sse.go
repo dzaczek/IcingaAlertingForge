@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+
 	"log/slog"
 	"net/http"
 	"strings"
@@ -148,9 +148,9 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 				// ⚡ Bolt: Fast-path io writes instead of fmt.Fprintf to avoid memory allocations and reflection overhead
-				_, _ = io.WriteString(w, "data: ")
+				_, _ = w.Write([]byte("data: "))
 				_, _ = w.Write(data)
-				_, _ = io.WriteString(w, "\n\n")
+				_, _ = w.Write([]byte("\n\n"))
 			}
 			flusher.Flush()
 		}

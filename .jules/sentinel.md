@@ -50,3 +50,8 @@
 **Vulnerability:** The application was ignoring returned errors from functions like `os.Remove` and `file.Close()` during error recovery paths (e.g., when a write to a temp file failed and the temp file needed to be removed and closed). This triggers security linters (like gosec G104) due to potentially missing critical I/O errors.
 **Learning:** Security linters strictly enforce checking return values for all I/O operations, including those executed during cleanup or error handling phases.
 **Prevention:** For operations where the error is genuinely non-actionable or expected to fail sometimes during cleanup (like removing a temp file on an error path), explicitly assign the return value to `_` and append a `// #nosec G104` comment to document the deliberate suppression.
+
+## 2026-11-03 - [TLS Configuration Vulnerability]
+**Vulnerability:** InsecureSkipVerify was being dynamically updated via hot-reload directly on the underlying http.Transport's TLSClientConfig without thread-safety guarantees on the TLSClientConfig itself.
+**Learning:** Directly modifying nested transport fields like TLSClientConfig.InsecureSkipVerify can cause race conditions or affect ongoing requests unpredictably. It also triggers gosec G402 (CWE-295) when set dynamically.
+**Prevention:** Avoid dynamically modifying TLS configuration on the fly. If necessary, re-create the HTTP transport or client rather than mutating shared configurations to ensure thread safety and avoid gosec warnings.

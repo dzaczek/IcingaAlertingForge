@@ -481,6 +481,12 @@ Removes a target and all its API keys.
 
 Generates a new API key for the target. Returns the key in cleartext (shown only once).
 
+#### `DELETE /admin/settings/targets/{id}/keys/{idx}`
+
+**Fast Track:** Removes a specific API key from a target.
+
+**Deep Dive:** Deletes the API key at the given index (`idx`) for the specified target (`id`).
+
 #### `GET /admin/settings/targets/{id}/reveal-keys`
 
 Returns the unmasked API keys for a specific target. Admin-only.

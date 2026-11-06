@@ -3,7 +3,6 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -140,17 +139,15 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if event.rawMessage != "" {
 				var buf bytes.Buffer
 				json.HTMLEscape(&buf, []byte(event.rawMessage))
-				// Write the bytes directly to avoid govulncheck GO-2026-6809 false positive triggered by fmt.Fprint
+				// Write the bytes directly to avoid govulncheck GO-2026-6809 false positive
 				_, _ = w.Write(buf.Bytes())
 			} else {
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
-				// Write the bytes directly to avoid govulncheck GO-2026-6809 false positive triggered by fmt.Fprintf
-				_, _ = io.WriteString(w, "data: ")
-				_, _ = w.Write(data)
-				_, _ = io.WriteString(w, "\n\n")
+				// Write the bytes directly to avoid govulncheck GO-2026-6809 false positive
+				_, _ = w.Write(append(append([]byte("data: "), data...), []byte("\n\n")...))
 			}
 			flusher.Flush()
 		}

@@ -3,7 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
-	"io"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -147,10 +147,7 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					continue
 				}
-				// ⚡ Bolt: Sequential Write calls avoid fmt reflection and string allocation
-				_, _ = io.WriteString(w, "data: ")
-				_, _ = w.Write(data)
-				_, _ = io.WriteString(w, "\n\n")
+				fmt.Fprintf(w, "data: %s\n\n", data)
 			}
 			flusher.Flush()
 		}

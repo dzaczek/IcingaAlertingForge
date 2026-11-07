@@ -94,7 +94,11 @@ func (c *APIClient) UpdateCredentials(baseURL, user, pass string, tlsSkipVerify 
 	c.BaseURL = baseURL
 	c.User = user
 	c.Pass = pass
-	c.HTTPClient.Transport.(*http.Transport).TLSClientConfig.InsecureSkipVerify = tlsSkipVerify
+	transport := c.HTTPClient.Transport.(*http.Transport).Clone()
+	transport.TLSClientConfig = transport.TLSClientConfig.Clone()
+	// #nosec G402 -- configurable TLS skip for self-signed Icinga2 certificates
+	transport.TLSClientConfig.InsecureSkipVerify = tlsSkipVerify
+	c.HTTPClient.Transport = transport
 }
 
 // recordDebug stores an API interaction in the debug ring buffer if present.

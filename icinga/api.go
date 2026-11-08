@@ -166,7 +166,7 @@ func (c *APIClient) SendCheckResult(host, service string, exitStatus int, messag
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(req.Method, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode != http.StatusOK {
@@ -248,7 +248,7 @@ func (c *APIClient) getServiceInfo(host, service string) (ServiceInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodGet, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -361,7 +361,7 @@ func (c *APIClient) getHostInfo(host string) (HostInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodGet, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode == http.StatusNotFound {
@@ -508,7 +508,7 @@ func (c *APIClient) CreateHost(spec HostSpec) error {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodPut, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode != http.StatusOK {
@@ -558,7 +558,7 @@ func (c *APIClient) ListServices(host string) ([]ServiceInfo, error) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodPost, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode != http.StatusOK {
@@ -749,7 +749,7 @@ func (c *APIClient) CreateService(host, name string, labels, annotations map[str
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodPut, reqURL, body, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode != http.StatusOK {
@@ -793,7 +793,7 @@ func (c *APIClient) DeleteService(host, name string) error {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodDelete, reqURL, nil, resp.StatusCode, respBody, time.Since(start), nil)
 
 	if resp.StatusCode != http.StatusOK {
@@ -835,7 +835,7 @@ func (c *APIClient) GetServiceStatus(host, service string) (exitStatus int, outp
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 5*1024*1024))
 	c.recordDebug(http.MethodPost, reqURL, body, resp.StatusCode, respBody, time.Since(startT), nil)
 
 	if resp.StatusCode != http.StatusOK {

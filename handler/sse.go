@@ -146,7 +146,10 @@ func (b *SSEBroker) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					continue
 				}
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				// ⚡ Bolt: Use direct w.Write calls instead of fmt.Fprintf to avoid reflection and formatting overhead
+				_, _ = w.Write([]byte("data: "))
+				_, _ = w.Write(data)
+				_, _ = w.Write([]byte("\n\n"))
 			}
 			flusher.Flush()
 		}
